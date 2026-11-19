@@ -1,0 +1,10 @@
+.inv-row td:first-child { box-shadow: inset 3px 0 0 var(--lvl); }
+.inv-row.lvl-ok { --lvl: var(--ion-color-success); }
+.inv-row.lvl-poco { --lvl: var(--ion-color-warning); }
+.inv-row.lvl-sin { --lvl: var(--ion-color-danger); }
+.inv-row.is-unsynced { background: var(--t-unsynced-bg); }
+.inv-row .sync-badge { margin-top: 4px; }
+@media (max-width: 767px) {
+  .inv-row td:first-child { box-shadow: none; }
+  .inv-row { box-shadow: inset 3px 0 0 var(--lvl); }
+}

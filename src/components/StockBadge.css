@@ -1,0 +1,15 @@
+.stock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.stock-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.stock-badge.level-ok { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
+.stock-badge.level-poco { background: var(--t-warning-bg); color: var(--t-warning-text); }
+.stock-badge.level-sin { background: var(--t-danger-bg); color: var(--ion-color-danger-shade); }
