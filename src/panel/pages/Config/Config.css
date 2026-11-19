@@ -1,0 +1,40 @@
+.cfg-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.cfg-card { padding: 18px; }
+.cfg-form { display: grid; gap: 14px; }
+@media (min-width: 768px) {
+  .cfg-form { grid-template-columns: 1fr 1fr; }
+  .cfg-form.is-single { grid-template-columns: 1fr; }
+  .cfg-wide { grid-column: 1 / -1; }
+}
+.cfg-actions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 18px; font-size: 0.88rem; }
+.cfg-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; background: var(--t-primary-bg); color: var(--ion-color-primary); font-weight: 800; font-size: 0.8rem; flex-shrink: 0; }
+.is-inactive .cfg-avatar { background: var(--t-surface-2); color: var(--t-muted); }
+.is-inactive strong { color: var(--t-muted); }
+.cfg-roles { padding: 4px 18px 18px; color: var(--t-ink); font-size: 0.88rem; }
+.cfg-roles p { margin: 6px 0; }
+
+.cfg-ticket { display: grid; gap: 18px; align-items: start; }
+@media (min-width: 900px) { .cfg-ticket { grid-template-columns: minmax(0, 1fr) 320px; } }
+.cfg-area { display: flex; flex-direction: column; gap: 6px; font-weight: 650; font-size: 0.88rem; color: var(--t-ink); }
+.cfg-area textarea {
+  padding: 12px 14px;
+  border: 1px solid var(--t-border-strong);
+  border-radius: 8px;
+  background: var(--t-surface);
+  color: var(--t-ink);
+  font: inherit;
+  font-weight: 400;
+  font-size: 1rem;
+  resize: vertical;
+}
+.cfg-area textarea:focus { outline: 2px solid var(--ion-color-primary); border-color: transparent; }
+.cfg-form ion-toggle { min-height: 44px; font-weight: 600; }
+.cfg-preview { justify-self: center; }
+.cfg-preview header img { margin-bottom: 6px; }
+@media (max-width: 599px) {
+  .cfg-tabs { flex-wrap: nowrap; overflow-x: auto; margin-inline: -14px; padding: 0 14px 2px; scrollbar-width: none; }
+  .cfg-tabs::-webkit-scrollbar { display: none; }
+  .cfg-card { padding: 14px; }
+  .cfg-actions { flex-direction: column; align-items: stretch; text-align: center; }
+  .cfg-preview { max-width: 100%; }
+}

@@ -1,0 +1,12 @@
+.sales-total { font-size: 1.02rem; }
+@media (max-width: 767px) { .sales-total { font-size: 1.15rem; } }
+
+.sd-facts { margin: 0 0 14px; }
+.sd-facts div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px dashed var(--t-border); }
+.sd-facts dt { color: var(--t-muted); }
+.sd-facts dd { margin: 0; font-weight: 650; text-align: right; }
+.sd-items th, .sd-items td { padding: 10px 6px; }
+.sd-total { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 6px 0; border-top: 2px solid var(--t-border); }
+.sd-total span { font-weight: 700; }
+.sd-total strong { font-size: 1.8rem; }
+.sd-paid { margin: 4px 6px 0; text-align: right; color: var(--t-muted); }

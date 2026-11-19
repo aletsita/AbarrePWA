@@ -1,0 +1,71 @@
+.login { --background: var(--ion-background-color); }
+.login-shell { display: grid; min-height: 100vh; min-height: 100dvh; }
+@media (min-width: 960px) { .login-shell { grid-template-columns: minmax(380px, 44%) 1fr; } }
+
+.login-brand { display: none; }
+@media (min-width: 960px) {
+  .login-brand {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 40px 56px 36px;
+    border-right: 1px solid var(--t-border);
+    background: var(--t-surface);
+  }
+}
+.login-brand-top { display: flex; align-items: center; gap: 12px; }
+.login-brand-top .brand-word { font-size: 1.45rem; color: var(--t-ink); }
+.login-pitch { max-width: 440px; }
+.login-pitch h2 { margin: 0 0 28px; font-size: 2rem; line-height: 1.2; font-weight: 700; letter-spacing: -0.025em; color: var(--t-ink); }
+.login-pitch ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.login-pitch li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--t-border); font-size: 0.95rem; color: #3b4659; }
+.login-pitch li:last-child { border-bottom: 1px solid var(--t-border); }
+.login-pitch ion-icon { flex-shrink: 0; width: 20px; height: 20px; padding: 8px; border-radius: 8px; background: var(--t-primary-bg); color: var(--ion-color-primary); }
+.login-legal { margin: 0; font-size: 0.78rem; color: var(--t-muted); }
+
+.login-main { display: flex; flex-direction: column; justify-content: center; padding: calc(env(safe-area-inset-top) + 32px) 16px 32px; }
+.login-hero, .login-card, .login-foot { width: 100%; max-width: 420px; margin-inline: auto; }
+.login-mobile-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; }
+.login-mobile-brand .brand-word { font-size: 1.35rem; color: var(--t-ink); }
+@media (min-width: 960px) { .login-mobile-brand { display: none; } }
+.login-hero h1 { margin: 0 0 6px; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; color: var(--t-ink); }
+.login-hero p { margin: 0 0 24px; color: var(--t-muted); font-size: 0.95rem; }
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 20px;
+  background: var(--t-surface);
+  border: 1px solid var(--t-border);
+  border-radius: var(--t-radius);
+  box-shadow: var(--t-shadow-lift);
+}
+.login-seg { --background: var(--t-surface-3); border-radius: 8px; padding: 3px; }
+.login-seg ion-segment-button {
+  --indicator-color: transparent;
+  --background-checked: var(--t-surface);
+  --color: var(--t-muted);
+  --color-checked: var(--t-ink);
+  --border-radius: 6px;
+  min-height: 40px;
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.login-seg ion-segment-button.segment-button-checked { box-shadow: var(--t-shadow); border-radius: 6px; }
+.login-card ion-input ion-icon[slot='start'] { color: var(--t-muted); margin-right: 8px; font-size: 19px; }
+.login-link {
+  align-self: flex-end;
+  margin-top: -6px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--ion-color-primary);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.login-help { margin: -8px 0 0; padding: 10px 12px; border: 1px solid var(--t-border); border-radius: 8px; background: var(--t-surface-2); color: var(--t-ink); font-size: 0.86rem; line-height: 1.45; }
+.login-foot { margin-top: 20px; text-align: center; color: var(--t-muted); font-size: 0.84rem; line-height: 1.45; }
