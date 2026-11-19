@@ -9,10 +9,12 @@ import { PanelHeader } from '../../components/PanelHeader';
 import './SaleComplete.css';
 
 export default function SaleComplete() {
-  const { sales, lastSaleId, store, ticketConfig } = useApp();
+  const { sales, lastSaleId, store, ticketConfig, customers, accounts } = useApp();
   const next = useRef<HTMLIonButtonElement>(null);
   const sale = sales.find((s) => s.id === lastSaleId);
   const change = sale?.method === 'efectivo' && sale.paid ? sale.paid - sale.total : 0;
+  const customer = customers.find((c) => c.id === sale?.customerId);
+  const waiting = accounts.filter((a) => a.count > 0);
   const [first, ...rest] = ticketConfig.header.split('\n');
 
   useIonViewDidEnter(() => next.current?.focus());
@@ -36,6 +38,19 @@ export default function SaleComplete() {
                 Cambio: <strong className="money">{money(change)}</strong>
               </p>
             )}
+            {sale?.method === 'credito' && (
+              <p className="done-change">
+                {sale.paid ? <>Abonó <strong className="money">{money(sale.paid)}</strong> · </> : null}
+                Quedó a cuenta de <strong>{sale.customerName}</strong>
+                {customer && <> · ahora debe <strong className="money">{money(customer.balance)}</strong></>}
+              </p>
+            )}
+            {waiting.length > 0 && (
+              <p className="done-waiting">
+                {waiting.length === 1 ? 'Hay 1 cuenta abierta en espera' : `Hay ${waiting.length} cuentas abiertas en espera`}:{' '}
+                {waiting.map((a) => a.name).join(', ')}
+              </p>
+            )}
             {sale?.pending && (
               <p className="done-pending">
                 <SyncBadge state="pendiente" /> Sin conexión: la venta se guardó en este equipo y se subirá sola.
@@ -46,7 +61,7 @@ export default function SaleComplete() {
                 <IonIcon slot="start" icon={calculatorOutline} />
                 Nueva venta
               </IonButton>
-              <IonButton fill="outline" className="btn-xl" disabled={!sale} onClick={() => sale && printSale(sale, store, ticketConfig)}>
+              <IonButton fill="outline" className="btn-xl" disabled={!sale} onClick={() => sale && printSale(sale, store, ticketConfig, customer)}>
                 <IonIcon slot="start" icon={printOutline} />
                 Imprimir ticket
               </IonButton>
@@ -73,8 +88,17 @@ export default function SaleComplete() {
                 ))}
               </ul>
               <div className="ticket-total"><span>TOTAL</span><span>{money(sale.total)}</span></div>
-              <div className="ticket-row"><span>{PAYMENT_LABEL[sale.method]}</span><span>{money(sale.paid ?? sale.total)}</span></div>
+              {sale.method === 'credito' ? (
+                <>
+                  {!!sale.paid && <div className="ticket-row"><span>Abono en efectivo</span><span>{money(sale.paid)}</span></div>}
+                  <div className="ticket-row"><span>A crédito</span><span>{money(sale.total - (sale.paid ?? 0))}</span></div>
+                  {customer && <div className="ticket-row"><span>Saldo pendiente</span><span>{money(customer.balance)}</span></div>}
+                </>
+              ) : (
+                <div className="ticket-row"><span>{PAYMENT_LABEL[sale.method]}</span><span>{money(sale.paid ?? sale.total)}</span></div>
+              )}
               {sale.method === 'efectivo' && <div className="ticket-row"><span>Cambio</span><span>{money(change)}</span></div>}
+              {sale.customerName && <div className="ticket-row"><span>Cliente</span><span>{sale.customerName}</span></div>}
               <footer>
                 {ticketConfig.footer}
                 {ticketConfig.showEmployee && <><br />Atendió: {sale.employee}</>}

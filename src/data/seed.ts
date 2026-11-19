@@ -1,6 +1,8 @@
 import type {
   CashCut,
   CashMovement,
+  CreditMovement,
+  Customer,
   Device,
   Movement,
   PaymentMethod,
@@ -74,9 +76,20 @@ function item(id: string, qty: number): SaleItem {
   return { productId: p.id, name: p.name, qty, price: p.price };
 }
 
+export const CUSTOMERS: Customer[] = [
+  { id: 'cl1', name: 'Guadalupe Torres', phone: '55 2345 1188', creditLimit: 1500, balance: 0, note: 'Vecina de la esquina, paga los viernes', createdAt: dayAt(40, 10, 0) },
+  { id: 'cl2', name: 'Jesús Martínez', phone: '55 9087 4421', creditLimit: 800, balance: 0, note: '', createdAt: dayAt(25, 12, 30) },
+  { id: 'cl3', name: 'Rosa Hernández', phone: '', creditLimit: 500, balance: 0, note: 'Fonda Doña Rosa', createdAt: dayAt(12, 9, 15) },
+];
+
+const CUSTOMER_OF: Record<number, Customer> = { 1045: CUSTOMERS[0], 1037: CUSTOMERS[1] };
+
 function sale(folio: number, date: string, items: SaleItem[], method: PaymentMethod, employee = JOSE): Sale {
   const total = items.reduce((s, i) => s + i.qty * i.price, 0);
+  const customer = CUSTOMER_OF[folio];
   return {
+    customerId: customer?.id,
+    customerName: customer?.name,
     id: `v${folio}`,
     folio,
     date,
@@ -100,7 +113,7 @@ export const SALES: Sale[] = [
   sale(1048, hoursAgo(0.3), [item('p01', 2), item('p02', 1)], 'efectivo'),
   sale(1047, hoursAgo(0.8), [item('p04', 2), item('p03', 1), item('p07', 1)], 'tarjeta', ANA),
   sale(1046, hoursAgo(1.4), [item('p05', 3)], 'efectivo', ANA),
-  sale(1045, hoursAgo(2.1), [item('p11', 1), item('p12', 1)], 'transferencia'),
+  sale(1045, hoursAgo(2.1), [item('p11', 1), item('p12', 1)], 'credito'),
   sale(1044, hoursAgo(2.9), [item('p14', 2), item('p13', 1)], 'efectivo', ANA),
   sale(1043, hoursAgo(3.6), [item('p08', 2), item('p10', 1), item('p09', 1)], 'tarjeta'),
   sale(1042, hoursAgo(4.7), [item('p06', 1), item('p07', 1)], 'efectivo'),
@@ -108,7 +121,7 @@ export const SALES: Sale[] = [
   sale(1040, dayAt(1, 20, 10), [item('p01', 3), item('p05', 2)], 'efectivo', ANA),
   sale(1039, dayAt(1, 17, 35), [item('p03', 1), item('p04', 1), item('p06', 1)], 'tarjeta'),
   sale(1038, dayAt(1, 13, 2), [item('p14', 4)], 'efectivo'),
-  sale(1037, dayAt(2, 19, 48), [item('p09', 1), item('p10', 2), item('p08', 1)], 'transferencia', ANA),
+  sale(1037, dayAt(2, 19, 48), [item('p09', 1), item('p10', 2), item('p08', 1)], 'credito', ANA),
   sale(1036, dayAt(3, 11, 25), [item('p13', 2), item('p01', 2)], 'efectivo'),
 ];
 
@@ -139,6 +152,25 @@ export const CASH_MOVEMENTS: CashMovement[] = [
   { id: 'c3', type: 'retiro', amount: 300, note: 'Pago a proveedor de refrescos', date: hoursAgo(3.1), employee: JOSE },
   { id: 'c4', type: 'gasto', amount: 40, note: 'Hielo', date: hoursAgo(1.1), employee: ANA },
 ];
+
+// Cargos de las ventas a crédito y un abono en efectivo de hoy; los saldos salen de aquí
+export const CREDIT_MOVEMENTS: CreditMovement[] = ([
+  { id: 'ab1', customerId: 'cl2', type: 'abono', amount: 50, date: hoursAgo(1.8), employee: ANA, note: 'Abono', method: 'efectivo' },
+  ...SALES.filter((s) => s.method === 'credito').map((s) => ({
+    id: `cr-${s.id}`,
+    customerId: s.customerId!,
+    type: 'cargo' as const,
+    amount: s.total,
+    date: s.date,
+    employee: s.employee,
+    note: `Venta #${s.folio}`,
+    saleId: s.id,
+  })),
+] as CreditMovement[]).sort((a, b) => b.date.localeCompare(a.date));
+
+CUSTOMERS.forEach((c) => {
+  c.balance = CREDIT_MOVEMENTS.filter((m) => m.customerId === c.id).reduce((n, m) => n + (m.type === 'cargo' ? m.amount : -m.amount), 0);
+});
 
 function cut(folio: number, daysAgo: number, salesTotal: number, salesCount: number, cash: number, card: number, counted: number, employee = JOSE): CashCut {
   const cashOut = 150;

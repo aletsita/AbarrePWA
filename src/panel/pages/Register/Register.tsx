@@ -16,8 +16,11 @@ import {
   barcodeOutline,
   cashOutline,
   closeCircleOutline,
+  createOutline,
   handLeftOutline,
   linkOutline,
+  personAddOutline,
+  personOutline,
   phonePortraitOutline,
   remove,
   trashOutline,
@@ -27,9 +30,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BarcodeSearch, type BarcodeSearchHandle } from '../../../components/BarcodeSearch';
 import { ProductThumb } from '../../../components/ProductThumb';
 import { useApp, type ProductView } from '../../../context/AppContext';
-import { money, type Product } from '../../../data/models';
+import { availableCredit, money, type Product } from '../../../data/models';
 import { ago, useNow } from '../../../hooks/useNow';
 import { PanelHeader } from '../../components/PanelHeader';
+import { CustomerPicker } from '../Customers/CustomerPicker';
 import { ProductModal } from '../Inventory/ProductModal';
 import { CheckoutModal } from './CheckoutModal';
 import './Register.css';
@@ -103,8 +107,42 @@ function QuickPicks({ onPick }: { onPick: (p: ProductView) => void }) {
   );
 }
 
+// Varias cuentas abiertas a la vez: se atiende a otro cliente sin perder lo que ya se escaneó
+function AccountTabs({ canAdd }: { canAdd: boolean }) {
+  const { accounts, newAccount, switchAccount } = useApp();
+  return (
+    <nav className="acc-tabs" aria-label="Cuentas abiertas">
+      <div className="acc-row">
+        {accounts.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            className={`acc-tab ${a.active ? 'is-active' : ''}`}
+            aria-current={a.active || undefined}
+            onClick={() => !a.active && switchAccount(a.id)}
+          >
+            <strong>{a.name}</strong>
+            <span className="money">{a.count ? `${a.count} art. · ${money(a.total)}` : 'Vacía'}</span>
+          </button>
+        ))}
+        <button type="button" className="acc-new" disabled={!canAdd} onClick={newAccount} title="Deja esta cuenta en espera y abre otra">
+          <IonIcon icon={add} />
+          <span>Nueva cuenta</span>
+          <kbd>F4</kbd>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export default function Register() {
-  const { ticket, ticketTotal, ticketCount, ticketAdd, ticketQty, ticketRemove, ticketClear, products } = useApp();
+  const {
+    ticket, ticketTotal, ticketCount, ticketAdd, ticketQty, ticketRemove, ticketClear, products,
+    account, customers, newAccount, updateAccount, linkCustomer,
+  } = useApp();
+  const [picking, setPicking] = useState(false);
+  const customer = customers.find((c) => c.id === account.customerId);
+  const canAddAccount = ticket.length > 0 || !!account.customerId;
   const [alert] = useIonAlert();
   const [toast] = useIonToast();
   const [payOpen, setPayOpen] = useState(false);
@@ -125,8 +163,12 @@ export default function Register() {
   const hasItems = ticket.length > 0;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!active.current || payOpen || newCode) return;
-      if (e.key === 'F2') {
+      if (!active.current || payOpen || newCode || picking) return;
+      if (e.key === 'F4') {
+        e.preventDefault();
+        if (canAddAccount) newAccount();
+        search.current?.focus();
+      } else if (e.key === 'F2') {
         e.preventDefault();
         search.current?.focus();
       } else if (e.key === 'F12' && hasItems) {
@@ -136,7 +178,7 @@ export default function Register() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [payOpen, newCode, hasItems]);
+  }, [payOpen, newCode, picking, hasItems, canAddAccount, newAccount]);
 
   const addProduct = (p: Product, qty: number) => {
     ticketAdd(p, qty);
@@ -161,6 +203,22 @@ export default function Register() {
       ],
     });
 
+  const rename = () =>
+    alert({
+      header: 'Nombre de la cuenta',
+      message: 'Para reconocerla rápido: el nombre del cliente, «Mesa 2», «Señor de la gorra»…',
+      inputs: [{ name: 'name', type: 'text', value: account.name, attributes: { maxlength: 40 } }],
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        {
+          text: 'Guardar',
+          handler: (v: { name: string }) => {
+            if (v.name.trim()) updateAccount(account.id, v.name.trim(), account.customerId);
+          },
+        },
+      ],
+    });
+
   const iva = ticketTotal - ticketTotal / 1.16;
 
   return (
@@ -168,6 +226,7 @@ export default function Register() {
       <PanelHeader title="Caja" />
       <IonContent>
         <div className="ppage reg-grid">
+          <AccountTabs canAdd={canAddAccount} />
           <section className="pcard reg-ticket">
             <div className="reg-search">
               <BarcodeSearch
@@ -184,13 +243,30 @@ export default function Register() {
                 <span><kbd>Enter</kbd> agrega</span>
                 <span><kbd>3*</kbd> antes del código para varias piezas</span>
                 <span><kbd>F2</kbd> buscar</span>
+                <span><kbd>F4</kbd> nueva cuenta</span>
                 <span><kbd>F12</kbd> cobrar</span>
               </p>
               <QuickPicks onPick={(p) => addProduct(p, 1)} />
             </div>
 
             <div className="pcard-head reg-head">
-              <h2>Cuenta actual</h2>
+              <div className="reg-acc">
+                <button type="button" className="reg-acc-name" onClick={rename} title="Cambiar el nombre de la cuenta">
+                  <h2>{account.name}</h2>
+                  <IonIcon icon={createOutline} />
+                </button>
+                <button type="button" className={`reg-acc-customer ${customer ? 'is-set' : ''}`} onClick={() => setPicking(true)}>
+                  <IonIcon icon={customer ? personOutline : personAddOutline} />
+                  {customer ? (
+                    <span>
+                      {customer.name !== account.name && `${customer.name} · `}
+                      <span className="money">{money(availableCredit(customer))}</span> de crédito disponible
+                    </span>
+                  ) : (
+                    <span>Asignar cliente</span>
+                  )}
+                </button>
+              </div>
               <span className="reg-count">{ticketCount} {ticketCount === 1 ? 'artículo' : 'artículos'}</span>
             </div>
 
@@ -285,6 +361,12 @@ export default function Register() {
         </IonToolbar>
       </IonFooter>
 
+      <CustomerPicker
+        isOpen={picking}
+        selectedId={account.customerId}
+        onClose={() => { setPicking(false); search.current?.focus(); }}
+        onPick={(c) => linkCustomer(account.id, c)}
+      />
       <CheckoutModal isOpen={payOpen} onClose={() => { setPayOpen(false); search.current?.focus(); }} />
       <ProductModal
         isOpen={!!newCode}

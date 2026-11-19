@@ -14,7 +14,10 @@ import {
   uid,
   type CashCut,
   type CashMovement,
+  type CashMethod,
   type CashMovementType,
+  type CreditMovement,
+  type Customer,
   type Device,
   type Movement,
   type PaymentMethod,
@@ -25,7 +28,7 @@ import {
   type TicketConfig,
   type User,
 } from '../data/models';
-import { CASH_MOVEMENTS, CUTS, DEVICES, MOVEMENTS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
+import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
 import { openSync, type SyncLink } from '../lib/sync';
 
 export interface TicketLine {
@@ -45,6 +48,24 @@ export interface SentItem {
   at: number;
   status: SentStatus;
   deviceId: string;
+  accountId?: string;
+}
+
+// Cuentas abiertas a la vez: la activa vive en `ticket` + `account`, las demás esperan en `parked`
+export interface OpenAccount {
+  id: string;
+  name: string;
+  customerId: string | null;
+  openedAt: number;
+  lines: TicketLine[];
+}
+
+export type AccountInfo = Omit<OpenAccount, 'lines'>;
+
+export interface AccountView extends AccountInfo {
+  active: boolean;
+  count: number;
+  total: number;
 }
 
 export type ProductView = Product & { sync?: SyncState };
@@ -68,6 +89,10 @@ interface Data {
   products: Product[];
   movements: Movement[];
   ticket: TicketLine[];
+  account: AccountInfo;
+  parked: OpenAccount[];
+  customers: Customer[];
+  creditMovements: CreditMovement[];
   sales: Sale[];
   sent: SentItem[];
   lastScan: LastScan | null;
@@ -103,6 +128,11 @@ type Action =
   | { type: 'UPDATE_STORE'; store: Store }
   | { type: 'UPDATE_TICKET_CONFIG'; config: TicketConfig }
   | { type: 'UPSERT_USER'; user: User; prevEmail?: string }
+  | { type: 'ACCOUNT_NEW'; id: string; at: number }
+  | { type: 'ACCOUNT_SWITCH'; id: string }
+  | { type: 'ACCOUNT_UPDATE'; id: string; name: string; customerId: string | null }
+  | { type: 'UPSERT_CUSTOMER'; customer: Customer }
+  | { type: 'CREDIT_PAYMENT'; movement: CreditMovement }
   | { type: 'REPLACE_DATA'; data: Data };
 
 type Message = Action | { type: 'PING'; key: string } | { type: 'BYE'; key: string } | { type: 'WHO' } | { type: 'SNAPSHOT'; data: Data };
@@ -120,7 +150,7 @@ export interface PendingItem {
   status: SyncState;
 }
 
-const VERSION = 4;
+const VERSION = 5;
 const DATA_KEY = 'tendero.datos';
 const SESSION_KEY = 'tendero.sesion';
 const QUEUE_KEY = 'tendero.pendientes.panel';
@@ -138,6 +168,10 @@ function seedData(): Data {
     products: PRODUCTS,
     movements: MOVEMENTS,
     ticket: [],
+    account: { id: 'a1', name: 'Cuenta 1', customerId: null, openedAt: 0 },
+    parked: [],
+    customers: CUSTOMERS,
+    creditMovements: CREDIT_MOVEMENTS,
     sales: SALES,
     sent: [],
     lastScan: null,
@@ -183,23 +217,51 @@ function addToTicket(ticket: TicketLine[], product: Product, qty: number, source
 
 const iso = (at: number) => new Date(at).toISOString();
 
+const sumLines = (lines: TicketLine[]) => lines.reduce((n, l) => n + l.qty * l.product.price, 0);
+
+// Siguiente "Cuenta N" libre; se calcula en el reducer para que todos los equipos lleguen al mismo nombre
+function nextAccountName(accounts: { name: string }[]) {
+  const used = accounts.map((a) => Number(/^Cuenta (\d+)$/.exec(a.name)?.[1] ?? 0));
+  return `Cuenta ${Math.max(0, ...used) + 1}`;
+}
+
+// La cuenta activa pasa a espera; si está vacía y sin cliente simplemente se descarta
+function parkActive(s: Data): OpenAccount[] {
+  if (!s.ticket.length && !s.account.customerId) return s.parked;
+  return [...s.parked, { ...s.account, lines: s.ticket }];
+}
+
+// Al cobrar o cancelar, la cuenta activa se cierra y su lugar lo toma una vacía
+function resetAccount(s: Data, at: number): AccountInfo {
+  return { id: s.account.id, name: nextAccountName(s.parked), customerId: null, openedAt: at };
+}
+
+const inActive = (s: Data, x: SentItem) => !x.accountId || x.accountId === s.account.id;
+
 function reducer(s: Data, a: Action): Data {
   switch (a.type) {
     case 'SCAN_TO_REGISTER':
       return {
         ...s,
         ticket: addToTicket(s.ticket, a.product, a.qty, 'movil', a.at),
-        sent: [{ id: a.sentId, product: a.product, qty: a.qty, at: a.at, status: 'en-caja' as SentStatus, deviceId: a.deviceId }, ...s.sent].slice(0, 200),
+        sent: [
+          { id: a.sentId, product: a.product, qty: a.qty, at: a.at, status: 'en-caja' as SentStatus, deviceId: a.deviceId, accountId: s.account.id },
+          ...s.sent,
+        ].slice(0, 200),
         lastScan: { name: a.product.name, deviceId: a.deviceId, at: a.at },
       };
     case 'REMOVE_SENT': {
       const item = s.sent.find((x) => x.id === a.sentId);
       if (!item) return s;
-      const ticket =
-        item.status === 'en-caja'
-          ? s.ticket.map((l) => (l.product.id === item.product.id ? { ...l, qty: l.qty - item.qty } : l)).filter((l) => l.qty > 0)
-          : s.ticket;
-      return { ...s, ticket, sent: s.sent.filter((x) => x.id !== a.sentId) };
+      const take = (lines: TicketLine[]) =>
+        lines.map((l) => (l.product.id === item.product.id ? { ...l, qty: l.qty - item.qty } : l)).filter((l) => l.qty > 0);
+      const waiting = item.status === 'en-caja';
+      return {
+        ...s,
+        ticket: waiting && inActive(s, item) ? take(s.ticket) : s.ticket,
+        parked: waiting ? s.parked.map((p) => (p.id === item.accountId ? { ...p, lines: take(p.lines) } : p)) : s.parked,
+        sent: s.sent.filter((x) => x.id !== a.sentId),
+      };
     }
     case 'TICKET_ADD':
       return { ...s, ticket: addToTicket(s.ticket, a.product, a.qty, 'manual', a.at) };
@@ -211,7 +273,12 @@ function reducer(s: Data, a: Action): Data {
     case 'TICKET_REMOVE':
       return { ...s, ticket: s.ticket.filter((l) => l.product.id !== a.productId) };
     case 'TICKET_CLEAR':
-      return { ...s, ticket: [], sent: s.sent.map((x) => (x.status === 'en-caja' ? { ...x, status: 'cancelado' } : x)) };
+      return {
+        ...s,
+        ticket: [],
+        account: resetAccount(s, s.account.openedAt),
+        sent: s.sent.map((x) => (x.status === 'en-caja' && inActive(s, x) ? { ...x, status: 'cancelado' } : x)),
+      };
     case 'CONFIRM_SALE': {
       const moves: Movement[] = a.sale.items.map((i) => ({
         id: `${a.sale.id}-${i.productId}`,
@@ -221,16 +288,32 @@ function reducer(s: Data, a: Action): Data {
         date: a.sale.date,
         note: `Venta #${a.sale.folio}`,
       }));
+      const charge: CreditMovement | null =
+        a.sale.method === 'credito' && a.sale.customerId
+          ? {
+              id: `cr-${a.sale.id}`,
+              customerId: a.sale.customerId,
+              type: 'cargo',
+              amount: a.sale.total,
+              date: a.sale.date,
+              employee: a.sale.employee,
+              note: `Venta #${a.sale.folio}`,
+              saleId: a.sale.id,
+            }
+          : null;
       return {
         ...s,
         sales: [a.sale, ...s.sales],
         movements: [...moves, ...s.movements],
+        customers: charge ? s.customers.map((c) => (c.id === charge.customerId ? { ...c, balance: c.balance + charge.amount } : c)) : s.customers,
+        creditMovements: charge ? [charge, ...s.creditMovements] : s.creditMovements,
         products: s.products.map((p) => {
           const it = a.sale.items.find((i) => i.productId === p.id);
           return it ? { ...p, stock: Math.max(0, p.stock - it.qty) } : p;
         }),
         ticket: [],
-        sent: s.sent.map((x) => (x.status === 'en-caja' ? { ...x, status: 'cobrado' } : x)),
+        account: resetAccount(s, Date.parse(a.sale.date)),
+        sent: s.sent.map((x) => (x.status === 'en-caja' && inActive(s, x) ? { ...x, status: 'cobrado' } : x)),
         lastSaleId: a.sale.id,
       };
     }
@@ -249,6 +332,7 @@ function reducer(s: Data, a: Action): Data {
         products: prev ? s.products.map((p) => (p.id === a.product.id ? a.product : p)) : [a.product, ...s.products],
         movements: move ? [move, ...s.movements] : s.movements,
         ticket: s.ticket.map((l) => (l.product.id === a.product.id ? { ...l, product: a.product } : l)),
+        parked: s.parked.map((p) => ({ ...p, lines: p.lines.map((l) => (l.product.id === a.product.id ? { ...l, product: a.product } : l)) })),
       };
     }
     case 'ADD_STOCK':
@@ -288,6 +372,32 @@ function reducer(s: Data, a: Action): Data {
       const exists = s.users.some((u) => u.email === key);
       return { ...s, users: exists ? s.users.map((u) => (u.email === key ? a.user : u)) : [...s.users, a.user] };
     }
+    case 'ACCOUNT_NEW': {
+      const parked = parkActive(s);
+      return { ...s, parked, ticket: [], account: { id: a.id, name: nextAccountName(parked), customerId: null, openedAt: a.at } };
+    }
+    case 'ACCOUNT_SWITCH': {
+      const target = s.parked.find((p) => p.id === a.id);
+      if (!target) return s;
+      const { lines, ...account } = target;
+      return { ...s, parked: parkActive(s).filter((p) => p.id !== a.id), ticket: lines, account };
+    }
+    case 'ACCOUNT_UPDATE':
+      return s.account.id === a.id
+        ? { ...s, account: { ...s.account, name: a.name, customerId: a.customerId } }
+        : { ...s, parked: s.parked.map((p) => (p.id === a.id ? { ...p, name: a.name, customerId: a.customerId } : p)) };
+    case 'UPSERT_CUSTOMER': {
+      // El saldo solo lo mueven las ventas a crédito y los abonos
+      const prev = s.customers.find((c) => c.id === a.customer.id);
+      const customer = { ...a.customer, balance: prev?.balance ?? 0 };
+      return { ...s, customers: prev ? s.customers.map((c) => (c.id === customer.id ? customer : c)) : [customer, ...s.customers] };
+    }
+    case 'CREDIT_PAYMENT':
+      return {
+        ...s,
+        creditMovements: [a.movement, ...s.creditMovements],
+        customers: s.customers.map((c) => (c.id === a.movement.customerId ? { ...c, balance: Math.max(0, c.balance - a.movement.amount) } : c)),
+      };
   }
 }
 
@@ -318,6 +428,15 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
   ticketRemove: (productId: string) => void;
   ticketClear: () => void;
   confirmSale: (method: PaymentMethod, paid: number) => Sale;
+
+  accounts: AccountView[];
+  newAccount: () => void;
+  switchAccount: (id: string) => void;
+  updateAccount: (id: string, name: string, customerId: string | null) => void;
+  linkCustomer: (id: string, customer: Customer | null) => void;
+
+  saveCustomer: (c: Omit<Customer, 'id' | 'balance' | 'createdAt'> & { id?: string }) => Customer;
+  addCreditPayment: (customerId: string, amount: number, method: CashMethod, note?: string) => void;
 
   closeCut: (cut: CashCut) => void;
   openShift: (openingFund: number) => void;
@@ -522,11 +641,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const user = data.users.find((u) => u.email === sessionEmail && u.active) ?? null;
   const employee = user?.name ?? data.store.owner;
 
+  const addCreditPayment = useCallback(
+    (customerId: string, amount: number, method: CashMethod, note = 'Abono', saleId?: string) =>
+      dispatch({
+        type: 'CREDIT_PAYMENT',
+        movement: { id: uid(), customerId, type: 'abono', amount, date: new Date().toISOString(), employee, note, method, saleId },
+      }),
+    [dispatch, employee],
+  );
+
+  // A crédito, `paid` es lo que el cliente abona en efectivo al momento; el resto queda a su cuenta
   const confirmSale = useCallback(
     (method: PaymentMethod, paid: number) => {
       const s = dataRef.current;
       const folio = Math.max(...s.sales.map((x) => x.folio), 1000) + 1;
-      const total = s.ticket.reduce((n, l) => n + l.qty * l.product.price, 0);
+      const total = sumLines(s.ticket);
+      const customer = s.customers.find((c) => c.id === s.account.customerId);
       const offline = !navigator.onLine;
       const sale: Sale = {
         id: `v${folio}-${uid().slice(0, 4)}`,
@@ -536,17 +666,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         total,
         method,
         employee,
-        paid: method === 'efectivo' ? paid : undefined,
+        paid: method === 'efectivo' || (method === 'credito' && paid > 0) ? paid : undefined,
         pending: offline || undefined,
+        customerId: customer?.id,
+        customerName: customer?.name,
       };
       dispatch({ type: 'CONFIRM_SALE', sale });
+      if (method === 'credito' && customer && paid > 0) {
+        addCreditPayment(customer.id, Math.min(paid, total), 'efectivo', `Abono inicial · venta #${folio}`, sale.id);
+      }
       if (offline) setQueue((q) => [...q, { id: uid(), kind: 'venta', saleId: sale.id, at: Date.now() }]);
       return sale;
     },
-    [dispatch, employee],
+    [dispatch, employee, addCreditPayment],
   );
 
-  const ticketTotal = data.ticket.reduce((s, l) => s + l.qty * l.product.price, 0);
+  const ticketTotal = sumLines(data.ticket);
+  const accounts: AccountView[] = [
+    { ...data.account, lines: data.ticket, active: true },
+    ...data.parked.map((p) => ({ ...p, active: false })),
+  ]
+    .sort((a, b) => a.openedAt - b.openedAt)
+    .map(({ lines, ...a }) => ({ ...a, count: lines.reduce((n, l) => n + l.qty, 0), total: sumLines(lines) }));
   const ticketCount = data.ticket.reduce((s, l) => s + l.qty, 0);
 
   const value: AppState = {
@@ -596,6 +737,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ticketRemove: (productId) => dispatch({ type: 'TICKET_REMOVE', productId }),
     ticketClear: () => dispatch({ type: 'TICKET_CLEAR' }),
     confirmSale,
+
+    accounts,
+    newAccount: () => dispatch({ type: 'ACCOUNT_NEW', id: uid(), at: Date.now() }),
+    switchAccount: (id) => dispatch({ type: 'ACCOUNT_SWITCH', id }),
+    updateAccount: (id, name, customerId) => dispatch({ type: 'ACCOUNT_UPDATE', id, name, customerId }),
+    // Una cuenta con nombre automático toma el del cliente, y lo suelta si se le quita
+    linkCustomer: (id, customer) => {
+      const all = [data.account, ...data.parked];
+      const acc = all.find((a) => a.id === id);
+      if (!acc) return;
+      const prevName = data.customers.find((c) => c.id === acc.customerId)?.name;
+      const auto = /^Cuenta \d+$/.test(acc.name) || acc.name === prevName;
+      const name = !auto ? acc.name : customer ? customer.name : nextAccountName(all.filter((a) => a.id !== id));
+      dispatch({ type: 'ACCOUNT_UPDATE', id, name, customerId: customer?.id ?? null });
+    },
+
+    saveCustomer: (c) => {
+      const prev = data.customers.find((x) => x.id === c.id);
+      const customer: Customer = {
+        ...c,
+        id: c.id ?? `cl-${uid()}`,
+        balance: prev?.balance ?? 0,
+        createdAt: prev?.createdAt ?? new Date().toISOString(),
+      };
+      dispatch({ type: 'UPSERT_CUSTOMER', customer });
+      return customer;
+    },
+    addCreditPayment: (customerId, amount, method, note) => addCreditPayment(customerId, amount, method, note),
 
     closeCut: (cut) => dispatch({ type: 'CLOSE_CUT', cut }),
     openShift: (openingFund) =>
