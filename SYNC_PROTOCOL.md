@@ -2,7 +2,7 @@
 
 Contrato entre **tendero-web** (la caja y el servidor) y **tendero-mobile** (la app del celular). Los dos proyectos tienen su propia copia del código que lo implementa (`src/lib/sync.ts` y `src/context/AppContext.tsx`). Si cambias algo de este documento, cámbialo en los dos proyectos y en las dos copias de este archivo.
 
-- **Versión del formato de datos:** `4` (constante `VERSION` en `AppContext.tsx`)
+- **Versión del formato de datos:** `5` (constante `VERSION` en `AppContext.tsx`)
 - **Canal:** `tendero` (nombre del `BroadcastChannel`)
 
 ## Transporte
@@ -60,7 +60,7 @@ interface Envelope {
 | `WHO` | — | Todos, al abrir la conexión y cuando se abre el `EventSource` | Responde con `PING` si tiene clave de presencia y está en línea. La caja responde además con un `SNAPSHOT`. |
 | `PING` | `key: string` | Todos, cada 4 s mientras están en línea | Marca `key` como presente. Una clave sin `PING` durante 10 s deja de estar presente. |
 | `BYE` | `key: string` | Todos, al perder la conexión, al cerrar o en `pagehide` | Quita `key` de los presentes. La caja actualiza `lastSeen` del dispositivo. |
-| `SNAPSHOT` | `data: Data` | Solo la caja | El celular reemplaza todos sus datos si `data.version === 4`. La caja lo ignora. |
+| `SNAPSHOT` | `data: Data` | Solo la caja | El celular reemplaza todos sus datos si `data.version === 5`. La caja lo ignora. |
 
 Claves de presencia: la caja usa `'panel'` y cada celular vinculado usa el `id` de su `Device`. Un celular sin vincular no publica `PING`.
 
@@ -90,23 +90,39 @@ Cada cliente aplica estas acciones con el mismo reducer (`reducer` en `AppContex
 | `UPDATE_STORE` | `store: Store` | caja |
 | `UPDATE_TICKET_CONFIG` | `config: TicketConfig` | caja |
 | `UPSERT_USER` | `user: User, prevEmail?: string` | caja |
+| `ACCOUNT_NEW` | `id: string, at: number` | caja: deja la cuenta activa en espera (o la descarta si está vacía y sin cliente) y abre una nueva llamada `Cuenta N` |
+| `ACCOUNT_SWITCH` | `id: string` | caja: la cuenta activa pasa a espera y la cuenta `id` se vuelve la activa |
+| `ACCOUNT_UPDATE` | `id: string, name: string, customerId: string \| null` | caja: nombre y cliente de una cuenta abierta |
+| `UPSERT_CUSTOMER` | `customer: Customer` | caja. El reducer conserva el `balance` que ya tenía el cliente (0 si es nuevo) |
+| `CREDIT_PAYMENT` | `movement: CreditMovement` (`type: 'abono'`) | caja: abono de un cliente, resta `amount` a su `balance` |
 | `REPLACE_DATA` | `data: Data` | no se publica: el celular la aplica localmente al recibir un `SNAPSHOT` |
 
-Los tipos `Product`, `Sale`, `Device`, `CashCut`, `Shift`, `CashMovement`, `Store`, `TicketConfig` y `User` están en `src/data/models.ts`.
+Los tipos `Product`, `Sale`, `Device`, `CashCut`, `Shift`, `CashMovement`, `Customer`, `CreditMovement`, `Store`, `TicketConfig` y `User` están en `src/data/models.ts`.
 
-### `Data` (versión 4)
+#### Cuentas abiertas y crédito
+
+- `ticket` son las líneas de la cuenta activa y `account` sus datos; las demás cuentas abiertas esperan en `parked`. `SCAN_TO_REGISTER`, `TICKET_*` y `CONFIRM_SALE` siempre actúan sobre la cuenta activa.
+- `SCAN_TO_REGISTER` guarda en el envío `accountId = account.id`. `REMOVE_SENT` quita las piezas de la cuenta a la que llegaron, esté activa o en espera; `CONFIRM_SALE` y `TICKET_CLEAR` solo cambian el estado de los envíos de la cuenta activa (o sin `accountId`).
+- Al cobrar (`CONFIRM_SALE`) o cancelar (`TICKET_CLEAR`) la cuenta activa queda vacía, con el mismo `id`, `customerId: null` y el siguiente nombre `Cuenta N` libre entre las cuentas en espera.
+- Una venta con `method: 'credito'` y `customerId` crea en `CONFIRM_SALE` el `CreditMovement` `{ id: 'cr-' + sale.id, type: 'cargo', amount: sale.total, saleId }` y suma `sale.total` al `balance` del cliente. Si el cliente abona algo al momento, la caja publica después un `CREDIT_PAYMENT` con `saleId` y `sale.paid` es ese abono.
+
+### `Data` (versión 5)
 
 ```ts
 interface Data {
-  version: 4;
+  version: 5;
   store: Store;
   ticketConfig: TicketConfig;
   users: User[];
   products: Product[];
   movements: Movement[];
-  ticket: { product: Product; qty: number; source: 'movil' | 'manual'; flashAt: number }[];
+  ticket: TicketLine[]; // { product: Product; qty: number; source: 'movil' | 'manual'; flashAt: number }
+  account: { id: string; name: string; customerId: string | null; openedAt: number };
+  parked: { id: string; name: string; customerId: string | null; openedAt: number; lines: TicketLine[] }[];
+  customers: Customer[];
+  creditMovements: CreditMovement[];
   sales: Sale[];
-  sent: { id: string; product: Product; qty: number; at: number; status: 'en-caja' | 'cobrado' | 'cancelado'; deviceId: string }[];
+  sent: { id: string; product: Product; qty: number; at: number; status: 'en-caja' | 'cobrado' | 'cancelado'; deviceId: string; accountId?: string }[];
   lastScan: { name: string; deviceId: string; at: number } | null;
   cuts: CashCut[];
   cashMovements: CashMovement[];
@@ -144,7 +160,7 @@ Todos los valores se guardan como JSON.
 
 | Clave | Proyecto | Contenido |
 |---|---|---|
-| `tendero.datos` | ambos | `Data` (versión 4) |
+| `tendero.datos` | ambos | `Data` (versión 5) |
 | `tendero.pendientes.panel` | web | Cola `Op[]` de la caja |
 | `tendero.pendientes.movil` | mobile | Cola `Op[]` del celular. En la app nativa se guarda en `@capacitor/preferences` con la misma clave y el mismo formato. |
 | `tendero.sesion` | web | Correo del usuario con sesión abierta |

@@ -198,3 +198,52 @@
   .reg-ticket { min-height: 0; }
   .reg-empty { padding: 28px 18px 32px; }
 }
+
+/* Cuentas abiertas */
+.acc-tabs { grid-column: 1 / -1; min-width: 0; }
+.acc-row { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 4px; scrollbar-width: thin; }
+.acc-tab, .acc-new {
+  display: flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--t-border-strong);
+  border-radius: 8px;
+  background: var(--t-surface);
+  font: inherit;
+  color: var(--t-ink);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.acc-tab { flex-direction: column; align-items: flex-start; justify-content: center; min-width: 132px; max-width: 220px; min-height: 52px; padding: 6px 14px; text-align: left; line-height: 1.25; }
+.acc-tab strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; font-weight: 650; }
+.acc-tab span { font-size: 0.78rem; color: var(--t-muted); }
+.acc-tab:hover { border-color: var(--ion-color-primary); }
+.acc-tab.is-active { border-color: var(--ion-color-primary); background: var(--t-primary-bg); box-shadow: inset 0 -3px 0 var(--ion-color-primary); cursor: default; }
+.acc-tab.is-active strong { color: var(--ion-color-primary); }
+.acc-new { align-items: center; gap: 6px; min-height: 52px; padding: 0 14px; border-style: dashed; color: var(--ion-color-primary); font-weight: 650; font-size: 0.88rem; }
+.acc-new ion-icon { font-size: 18px; }
+.acc-new:hover:not(:disabled) { background: var(--t-primary-bg); border-color: var(--ion-color-primary); }
+.acc-new:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 699px) { .acc-new kbd { display: none; } }
+
+.reg-acc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.reg-acc-name { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; margin-left: -6px; border: 0; border-radius: 6px; background: transparent; font: inherit; color: var(--t-ink); cursor: pointer; }
+.reg-acc-name:hover { background: var(--t-surface-2); }
+.reg-acc-name ion-icon { font-size: 15px; color: var(--t-muted); }
+.reg-acc-customer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px dashed var(--t-border-strong);
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--t-muted);
+  cursor: pointer;
+}
+.reg-acc-customer:hover { border-color: var(--ion-color-primary); color: var(--ion-color-primary); }
+.reg-acc-customer.is-set { border-style: solid; border-color: transparent; background: var(--t-warning-bg); color: var(--t-warning-text); }
+.reg-acc-customer ion-icon { font-size: 15px; }

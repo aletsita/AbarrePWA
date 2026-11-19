@@ -1,4 +1,7 @@
-export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia';
+export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'credito';
+
+// Formas de pago con las que entra dinero (las ventas a crédito no traen dinero, los abonos sí)
+export type CashMethod = Exclude<PaymentMethod, 'credito'>;
 
 export interface Product {
   id: string;
@@ -29,6 +32,33 @@ export interface Sale {
   employee: string;
   paid?: number;
   pending?: boolean;
+  customerId?: string;
+  customerName?: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  creditLimit: number;
+  balance: number;
+  note: string;
+  createdAt: string;
+}
+
+// cargo: compra a crédito (sube el saldo) · abono: pago del cliente (lo baja)
+export type CreditMovementType = 'cargo' | 'abono';
+
+export interface CreditMovement {
+  id: string;
+  customerId: string;
+  type: CreditMovementType;
+  amount: number;
+  date: string;
+  employee: string;
+  note: string;
+  saleId?: string;
+  method?: CashMethod;
 }
 
 export type MovementType = 'venta' | 'entrada' | 'ajuste' | 'alta';
@@ -73,6 +103,9 @@ export interface CashCut {
   cashSales: number;
   cardSales: number;
   transferSales: number;
+  creditSales?: number;
+  creditPaid?: number;
+  creditCash?: number;
   cashIn: number;
   cashOut: number;
   expectedCash: number;
@@ -170,6 +203,9 @@ export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   efectivo: 'Efectivo',
   tarjeta: 'Tarjeta',
   transferencia: 'Transferencia',
+  credito: 'Crédito',
 };
+
+export const availableCredit = (c: Customer) => Math.max(0, c.creditLimit - c.balance);
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);

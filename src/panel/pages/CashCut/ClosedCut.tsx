@@ -41,6 +41,8 @@ export function ClosedCut({ cut }: { cut: CashCut }) {
             <div><dt>Efectivo</dt><dd className="money">{money(cut.cashSales)}</dd></div>
             <div><dt>Tarjeta</dt><dd className="money">{money(cut.cardSales)}</dd></div>
             <div><dt>Transferencia</dt><dd className="money">{money(cut.transferSales)}</dd></div>
+            <div><dt>A crédito</dt><dd className="money">{money(cut.creditSales ?? 0)}</dd></div>
+            <div><dt>Abonos de clientes</dt><dd className="money">{money(cut.creditPaid ?? 0)}</dd></div>
           </dl>
         </section>
         <section>
@@ -48,6 +50,7 @@ export function ClosedCut({ cut }: { cut: CashCut }) {
           <dl>
             <div><dt>Fondo inicial</dt><dd className="money">{money(cut.openingFund)}</dd></div>
             <div><dt>+ Ventas en efectivo</dt><dd className="money">{money(cut.cashSales)}</dd></div>
+            <div><dt>+ Abonos en efectivo</dt><dd className="money">{money(cut.creditCash ?? 0)}</dd></div>
             <div><dt>+ Entradas</dt><dd className="money">{money(cut.cashIn)}</dd></div>
             <div><dt>− Salidas</dt><dd className="money">{money(cut.cashOut)}</dd></div>
             <div className="is-strong"><dt>Efectivo esperado</dt><dd className="money">{money(cut.expectedCash)}</dd></div>

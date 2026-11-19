@@ -1,6 +1,7 @@
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 import {
   basketOutline,
+  bookOutline,
   cardOutline,
   cashOutline,
   closeOutline,
@@ -20,7 +21,7 @@ import { downloadSalesCsv, printSale } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import './Sales.css';
 
-const METHOD_ICON: Record<PaymentMethod, string> = { efectivo: cashOutline, tarjeta: cardOutline, transferencia: swapHorizontalOutline };
+const METHOD_ICON: Record<PaymentMethod, string> = { efectivo: cashOutline, tarjeta: cardOutline, transferencia: swapHorizontalOutline, credito: bookOutline };
 type Range = 'hoy' | 'ayer' | 'semana' | 'todo';
 const RANGE_LABEL: Record<Range, string> = { hoy: 'Hoy', ayer: 'Ayer', semana: 'Últimos 7 días', todo: 'Todo' };
 
@@ -36,7 +37,7 @@ function inRange(iso: string, r: Range) {
 }
 
 export default function Sales() {
-  const { sales, users, store, ticketConfig } = useApp();
+  const { sales, users, store, ticketConfig, customers } = useApp();
   const [range, setRange] = useState<Range>('hoy');
   const [method, setMethod] = useState<PaymentMethod | ''>('');
   const [employee, setEmployee] = useState('');
@@ -117,7 +118,10 @@ export default function Sales() {
                         #{s.folio} {s.pending && <SyncBadge state="pendiente" compact />}
                       </td>
                       <td data-label="Fecha">{shortDate(s.date)} · {time(s.date)}</td>
-                      <td data-label="Empleado">{s.employee}</td>
+                      <td data-label="Empleado">
+                        {s.employee}
+                        {s.customerName && <small className="sales-customer">Cliente: {s.customerName}</small>}
+                      </td>
                       <td className="num" data-label="Artículos">{s.items.reduce((n, i) => n + i.qty, 0)}</td>
                       <td data-label="Pago">
                         <span className={`pill is-${s.method}`}><IonIcon icon={METHOD_ICON[s.method]} />{PAYMENT_LABEL[s.method]}</span>
@@ -149,6 +153,7 @@ export default function Sales() {
               <dl className="sd-facts">
                 <div><dt>Fecha</dt><dd>{new Date(detail.date).toLocaleDateString('es-MX', { dateStyle: 'long' })} · {time(detail.date)}</dd></div>
                 <div><dt>Atendió</dt><dd>{detail.employee}</dd></div>
+                {detail.customerName && <div><dt>Cliente</dt><dd>{detail.customerName}</dd></div>}
                 <div><dt>Pago</dt><dd><span className={`pill is-${detail.method}`}><IonIcon icon={METHOD_ICON[detail.method]} />{PAYMENT_LABEL[detail.method]}</span></dd></div>
                 {detail.pending && <div><dt>Estado</dt><dd><SyncBadge state="pendiente" /></dd></div>}
               </dl>
@@ -172,9 +177,14 @@ export default function Sales() {
               {detail.method === 'efectivo' && detail.paid && (
                 <p className="sd-paid">Pagó con {money(detail.paid)} · cambio {money(detail.paid - detail.total)}</p>
               )}
+              {detail.method === 'credito' && (
+                <p className="sd-paid">
+                  {detail.paid ? `Abonó ${money(detail.paid)} al momento · ` : ''}quedó a cuenta de {detail.customerName}
+                </p>
+              )}
             </div>
             <div className="pmodal-foot">
-              <IonButton fill="outline" className="btn-lg" onClick={() => printSale(detail, store, ticketConfig)}>
+              <IonButton fill="outline" className="btn-lg" onClick={() => printSale(detail, store, ticketConfig, customers.find((c) => c.id === detail.customerId))}>
                 <IonIcon slot="start" icon={printOutline} />
                 Reimprimir ticket
               </IonButton>

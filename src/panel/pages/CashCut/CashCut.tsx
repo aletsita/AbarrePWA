@@ -38,7 +38,7 @@ const MOVE_LABEL: Record<CashMovementType, string> = { entrada: 'Entrada', retir
 const MOVE_ICON: Record<CashMovementType, string> = { entrada: arrowDownCircleOutline, retiro: arrowUpCircleOutline, gasto: basketOutline };
 
 export default function CashCut() {
-  const { sales, cashMovements, cuts, closedCutId, closeCut, shift, store, user, addCashMovement, openShift } = useApp();
+  const { sales, cashMovements, creditMovements, cuts, closedCutId, closeCut, shift, store, user, addCashMovement, openShift } = useApp();
   const [toast] = useIonToast();
   const [alert] = useIonAlert();
   const [countedText, setCountedText] = useState('');
@@ -56,7 +56,10 @@ export default function CashCut() {
   const cashSales = sum('efectivo');
   const cashIn = cashMovements.filter((c) => c.type === 'entrada').reduce((n, c) => n + c.amount, 0);
   const cashOut = cashMovements.filter((c) => c.type !== 'entrada').reduce((n, c) => n + c.amount, 0);
-  const expected = shift.openingFund + cashSales + cashIn - cashOut;
+  const payments = creditMovements.filter((m) => m.type === 'abono' && m.date >= shift.openedAt);
+  const creditPaid = payments.reduce((n, m) => n + m.amount, 0);
+  const creditCash = payments.filter((m) => m.method === 'efectivo').reduce((n, m) => n + m.amount, 0);
+  const expected = shift.openingFund + cashSales + creditCash + cashIn - cashOut;
   const counted = countedText === '' ? null : Number(countedText);
 
   const top = useMemo(() => {
@@ -91,6 +94,9 @@ export default function CashCut() {
       cashSales,
       cardSales: sum('tarjeta'),
       transferSales: sum('transferencia'),
+      creditSales: sum('credito'),
+      creditPaid,
+      creditCash,
       cashIn,
       cashOut,
       expectedCash: expected,
@@ -112,7 +118,7 @@ export default function CashCut() {
       ],
     });
 
-  const methods: PaymentMethod[] = ['efectivo', 'tarjeta', 'transferencia'];
+  const methods: PaymentMethod[] = ['efectivo', 'tarjeta', 'transferencia', 'credito'];
   const maxMethod = Math.max(...methods.map(sum), 1);
 
   return (
@@ -209,6 +215,7 @@ export default function CashCut() {
                       <dl className="recon-list">
                         <div><dt>Fondo inicial</dt><dd className="money">{money(shift.openingFund)}</dd></div>
                         <div><dt>+ Ventas en efectivo</dt><dd className="money">{money(cashSales)}</dd></div>
+                        <div><dt>+ Abonos de clientes en efectivo</dt><dd className="money">{money(creditCash)}</dd></div>
                         <div><dt>+ Entradas de efectivo</dt><dd className="money">{money(cashIn)}</dd></div>
                         <div><dt>− Salidas (retiros y gastos)</dt><dd className="money">{money(cashOut)}</dd></div>
                         <div className="is-total"><dt>Efectivo esperado</dt><dd className="money">{money(expected)}</dd></div>

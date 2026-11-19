@@ -1,4 +1,4 @@
-import { money, PAYMENT_LABEL, time, type CashCut, type Sale, type Store, type TicketConfig } from '../data/models';
+import { money, PAYMENT_LABEL, time, type CashCut, type Customer, type Sale, type Store, type TicketConfig } from '../data/models';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -30,12 +30,20 @@ function printHtml(title: string, body: string) {
   }, 50);
 }
 
-export function printSale(sale: Sale, store: Store, config: TicketConfig) {
+// Con `customer`, el ticket de una venta a crédito muestra lo que el cliente debe en total
+export function printSale(sale: Sale, store: Store, config: TicketConfig, customer?: Customer) {
   const [first, ...rest] = config.header.split('\n');
   const rows = sale.items
     .map((i) => `<tr><td>${i.qty} ${esc(i.name)}</td><td class="n">${money(i.qty * i.price)}</td></tr>`)
     .join('');
   const change = sale.method === 'efectivo' && sale.paid ? sale.paid - sale.total : 0;
+  const row = (k: string, v: number) => `<div class="row"><span>${k}</span><span>${money(v)}</span></div>`;
+  const payment =
+    sale.method === 'credito'
+      ? `${sale.paid ? row('Abono en efectivo', sale.paid) : ''}${row('A crédito', sale.total - (sale.paid ?? 0))}
+         <div class="sep"></div><div>Cliente: ${esc(sale.customerName ?? '')}</div>${customer ? row('Saldo pendiente', customer.balance) : ''}`
+      : `${row(PAYMENT_LABEL[sale.method], sale.paid ?? sale.total)}${sale.method === 'efectivo' ? row('Cambio', change) : ''}
+         ${sale.customerName ? `<div>Cliente: ${esc(sale.customerName)}</div>` : ''}`;
   printHtml(
     `Ticket ${sale.folio}`,
     `<div class="c"><h1>${esc(first ?? store.name)}</h1>${rest.map((l) => `<div>${esc(l)}</div>`).join('')}<div>RFC ${esc(store.rfc)}</div></div>
@@ -45,8 +53,7 @@ export function printSale(sale: Sale, store: Store, config: TicketConfig) {
      <table>${rows}</table>
      <div class="sep"></div>
      <div class="row b"><span>TOTAL</span><span>${money(sale.total)}</span></div>
-     <div class="row"><span>${PAYMENT_LABEL[sale.method]}</span><span>${money(sale.paid ?? sale.total)}</span></div>
-     ${sale.method === 'efectivo' ? `<div class="row"><span>Cambio</span><span>${money(change)}</span></div>` : ''}
+     ${payment}
      <div class="sep"></div>
      <div class="c">${esc(config.footer).replace(/\n/g, '<br>')}${config.showEmployee ? `<br>Atendió: ${esc(sale.employee)}` : ''}</div>`,
   );
@@ -59,7 +66,10 @@ function cutRows(cut: CashCut): [string, number][] {
     ['Efectivo', cut.cashSales],
     ['Tarjeta', cut.cardSales],
     ['Transferencia', cut.transferSales],
+    ['A crédito', cut.creditSales ?? 0],
+    ['Abonos de clientes', cut.creditPaid ?? 0],
     ['Fondo inicial', cut.openingFund],
+    ['Abonos en efectivo', cut.creditCash ?? 0],
     ['Entradas de efectivo', cut.cashIn],
     ['Salidas de efectivo', cut.cashOut],
     ['Efectivo esperado', cut.expectedCash],
@@ -111,16 +121,17 @@ export function downloadSalesCsv(sales: Sale[], store: Store, period: string) {
     ['Tienda', store.name],
     ['Periodo', period],
     [],
-    ['Folio', 'Fecha', 'Hora', 'Empleado', 'Artículos', 'Método de pago', 'Total', 'Pagó con'],
+    ['Folio', 'Fecha', 'Hora', 'Empleado', 'Cliente', 'Artículos', 'Método de pago', 'Total', 'Pagó con'],
     ...sales.map((s) => [
       s.folio,
       new Date(s.date).toLocaleDateString('es-MX'),
       time(s.date),
       s.employee,
+      s.customerName ?? '',
       s.items.reduce((n, i) => n + i.qty, 0),
       PAYMENT_LABEL[s.method],
       s.total.toFixed(2),
-      (s.paid ?? s.total).toFixed(2),
+      (s.paid ?? (s.method === 'credito' ? 0 : s.total)).toFixed(2),
     ]),
   ]);
 }

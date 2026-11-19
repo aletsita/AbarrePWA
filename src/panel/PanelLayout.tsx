@@ -14,6 +14,7 @@ import {
   cubeOutline,
   ellipsisHorizontal,
   logOutOutline,
+  peopleOutline,
   phonePortraitOutline,
   receiptOutline,
   settingsOutline,
@@ -27,6 +28,7 @@ import Register from './pages/Register/Register';
 import SaleComplete from './pages/SaleComplete/SaleComplete';
 import Inventory from './pages/Inventory/Inventory';
 import Sales from './pages/Sales/Sales';
+import Customers from './pages/Customers/Customers';
 import CashCut from './pages/CashCut/CashCut';
 import Devices from './pages/Devices/Devices';
 import Config from './pages/Config/Config';
@@ -35,7 +37,7 @@ import './panel.css';
 export default function PanelLayout() {
   const { pathname } = useLocation();
   const router = useIonRouter();
-  const { ticketCount, products, devices, store, user, logout, isLive, pending, sales } = useApp();
+  const { products, devices, store, user, logout, isLive, pending, sales, customers, accounts } = useApp();
 
   if (!user) return <Redirect to="/panel/login" />;
 
@@ -48,12 +50,15 @@ export default function PanelLayout() {
   const unsynced = pending.length;
   const todays = sales.filter((s) => isToday(s.date));
   const todayTotal = todays.reduce((n, s) => n + s.total, 0);
+  const owing = customers.filter((c) => c.balance > 0).length;
+  const openItems = accounts.reduce((n, a) => n + a.count, 0);
 
   const NAV = [
-    { href: '/panel/caja', label: 'Caja', icon: calculatorOutline, badge: ticketCount, tone: 'secondary' },
+    { href: '/panel/caja', label: 'Caja', icon: calculatorOutline, badge: openItems, tone: 'secondary' },
     { href: '/panel/inventario', label: 'Inventario', icon: cubeOutline, badge: low, tone: 'warning' },
     { href: '/panel/ventas', label: 'Ventas', icon: receiptOutline, badge: unsynced, tone: 'warning' },
     { href: '/panel/corte', label: 'Corte del día', short: 'Corte', icon: walletOutline },
+    { href: '/panel/clientes', label: 'Clientes', icon: peopleOutline, badge: owing, tone: 'warning' },
     { href: '/panel/dispositivos', label: 'Dispositivos', icon: phonePortraitOutline, badge: live, tone: 'success' },
     { href: '/panel/configuracion', label: 'Configuración', icon: settingsOutline },
   ];
@@ -134,6 +139,7 @@ export default function PanelLayout() {
             <Route exact path="/panel/venta-completada" component={SaleComplete} />
             <Route exact path="/panel/inventario" component={Inventory} />
             <Route exact path="/panel/ventas" component={Sales} />
+            <Route exact path="/panel/clientes" component={Customers} />
             <Route exact path="/panel/corte" component={CashCut} />
             <Route exact path="/panel/dispositivos" component={Devices} />
             <Route exact path="/panel/configuracion" component={Config} />

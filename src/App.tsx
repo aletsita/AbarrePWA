@@ -16,7 +16,7 @@ export default function App() {
           <IonRouterOutlet>
             <Route exact path="/panel/login" component={Login} />
             <Route
-              path="/panel/:section(caja|venta-completada|inventario|ventas|corte|dispositivos|configuracion)"
+              path="/panel/:section(caja|venta-completada|inventario|ventas|clientes|corte|dispositivos|configuracion)"
               render={() => <PanelLayout />}
             />
             <Route exact path="/panel">

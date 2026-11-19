@@ -213,6 +213,7 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
 .pill.is-efectivo { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .pill.is-tarjeta { background: var(--t-primary-bg); color: var(--ion-color-primary); }
 .pill.is-transferencia { background: var(--t-accent-bg); color: var(--ion-color-secondary-shade); }
+.pill.is-credito { background: var(--t-warning-bg); color: var(--t-warning-text); }
 .pill.is-ok { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .pill.is-off { background: var(--t-surface-2); color: var(--t-muted); box-shadow: inset 0 0 0 1px var(--t-border); }
 
