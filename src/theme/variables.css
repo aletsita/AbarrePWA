@@ -47,8 +47,8 @@
   --ion-color-dark-shade: #0d182d;
   --ion-color-dark-tint: #273247;
 
-  --ion-background-color: #f5f7fa;
-  --ion-background-color-rgb: 245, 247, 250;
+  --ion-background-color: #f3f5f9;
+  --ion-background-color-rgb: 243, 245, 249;
   --ion-text-color: #0f1b33;
   --ion-text-color-rgb: 15, 27, 51;
   --ion-toolbar-background: #ffffff;
@@ -68,11 +68,14 @@
   --t-border: #e3e8ef;
   --t-border-strong: #cbd3df;
   --t-muted: #5b6678;
-  --t-radius: 10px;
-  --t-radius-sm: 8px;
-  --t-shadow: 0 1px 2px rgba(15, 27, 51, 0.05);
-  --t-shadow-lift: 0 1px 3px rgba(15, 27, 51, 0.06), 0 4px 12px rgba(15, 27, 51, 0.05);
-  --t-shadow-pop: 0 12px 32px rgba(15, 27, 51, 0.14);
+  --t-radius: 14px;
+  --t-radius-sm: 10px;
+  --t-shadow: 0 1px 2px rgba(15, 27, 51, 0.04), 0 2px 6px rgba(15, 27, 51, 0.03);
+  --t-shadow-lift: 0 2px 4px rgba(15, 27, 51, 0.04), 0 12px 28px rgba(15, 27, 51, 0.09);
+  --t-shadow-pop: 0 24px 48px rgba(15, 27, 51, 0.18);
+  --t-side-text: #3b4659;
+  --t-primary-gradient: linear-gradient(180deg, #2b4aa6 0%, #1f3a8a 100%);
+  --t-row-hover: #f6f8fc;
   --t-primary-bg: #eaeff9;
   --t-accent-bg: #e3f2ec;
   --t-success-bg: #e5f4ea;
@@ -213,6 +216,9 @@ html.theme-dark {
   --t-muted: #a29fba;
   --t-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   --t-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.3);
+  --t-side-text: #c9c6dc;
+  --t-primary-gradient: linear-gradient(180deg, #92b1f3 0%, #7ea2f0 100%);
+  --t-row-hover: #1e1c2e;
   --t-shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.55);
   --t-primary-bg: #25214d;
   --t-accent-bg: #10302a;

@@ -25,7 +25,7 @@ El servidor (`server/index.js` en tendero-web) solo reenvía mensajes: no los gu
 ### CORS
 
 - `OPTIONS /__sync` responde `204` (preflight).
-- Si el `Origin` de la petición está en `ALLOWED_ORIGINS`, el servidor añade `Access-Control-Allow-Origin: <origin>`, `Access-Control-Allow-Methods: GET, POST, OPTIONS` y `Access-Control-Allow-Headers: Content-Type`.
+- Si el `Origin` de la petición está en `ALLOWED_ORIGINS` (o, cuando esa variable no está definida, es una IP de red local: `10.x`, `172.16–31.x`, `192.168.x`), el servidor añade `Access-Control-Allow-Origin: <origin>`, `Access-Control-Allow-Methods: GET, POST, OPTIONS` y `Access-Control-Allow-Headers: Content-Type`.
 - Orígenes permitidos por defecto: `http://localhost:5173` (web en desarrollo), `http://localhost:5174` (mobile en el navegador), `http://localhost` (app Android en modo desarrollo, `androidScheme: http`), `https://localhost` (app Android en producción) y `capacitor://localhost` (iOS).
 
 ### URL del servidor
@@ -33,7 +33,18 @@ El servidor (`server/index.js` en tendero-web) solo reenvía mensajes: no los gu
 | Proyecto | Valor |
 |---|---|
 | tendero-web | `VITE_SYNC_URL` o, si falta, `/__sync` en el mismo origen (Vite lo reenvía al servidor en desarrollo; en producción lo sirve el mismo servidor que sirve la web) |
-| tendero-mobile | `VITE_SYNC_URL` obligatoria y absoluta, por ejemplo `http://192.168.1.20:8787/__sync` |
+| tendero-mobile | La que llega en el QR de vinculación o se escribe a mano, guardada en `tendero.servidor`. `VITE_SYNC_URL` (opcional) es solo el valor inicial. |
+
+### `GET /__sync/info`: direcciones del servidor
+
+Responde JSON sin abrir conexión SSE. La caja lo usa para saber qué dirección poner en el QR:
+
+```json
+{ "app": "abarre-sync", "port": 8787, "clients": 2,
+  "urls": [{ "url": "http://192.168.1.20:8787/__sync", "name": "Wi-Fi", "virtual": false }] }
+```
+
+`urls` lista las IPv4 de la red local (las de adaptadores virtuales van al final). Si el servidor tiene `PUBLIC_SYNC_URL`, esa va primero.
 
 ### Entre pestañas del mismo navegador
 
@@ -138,8 +149,14 @@ Si cambias la forma de `Data`, sube `VERSION` en los dos proyectos. Un cliente d
 
 ## Vinculación
 
-1. La caja publica `SET_PAIRING` con un código de 6 dígitos que vence en 5 minutos. El QR contiene `ABARRE-LINK:<código>`; el celular también acepta `TENDERO-LINK:<código>`.
-2. El celular busca el código en su copia de los datos, que recibió en el `SNAPSHOT`. Si coincide y no ha vencido, publica `ADD_DEVICE` con su nuevo `Device` y después `SET_PAIRING` con `pairing: null`.
+1. La caja publica `SET_PAIRING` con un código de 6 dígitos que vence en 5 minutos. El QR contiene el código y la dirección del servidor (`src/lib/link.ts`, igual en los dos proyectos):
+
+   ```
+   abarre://vincular?codigo=123456&servidor=http%3A%2F%2F192.168.1.20%3A8787%2F__sync
+   ```
+
+   El celular también acepta los formatos anteriores, solo con el código: `ABARRE-LINK:<código>` y `TENDERO-LINK:<código>`. Una dirección escrita a mano (`192.168.1.20`, `192.168.1.20:8787`, `https://dominio.com`) se completa con el puerto `8787` y la ruta `/__sync`.
+2. El celular abre la conexión con esa dirección, publica `WHO` y espera un `SNAPSHOT` nuevo de la caja (hasta 10 s; si no llega, avisa «La caja no respondió»). Con los datos recién recibidos busca el código. Si coincide y no ha vencido, publica `ADD_DEVICE` con su nuevo `Device` y después `SET_PAIRING` con `pairing: null`.
 3. Desde ese momento el celular publica `PING` con `key = device.id`.
 
 ## Cambios sin conexión
@@ -166,4 +183,5 @@ Todos los valores se guardan como JSON.
 | `tendero.sesion` | web | Correo del usuario con sesión abierta |
 | `tendero.ultimoCorreo` | web | Último correo usado para entrar (texto plano, prellena el inicio de sesión) |
 | `tendero.dispositivo` | mobile | `id` del `Device` vinculado en este celular |
+| `tendero.servidor` | mobile | URL del servidor de sincronización elegida al vincular (`http://IP:8787/__sync`) |
 | `abarre.tema` | ambos | `'sistema' \| 'claro' \| 'oscuro'` (texto plano, sin JSON) |

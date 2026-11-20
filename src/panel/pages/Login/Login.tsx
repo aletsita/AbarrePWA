@@ -2,8 +2,6 @@ import {
   IonButton,
   IonContent,
   IonIcon,
-  IonInput,
-  IonInputPasswordToggle,
   IonLabel,
   IonPage,
   IonSegment,
@@ -24,6 +22,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Redirect } from 'react-router-dom';
 import { BrandLogo, BrandWord } from '../../../components/Brand';
+import { TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import './Login.css';
 
@@ -133,28 +132,15 @@ export default function Login() {
 
               {mode === 'registro' && (
                 <>
-                  <IonInput className="field" fill="outline" label="Nombre de la tienda" labelPlacement="stacked" placeholder="Abarrotes Don Pepe"
-                    value={storeName} onIonInput={(e) => setStoreName(e.detail.value ?? '')}>
-                    <IonIcon slot="start" icon={storefrontOutline} aria-hidden="true" />
-                  </IonInput>
-                  <IonInput className="field" fill="outline" label="Tu nombre" labelPlacement="stacked" autocapitalize="words"
-                    value={name} onIonInput={(e) => setName(e.detail.value ?? '')}>
-                    <IonIcon slot="start" icon={personOutline} aria-hidden="true" />
-                  </IonInput>
+                  <TextField label="Nombre de la tienda" icon={storefrontOutline} placeholder="Ej. Abarrotes Don Pepe" value={storeName} onChange={setStoreName} />
+                  <TextField label="Tu nombre" icon={personOutline} autoCapitalize="words" placeholder="Ej. José Ramírez" value={name} onChange={setName} />
                 </>
               )}
 
-              <IonInput className="field" fill="outline" type="email" inputmode="email" autocomplete="email" label="Correo" labelPlacement="stacked"
-                value={email} onIonInput={(e) => setEmail(e.detail.value ?? '')}>
-                <IonIcon slot="start" icon={mailOutline} aria-hidden="true" />
-              </IonInput>
-
-              <IonInput className="field" fill="outline" type="password" autocomplete={mode === 'entrar' ? 'current-password' : 'new-password'}
-                label="Contraseña" labelPlacement="stacked" placeholder="Mínimo 4 caracteres"
-                value={password} onIonInput={(e) => setPassword(e.detail.value ?? '')}>
-                <IonIcon slot="start" icon={lockClosedOutline} aria-hidden="true" />
-                <IonInputPasswordToggle slot="end" />
-              </IonInput>
+              <TextField label="Correo" icon={mailOutline} type="email" inputMode="email" autoComplete="email" placeholder="nombre@correo.mx"
+                value={email} onChange={setEmail} />
+              <TextField label="Contraseña" icon={lockClosedOutline} type="password" autoComplete={mode === 'entrar' ? 'current-password' : 'new-password'}
+                placeholder="Mínimo 4 caracteres" value={password} onChange={setPassword} />
 
               {error && (
                 <div className="form-error" role="alert">
