@@ -4,21 +4,24 @@ import {
   bagCheckOutline,
   callOutline,
   checkmarkDoneOutline,
+  closeCircleOutline,
   closeOutline,
   flameOutline,
   printOutline,
   qrCodeOutline,
   timeOutline,
+  trashOutline,
 } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { EmptyState } from '../../../components/EmptyState';
 import { StatCard } from '../../../components/StatCard';
 import { useApp } from '../../../context/AppContext';
 import { isToday, money, PAYMENT_LABEL, time } from '../../../data/models';
-import { ACTIVE_STATUSES, ORDER_NEXT_ACTION, ORDER_STATUS_LABEL, reservedStock, type OrderStatus, type PickupOrder } from '../../../data/pickup';
+import { ACTIVE_STATUSES, CANCEL_REASON_LABEL, ORDER_NEXT_ACTION, ORDER_STATUS_LABEL, reservedStock, type OrderStatus, type PickupOrder } from '../../../data/pickup';
 import { printSale } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import { CheckoutModal } from '../Register/CheckoutModal';
+import { CancelOrderModal } from './CancelOrderModal';
 import { PickupCodeModal } from './PickupCodeModal';
 import './Orders.css';
 
@@ -28,7 +31,11 @@ const TABS: { id: OrderStatus; label: string }[] = [
   { id: 'preparando', label: 'Preparando' },
   { id: 'listo', label: 'Listos' },
   { id: 'entregado', label: 'Entregados' },
+  { id: 'cancelado', label: 'Cancelados' },
 ];
+
+// Entregados y cancelados se ordenan del más reciente; los demás, del más antiguo (el que lleva más esperando)
+const closed = (st: OrderStatus) => st === 'entregado' || st === 'cancelado';
 
 function ago(iso: string, now: number) {
   const min = Math.floor((now - Date.parse(iso)) / 60000);
@@ -41,12 +48,13 @@ function ago(iso: string, now: number) {
 const pieces = (o: PickupOrder) => o.items.reduce((n, i) => n + i.qty, 0);
 
 export default function Orders() {
-  const { orders, products, sales, store, ticketConfig, advanceOrder, deliverOrder } = useApp();
+  const { orders, products, sales, store, ticketConfig, advanceOrder, deliverOrder, cancelOrder } = useApp();
   const [tab, setTab] = useState<OrderStatus>(() => ACTIVE_STATUSES.find((st) => orders.some((o) => o.status === st)) ?? 'pendiente');
   const [openId, setOpenId] = useState<string>();
   // Entrega en dos pasos: primero el código del cliente, después el cobro
   const [verifying, setVerifying] = useState<{ order?: PickupOrder } | null>(null);
   const [charging, setCharging] = useState<{ order: PickupOrder; code: string }>();
+  const [cancelling, setCancelling] = useState<PickupOrder>();
   const [now, setNow] = useState(Date.now());
   const [toast] = useIonToast();
 
@@ -59,11 +67,11 @@ export default function Orders() {
     orders
       .filter((o) => o.status === st)
       .sort((a, b) =>
-        st === 'entregado'
+        closed(st)
           ? Date.parse(b.deliveredAt ?? b.updatedAt) - Date.parse(a.deliveredAt ?? a.updatedAt)
           : Date.parse(a.createdAt) - Date.parse(b.createdAt),
       );
-  const list = byStatus(tab).filter((o) => tab !== 'entregado' || isToday(o.deliveredAt ?? o.updatedAt));
+  const list = byStatus(tab).filter((o) => !closed(tab) || isToday(o.deliveredAt ?? o.updatedAt));
   const sumOf = (l: PickupOrder[]) => l.reduce((n, o) => n + o.total, 0);
   const deliveredToday = byStatus('entregado').filter((o) => isToday(o.deliveredAt ?? o.updatedAt));
   const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
@@ -77,6 +85,11 @@ export default function Orders() {
       const p = products.find((x) => x.id === i.productId);
       return !p || p.stock - (reserved[i.productId] ?? 0) < i.qty;
     });
+  };
+
+  const askCancel = (o: PickupOrder) => {
+    setOpenId(undefined);
+    setCancelling(o);
   };
 
   const act = (o: PickupOrder) => {
@@ -133,7 +146,9 @@ export default function Orders() {
             {list.length === 0 ? (
               <EmptyState
                 art="cart"
-                title={tab === 'entregado' ? 'Aún no entregas pedidos hoy' : `Sin pedidos ${TABS.find((t) => t.id === tab)!.label.toLowerCase()}`}
+                title={
+                  tab === 'entregado' ? 'Aún no entregas pedidos hoy' : tab === 'cancelado' ? 'No has cancelado pedidos hoy' : `Sin pedidos ${TABS.find((t) => t.id === tab)!.label.toLowerCase()}`
+                }
                 text="Los pedidos que hagan tus clientes desde la app aparecen aquí."
               />
             ) : (
@@ -153,16 +168,22 @@ export default function Orders() {
                           <span className="ord-row-who">
                             <strong>{o.customer.name}</strong>
                             <small>
-                              {pieces(o)} {pieces(o) === 1 ? 'pieza' : 'piezas'} · {o.status === 'entregado' ? time(o.deliveredAt ?? o.updatedAt) : ago(o.createdAt, now)}
+                              {pieces(o)} {pieces(o) === 1 ? 'pieza' : 'piezas'} · {closed(o.status) ? time(o.deliveredAt ?? o.updatedAt) : ago(o.createdAt, now)}
                               {missing && <em> · falta existencia</em>}
+                              {o.cancel && <em> · {CANCEL_REASON_LABEL[o.cancel.reason].toLowerCase()}</em>}
                             </small>
                           </span>
                           <span className="ord-row-total money">{money(o.total)}</span>
                         </button>
-                        {o.status !== 'entregado' && (
-                          <IonButton fill={o.status === 'listo' ? 'solid' : 'outline'} color={o.status === 'listo' ? 'success' : undefined} className="ord-row-act" onClick={() => act(o)}>
-                            {o.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[o.status]}
-                          </IonButton>
+                        {o.status !== 'entregado' && o.status !== 'cancelado' && (
+                          <>
+                            <IonButton fill={o.status === 'listo' ? 'solid' : 'outline'} color={o.status === 'listo' ? 'success' : undefined} className="ord-row-act" onClick={() => act(o)}>
+                              {o.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[o.status]}
+                            </IonButton>
+                            <IonButton fill="clear" color="danger" className="ord-row-cancel" onClick={() => askCancel(o)} aria-label={`Cancelar ${o.folio}`} title="Cancelar pedido">
+                              <IonIcon slot="icon-only" icon={trashOutline} />
+                            </IonButton>
+                          </>
                         )}
                       </li>
                     );
@@ -201,6 +222,16 @@ export default function Orders() {
               </dl>
 
               {open.note && <p className="ord-note">“{open.note}”</p>}
+              {open.cancel && (
+                <p className="ord-cancelled">
+                  <IonIcon icon={closeCircleOutline} />
+                  <span>
+                    <strong>Cancelado por {CANCEL_REASON_LABEL[open.cancel.reason].toLowerCase()}</strong> · {time(open.cancel.at)}
+                    {open.cancel.missing.length > 0 && <> · Se agotó: {open.items.filter((i) => open.cancel!.missing.includes(i.productId)).map((i) => i.name).join(', ')}</>}
+                    {open.cancel.note && <> · “{open.cancel.note}”</>}
+                  </span>
+                </p>
+              )}
               {openMissing.length > 0 && (
                 <p className="ord-warn">
                   <IonIcon icon={alertCircleOutline} />
@@ -229,15 +260,33 @@ export default function Orders() {
                     Imprimir ticket
                   </IonButton>
                 )
-              ) : (
-                <IonButton className="btn-lg" color={open.status === 'listo' ? 'success' : undefined} onClick={() => act(open)}>
-                  {open.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[open.status]}
-                </IonButton>
+              ) : open.status !== 'cancelado' && (
+                <>
+                  <IonButton fill="clear" color="danger" className="btn-lg" onClick={() => askCancel(open)}>
+                    <IonIcon slot="start" icon={trashOutline} />
+                    Cancelar pedido
+                  </IonButton>
+                  <IonButton className="btn-lg" color={open.status === 'listo' ? 'success' : undefined} onClick={() => act(open)}>
+                    {open.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[open.status]}
+                  </IonButton>
+                </>
               )}
             </div>
           </>
         )}
       </IonModal>
+
+      <CancelOrderModal
+        order={cancelling}
+        shortages={cancelling ? shortages(cancelling).map((i) => i.productId) : []}
+        onClose={() => setCancelling(undefined)}
+        onConfirm={(reason, missing, note) => {
+          const o = cancelling!;
+          cancelOrder(o.id, reason, missing, note);
+          setCancelling(undefined);
+          toast({ message: `${o.folio} cancelado. Le avisamos a ${o.customer.name}.`, duration: 3500, color: 'medium', position: 'top', cssClass: 'toast-app' });
+        }}
+      />
 
       <PickupCodeModal
         isOpen={!!verifying}

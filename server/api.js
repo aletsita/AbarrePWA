@@ -169,6 +169,9 @@ export function onRelayMessage(msg) {
   } else if (msg.type === 'ORDER_DELIVER') {
     const o = db.orders.find((x) => x.id === msg.id);
     if (o) setStatus(o, 'entregado');
+  } else if (msg.type === 'ORDER_CANCEL') {
+    const o = db.orders.find((x) => x.id === msg.id);
+    if (o) cancelOrder(o, { reason: msg.reason, missing: msg.missing ?? [], ...(msg.note ? { note: msg.note } : {}), at: new Date(msg.at ?? Date.now()).toISOString() });
   }
 }
 
@@ -178,7 +181,7 @@ function onSnapshot(data) {
     at: Date.now(),
     products: Array.isArray(data.products) ? data.products : [],
     users: Array.isArray(data.users) ? data.users.map(({ name, email, role, active }) => ({ name, email, role, active })) : [],
-    orders: Array.isArray(data.orders) ? data.orders.map(({ id, folio, status, items }) => ({ id, folio, status, items })) : [],
+    orders: Array.isArray(data.orders) ? data.orders.map(({ id, folio, status, items, cancel }) => ({ id, folio, status, items, cancel })) : [],
   };
   // Reconcilia los pedidos: folio y estado de la caja; reenvía los que no le llegaron
   for (const o of db.orders) {
@@ -186,8 +189,9 @@ function onSnapshot(data) {
     if (c) {
       o.folio = c.folio;
       o.tries = 0;
-      setStatus(o, c.status);
-    } else if (o.status !== 'entregado' && o.folio && (o.tries ?? 0) < MAX_TRIES) {
+      if (c.status === 'cancelado') cancelOrder(o, c.cancel ?? { reason: 'otro', missing: [], at: new Date().toISOString() });
+      else setStatus(o, c.status);
+    } else if (o.status !== 'entregado' && o.status !== 'cancelado' && o.folio && (o.tries ?? 0) < MAX_TRIES) {
       sendToCaja(o);
     }
   }
@@ -216,7 +220,7 @@ function sendToCaja(o) {
 function catalogOf(caja) {
   const reserved = {};
   for (const o of caja.orders) {
-    if (o.status === 'entregado') continue;
+    if (o.status === 'entregado' || o.status === 'cancelado') continue;
     for (const i of o.items ?? []) reserved[i.productId] = (reserved[i.productId] ?? 0) + i.qty;
   }
   return caja.products
@@ -247,10 +251,21 @@ function emit(o) {
 
 // Lleva el pedido hasta `status` paso a paso, para que la línea de tiempo no se salte etapas
 function setStatus(o, status, at = Date.now()) {
+  if (o.status === 'cancelado') return;
   const target = STEPS.indexOf(status);
   if (target <= STEPS.indexOf(o.status)) return;
   for (let i = STEPS.indexOf(o.status) + 1; i <= target; i++) o.history.push({ status: STEPS[i], at: new Date(at).toISOString() });
   o.status = status;
+  save();
+  emit(o);
+}
+
+// La caja canceló el pedido (por ejemplo, se agotó un producto). El cliente decide en su app qué hacer.
+function cancelOrder(o, cancel) {
+  if (o.status === 'cancelado' || o.status === 'entregado') return;
+  o.status = 'cancelado';
+  o.cancel = { reason: cancel.reason === 'sin-existencia' ? 'sin-existencia' : 'otro', missing: cancel.missing ?? [], ...(cancel.note ? { note: cancel.note } : {}), at: cancel.at };
+  o.history.push({ status: 'cancelado', at: cancel.at });
   save();
   emit(o);
 }
@@ -286,8 +301,8 @@ function validateRegister(b) {
 }
 
 async function route(method, path, token, body, headers) {
-  const m = path.match(/^\/pedidos\/([^/]+)$/);
-  const key = m && m[1] !== 'eventos' ? `${method} /pedidos/:id` : `${method} ${path}`;
+  const m = path.match(/^\/pedidos\/([^/]+)(\/resolver)?$/);
+  const key = m && m[1] !== 'eventos' ? `${method} /pedidos/:id${m[2] ?? ''}` : `${method} ${path}`;
 
   switch (key) {
     case 'POST /auth/registro': {
@@ -345,6 +360,19 @@ async function route(method, path, token, body, headers) {
       // El pedido de otra persona responde igual que uno que no existe
       const o = db.orders.find((x) => x.id === id && x.userId === c.sub && x.folio);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
+      return [200, publicOrder(o)];
+    }
+
+    case 'POST /pedidos/:id/resolver': {
+      // Pedido cancelado: el cliente lo quita de sus pedidos activos o elige otros productos
+      const c = requireRole(token, 'cliente');
+      const o = db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && x.folio);
+      if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
+      if (o.status !== 'cancelado') throw new HttpError(409, 'no-cancelado', 'Este pedido sigue en curso.');
+      const action = body.accion === 'reemplazar' ? 'reemplazar' : 'quitar';
+      o.resolved ??= { action, at: new Date().toISOString() };
+      save();
+      emit(o);
       return [200, publicOrder(o)];
     }
 
