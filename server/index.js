@@ -1,11 +1,13 @@
 // Servidor de sincronización: reenvía los cambios entre la caja y los celulares.
 // Mismo protocolo que el relay que antes vivía en vite.config.ts (ver SYNC_PROTOCOL.md).
 // En producción también sirve el build de la web (dist/) para tener un solo despliegue.
+import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { api, connectRelay, onRelayMessage } from './api.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -49,8 +51,8 @@ function cors(req, res) {
   if (!origin) return;
   if (ORIGINS.includes('*') || ORIGINS.includes(origin) || (ALLOW_LAN && LAN_ORIGIN.test(origin))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key');
     res.setHeader('Access-Control-Max-Age', '600');
   }
   res.setHeader('Vary', 'Origin');
@@ -113,6 +115,12 @@ function sync(req, res) {
     req.on('end', () => {
       const line = body.replace(/\r?\n/g, '');
       clients.forEach((c) => c.write(`data: ${line}\n\n`));
+      // La API escucha el canal: catálogo, usuarios y pedidos de la caja
+      try {
+        onRelayMessage(JSON.parse(line)?.msg);
+      } catch {
+        /* mensaje que no es JSON */
+      }
       res.writeHead(204);
       res.end();
     });
@@ -160,15 +168,31 @@ function serveDist(req, res) {
   send(res, join(DIST, 'index.html'), 'no-cache');
 }
 
+// La API publica en el canal como un equipo más (por ejemplo, ORDER_RECEIVED o WHO)
+const SERVER_FROM = `servidor-${randomUUID()}`;
+connectRelay((msg) => {
+  const line = JSON.stringify({ id: randomUUID(), from: SERVER_FROM, msg });
+  clients.forEach((c) => c.write(`data: ${line}\n\n`));
+});
+
 const server = createServer((req, res) => {
   if (req.url?.startsWith('/__sync')) return sync(req, res);
+  if (req.url === '/api' || req.url?.startsWith('/api/') || req.url?.startsWith('/api?')) {
+    cors(req, res);
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    return void api(req, res);
+  }
   if (SERVE_DIST) return serveDist(req, res);
   res.writeHead(404);
   res.end();
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Sincronización en http://${HOST}:${PORT}/__sync`);
+  console.log(`Sincronización en http://${HOST}:${PORT}/__sync · API en http://${HOST}:${PORT}/api`);
   console.log(SERVE_DIST ? `Sirviendo la web desde ${DIST}` : 'Sin build de la web (dist/): solo sincronización');
   console.log(`Orígenes permitidos: ${ORIGINS.join(', ')}${ALLOW_LAN ? ' y equipos de la red local' : ''}`);
   const lan = lanUrls();
