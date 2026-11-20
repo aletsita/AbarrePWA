@@ -12,6 +12,7 @@ import { menuController } from '@ionic/core/components';
 import {
   calculatorOutline,
   cubeOutline,
+  bagHandleOutline,
   ellipsisHorizontal,
   logOutOutline,
   peopleOutline,
@@ -24,7 +25,9 @@ import { Redirect, Route, useLocation } from 'react-router-dom';
 import { BrandLogo, BrandWord } from '../components/Brand';
 import { useApp } from '../context/AppContext';
 import { initials, isToday, money, stockLevel } from '../data/models';
+import { ACTIVE_STATUSES } from '../data/pickup';
 import Register from './pages/Register/Register';
+import Orders from './pages/Orders/Orders';
 import SaleComplete from './pages/SaleComplete/SaleComplete';
 import Inventory from './pages/Inventory/Inventory';
 import Sales from './pages/Sales/Sales';
@@ -37,7 +40,7 @@ import './panel.css';
 export default function PanelLayout() {
   const { pathname } = useLocation();
   const router = useIonRouter();
-  const { products, devices, store, user, logout, isLive, pending, sales, customers, accounts } = useApp();
+  const { products, devices, store, user, logout, isLive, pending, sales, customers, accounts, orders } = useApp();
 
   if (!user) return <Redirect to="/panel/login" />;
 
@@ -52,9 +55,13 @@ export default function PanelLayout() {
   const todayTotal = todays.reduce((n, s) => n + s.total, 0);
   const owing = customers.filter((c) => c.balance > 0).length;
   const openItems = accounts.reduce((n, a) => n + a.count, 0);
+  const newOrders = orders.filter((o) => o.status === 'pendiente').length;
+  const openOrders = orders.filter((o) => ACTIVE_STATUSES.includes(o.status)).length;
 
   const NAV = [
     { href: '/panel/caja', label: 'Caja', icon: calculatorOutline, badge: openItems, tone: 'secondary' },
+    // Contador: pedidos pendientes de atender (o, si no hay, los que faltan por entregar)
+    { href: '/panel/pedidos', label: 'Pedidos', icon: bagHandleOutline, badge: newOrders || openOrders, tone: newOrders ? 'danger' : 'medium' },
     { href: '/panel/inventario', label: 'Inventario', icon: cubeOutline, badge: low, tone: 'warning' },
     { href: '/panel/ventas', label: 'Ventas', icon: receiptOutline, badge: unsynced, tone: 'warning' },
     { href: '/panel/corte', label: 'Corte del día', short: 'Corte', icon: walletOutline },
@@ -136,6 +143,7 @@ export default function PanelLayout() {
         <div className="panel-outlet">
           <IonRouterOutlet>
             <Route exact path="/panel/caja" component={Register} />
+            <Route exact path="/panel/pedidos" component={Orders} />
             <Route exact path="/panel/venta-completada" component={SaleComplete} />
             <Route exact path="/panel/inventario" component={Inventory} />
             <Route exact path="/panel/ventas" component={Sales} />

@@ -1,6 +1,7 @@
 import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { Redirect, Route } from 'react-router-dom';
+import { OrderAlerts } from './components/OrderAlerts';
 import { SyncToaster } from './components/SyncToaster';
 import { AppProvider } from './context/AppContext';
 import PanelLayout from './panel/PanelLayout';
@@ -16,7 +17,7 @@ export default function App() {
           <IonRouterOutlet>
             <Route exact path="/panel/login" component={Login} />
             <Route
-              path="/panel/:section(caja|venta-completada|inventario|ventas|clientes|corte|dispositivos|configuracion)"
+              path="/panel/:section(caja|pedidos|venta-completada|inventario|ventas|clientes|corte|dispositivos|configuracion)"
               render={() => <PanelLayout />}
             />
             <Route exact path="/panel">
@@ -27,6 +28,7 @@ export default function App() {
               <Redirect to="/panel/caja" />
             </Route>
           </IonRouterOutlet>
+          <OrderAlerts />
         </IonReactRouter>
         <SyncToaster />
       </IonApp>

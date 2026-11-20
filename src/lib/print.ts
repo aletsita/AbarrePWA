@@ -1,4 +1,4 @@
-import { money, PAYMENT_LABEL, time, type CashCut, type Customer, type Sale, type Store, type TicketConfig } from '../data/models';
+import { money, ORIGIN_LABEL, PAYMENT_LABEL, saleOrigin, time, type CashCut, type Customer, type Sale, type Store, type TicketConfig } from '../data/models';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -49,6 +49,7 @@ export function printSale(sale: Sale, store: Store, config: TicketConfig, custom
     `<div class="c"><h1>${esc(first ?? store.name)}</h1>${rest.map((l) => `<div>${esc(l)}</div>`).join('')}<div>RFC ${esc(store.rfc)}</div></div>
      <div class="sep"></div>
      <div class="c">Folio ${sale.folio} · ${new Date(sale.date).toLocaleDateString('es-MX')} ${time(sale.date)}</div>
+     ${sale.orderFolio ? `<div class="c">${ORIGIN_LABEL.pedido} · pedido ${esc(sale.orderFolio)}</div>` : ''}
      <div class="sep"></div>
      <table>${rows}</table>
      <div class="sep"></div>
@@ -63,6 +64,9 @@ function cutRows(cut: CashCut): [string, number][] {
   return [
     ['Total vendido', cut.salesTotal],
     ['Número de ventas', cut.salesCount],
+    // Cortes anteriores a Pide y recoge: todo fue venta en tienda
+    ['Ventas en tienda', cut.storeSales ?? cut.salesTotal - (cut.pickupSales ?? 0)],
+    ['Ventas Pide y recoge', cut.pickupSales ?? 0],
     ['Efectivo', cut.cashSales],
     ['Tarjeta', cut.cardSales],
     ['Transferencia', cut.transferSales],
@@ -121,11 +125,13 @@ export function downloadSalesCsv(sales: Sale[], store: Store, period: string) {
     ['Tienda', store.name],
     ['Periodo', period],
     [],
-    ['Folio', 'Fecha', 'Hora', 'Empleado', 'Cliente', 'Artículos', 'Método de pago', 'Total', 'Pagó con'],
+    ['Folio', 'Fecha', 'Hora', 'Origen', 'Pedido', 'Empleado', 'Cliente', 'Artículos', 'Método de pago', 'Total', 'Pagó con'],
     ...sales.map((s) => [
       s.folio,
       new Date(s.date).toLocaleDateString('es-MX'),
       time(s.date),
+      ORIGIN_LABEL[saleOrigin(s)],
+      s.orderFolio ?? '',
       s.employee,
       s.customerName ?? '',
       s.items.reduce((n, i) => n + i.qty, 0),

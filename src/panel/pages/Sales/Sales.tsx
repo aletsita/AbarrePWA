@@ -1,5 +1,6 @@
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 import {
+  bagHandleOutline,
   basketOutline,
   bookOutline,
   cardOutline,
@@ -16,7 +17,7 @@ import { EmptyState } from '../../../components/EmptyState';
 import { StatCard } from '../../../components/StatCard';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp } from '../../../context/AppContext';
-import { money, PAYMENT_LABEL, shortDate, time, type PaymentMethod, type Sale } from '../../../data/models';
+import { money, ORIGIN_LABEL, PAYMENT_LABEL, saleOrigin, shortDate, time, type PaymentMethod, type Sale, type SaleOrigin } from '../../../data/models';
 import { downloadSalesCsv, printSale } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import './Sales.css';
@@ -41,10 +42,11 @@ export default function Sales() {
   const [range, setRange] = useState<Range>('hoy');
   const [method, setMethod] = useState<PaymentMethod | ''>('');
   const [employee, setEmployee] = useState('');
+  const [origin, setOrigin] = useState<SaleOrigin | ''>('');
   const [detail, setDetail] = useState<Sale>();
 
   const list = sales.filter(
-    (s) => inRange(s.date, range) && (!method || s.method === method) && (!employee || s.employee === employee),
+    (s) => inRange(s.date, range) && (!method || s.method === method) && (!employee || s.employee === employee) && (!origin || saleOrigin(s) === origin),
   );
   const total = list.reduce((n, s) => n + s.total, 0);
   const pieces = list.reduce((n, s) => n + s.items.reduce((m, i) => m + i.qty, 0), 0);
@@ -94,6 +96,10 @@ export default function Sales() {
               <option value="">Todos los empleados</option>
               {employees.map((e) => <option key={e}>{e}</option>)}
             </select>
+            <select className="fselect" value={origin} onChange={(e) => setOrigin(e.target.value as SaleOrigin | '')} aria-label="Origen">
+              <option value="">Todos los orígenes</option>
+              {(Object.keys(ORIGIN_LABEL) as SaleOrigin[]).map((o) => <option key={o} value={o}>{ORIGIN_LABEL[o]}</option>)}
+            </select>
           </div>
 
           <section className="pcard">
@@ -106,6 +112,7 @@ export default function Sales() {
                     <th>Folio</th>
                     <th>Fecha y hora</th>
                     <th>Empleado</th>
+                    <th>Origen</th>
                     <th className="num">Artículos</th>
                     <th>Pago</th>
                     <th className="num">Total</th>
@@ -121,6 +128,13 @@ export default function Sales() {
                       <td data-label="Empleado">
                         {s.employee}
                         {s.customerName && <small className="sales-customer">Cliente: {s.customerName}</small>}
+                      </td>
+                      <td data-label="Origen">
+                        {saleOrigin(s) === 'pedido' ? (
+                          <span className="pill is-pickup"><IonIcon icon={bagHandleOutline} />{s.orderFolio ?? ORIGIN_LABEL.pedido}</span>
+                        ) : (
+                          <span className="sales-origin">{ORIGIN_LABEL.tienda}</span>
+                        )}
                       </td>
                       <td className="num" data-label="Artículos">{s.items.reduce((n, i) => n + i.qty, 0)}</td>
                       <td data-label="Pago">
@@ -153,6 +167,8 @@ export default function Sales() {
               <dl className="sd-facts">
                 <div><dt>Fecha</dt><dd>{new Date(detail.date).toLocaleDateString('es-MX', { dateStyle: 'long' })} · {time(detail.date)}</dd></div>
                 <div><dt>Atendió</dt><dd>{detail.employee}</dd></div>
+                <div><dt>Origen</dt><dd>{ORIGIN_LABEL[saleOrigin(detail)]}</dd></div>
+                {detail.orderFolio && <div><dt>Pedido</dt><dd><span className="pill is-pickup"><IonIcon icon={bagHandleOutline} />{detail.orderFolio}</span></dd></div>}
                 {detail.customerName && <div><dt>Cliente</dt><dd>{detail.customerName}</dd></div>}
                 <div><dt>Pago</dt><dd><span className={`pill is-${detail.method}`}><IonIcon icon={METHOD_ICON[detail.method]} />{PAYMENT_LABEL[detail.method]}</span></dd></div>
                 {detail.pending && <div><dt>Estado</dt><dd><SyncBadge state="pendiente" /></dd></div>}

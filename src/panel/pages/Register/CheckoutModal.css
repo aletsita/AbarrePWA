@@ -15,6 +15,7 @@
 
 .co-methods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 @media (max-width: 479px) { .co-methods { grid-template-columns: repeat(2, 1fr); } }
+.co-methods.is-three { grid-template-columns: repeat(3, 1fr); }
 .co-method {
   position: relative;
   display: flex;

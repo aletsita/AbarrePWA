@@ -13,6 +13,8 @@ export interface Product {
   minStock: number;
   barcode: string;
   photo?: string;
+  // Pide y recoge: si aparece en el catálogo de la app de clientes (sin valor = sí)
+  showInApp?: boolean;
 }
 
 export interface SaleItem {
@@ -34,7 +36,15 @@ export interface Sale {
   pending?: boolean;
   customerId?: string;
   customerName?: string;
+  // Pide y recoge: la venta viene de un pedido entregado (sin origen = venta en tienda)
+  origin?: SaleOrigin;
+  orderId?: string;
+  orderFolio?: string;
 }
+
+export type SaleOrigin = 'tienda' | 'pedido';
+export const ORIGIN_LABEL: Record<SaleOrigin, string> = { tienda: 'En tienda', pedido: 'Pide y recoge' };
+export const saleOrigin = (s: Sale): SaleOrigin => s.origin ?? 'tienda';
 
 export interface Customer {
   id: string;
@@ -106,6 +116,9 @@ export interface CashCut {
   creditSales?: number;
   creditPaid?: number;
   creditCash?: number;
+  // Desglose por origen (los cortes anteriores a Pide y recoge no lo traen)
+  storeSales?: number;
+  pickupSales?: number;
   cashIn: number;
   cashOut: number;
   expectedCash: number;

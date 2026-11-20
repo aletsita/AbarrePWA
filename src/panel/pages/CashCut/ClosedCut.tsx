@@ -38,6 +38,8 @@ export function ClosedCut({ cut }: { cut: CashCut }) {
             <div><dt>Total vendido</dt><dd className="money">{money(cut.salesTotal)}</dd></div>
             <div><dt>Número de ventas</dt><dd>{cut.salesCount}</dd></div>
             <div><dt>Ticket promedio</dt><dd className="money">{money(avg)}</dd></div>
+            <div><dt>En tienda</dt><dd className="money">{money(cut.storeSales ?? cut.salesTotal - (cut.pickupSales ?? 0))}</dd></div>
+            <div><dt>Pide y recoge</dt><dd className="money">{money(cut.pickupSales ?? 0)}</dd></div>
             <div><dt>Efectivo</dt><dd className="money">{money(cut.cashSales)}</dd></div>
             <div><dt>Tarjeta</dt><dd className="money">{money(cut.cardSales)}</dd></div>
             <div><dt>Transferencia</dt><dd className="money">{money(cut.transferSales)}</dd></div>
