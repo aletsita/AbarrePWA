@@ -15,7 +15,7 @@ Necesitas dos terminales:
 
 ```bash
 npm install
-npm run dev:server   # servidor de sincronización en http://0.0.0.0:8787
+npm run dev:server   # sincronización (/__sync) y API de la app del celular (/api) en http://0.0.0.0:8787
 npm run dev          # caja en http://localhost:5173
 ```
 
@@ -76,10 +76,15 @@ El acceso viene prellenado: `donpepe@correo.mx` (Dueño) con contraseña `abarre
 
 ### Pide y recoge (vista previa)
 
-Tus clientes piden desde su celular y pagan al recoger en tienda, en efectivo, con tarjeta o por transferencia. Todavía no hay API: los pedidos viven en los datos de la caja, igual que los productos. Al empezar hay uno de ejemplo en cada estado, y los nuevos llegan por el canal de sincronización (mensaje `ORDER_RECEIVED`, ver [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md)).
+Tus clientes piden desde su celular y pagan al recoger en tienda, en efectivo, con tarjeta o por transferencia. Los pedidos viven en los datos de la caja, igual que los productos. Al empezar hay uno de ejemplo en cada estado. Los clientes los hacen en la app del celular contra la API del servidor (`server/api.js`), que se los manda a la caja por el canal de sincronización (mensaje `ORDER_RECEIVED`, ver [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md)). **La caja tiene que estar abierta** para que lleguen.
+
+- Las cuentas de la app y los pedidos de los clientes se guardan en `server/data/api.json` (no se sube a git). Para empezar de cero, apaga el servidor y borra esa carpeta.
+- El personal entra a la app del celular con el **mismo correo** que tiene en **Ajustes → Usuarios**. Si el usuario está activo, la app le muestra las pantallas de la tienda; si no, entra como cliente.
+- La **descripción** de cada producto (en **Inventario**, sección *Pide y recoge*) es lo que ven los clientes en el detalle.
 
 - **Pedidos** muestra una lista por pestañas: *Pendientes*, *Preparando*, *Listos* y *Entregados*. El número del menú cuenta los pendientes. Cuando entra un pedido nuevo suena un aviso y aparece una alerta en cualquier pantalla.
 - Cada pedido avanza una etapa a la vez: **Empezar a preparar**, **Marcar listo** y **Entregar**.
+- Mientras no se entrega, cualquier pedido se puede **cancelar** (🗑 en la lista o **Cancelar pedido** en el detalle). Si es por **falta de existencia** se marcan los productos agotados y el cliente puede quitar el pedido o elegir otros productos desde su app; si es por **otro motivo** se le escribe el porqué. Los cancelados del día están en la pestaña **Cancelados**.
 - **Para entregar se necesita el código del cliente.** Su app lo genera al confirmar el pedido y lo muestra como QR y 6 dígitos cuando el pedido está listo. En la caja, **Entregar** (o **Entregar con código**, que busca el pedido por el código) pide escribirlo o escanearlo con la cámara o con un lector USB. Después de 5 intentos fallidos se bloquea un minuto. Con el código correcto se abre el cobro de siempre, sin crédito. La entrega registra la venta una sola vez, descuenta existencias y permite imprimir el ticket.
 - Para probar con los pedidos de ejemplo, estos son sus códigos: P-0002 `418362` (listo), P-0003 `529083`, P-0004 `771640` y P-0005 `305218`.
 - Mientras un pedido no se entrega, sus piezas quedan apartadas. Si después se venden en mostrador y ya no alcanzan, el pedido lo avisa.

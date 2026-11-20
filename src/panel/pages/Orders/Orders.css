@@ -88,3 +88,26 @@
 .pc-camera { position: relative; overflow: hidden; border-radius: 12px; background: #000; aspect-ratio: 4 / 3; }
 .pc-camera video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pc-camera-text { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); color: #fff; font-size: 0.86rem; text-align: center; }
+
+/* Cancelar pedido */
+.ord-row-cancel { --padding-start: 8px; --padding-end: 8px; margin: 0; }
+.ord-cancelled { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--t-danger-bg); color: var(--ion-color-danger); font-size: 0.88rem; line-height: 1.45; }
+.ord-cancelled ion-icon { flex: none; margin-top: 1px; font-size: 18px; }
+.oc-lead { margin: 0 0 16px; color: var(--t-muted); line-height: 1.5; }
+.oc-lead strong { color: var(--t-ink); }
+.oc-reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.oc-reason { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1.5px solid var(--t-border-strong); border-radius: 12px; background: var(--t-surface); color: var(--t-ink); font: inherit; text-align: left; cursor: pointer; }
+.oc-reason ion-icon { flex: none; font-size: 22px; color: var(--t-muted); }
+.oc-reason span { display: flex; flex-direction: column; gap: 2px; }
+.oc-reason small { color: var(--t-muted); font-size: 0.8rem; line-height: 1.35; }
+.oc-reason.is-active { border-color: var(--ion-color-danger); background: var(--t-danger-bg); }
+.oc-reason.is-active ion-icon { color: var(--ion-color-danger); }
+.oc-items { margin: 0; padding: 0; border: 0; }
+.oc-items legend { margin-bottom: 8px; font-weight: 600; }
+.oc-items label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--t-border); border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+.oc-items label.is-on { border-color: var(--ion-color-danger); }
+.oc-items input { width: 18px; height: 18px; accent-color: var(--ion-color-danger); }
+.oc-items label span { flex: 1; }
+.oc-items em { font-style: normal; font-size: 0.78rem; font-weight: 700; color: var(--ion-color-danger); }
+.oc-error { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--ion-color-danger); font-size: 0.86rem; font-weight: 600; }
+@media (max-width: 480px) { .oc-reasons { grid-template-columns: 1fr; } }

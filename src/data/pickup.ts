@@ -1,9 +1,11 @@
 // Pide y recoge: estados de un pedido y sus textos. ÚNICO lugar donde se definen.
 // Un pedido solo avanza, una etapa a la vez: pendiente → preparando → listo → entregado.
+// Mientras no se entrega, la caja puede cancelarlo (por ejemplo, si se agotó un producto).
 import type { CashMethod, SaleItem } from './models';
 
-export type OrderStatus = 'pendiente' | 'preparando' | 'listo' | 'entregado';
+export type OrderStatus = 'pendiente' | 'preparando' | 'listo' | 'entregado' | 'cancelado';
 
+// Etapas en orden (cancelado no es una etapa: sale de cualquiera antes de entregado)
 export const ORDER_STATUSES: OrderStatus[] = ['pendiente', 'preparando', 'listo', 'entregado'];
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
@@ -11,10 +13,26 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   preparando: 'Preparando',
   listo: 'Listo para recoger',
   entregado: 'Entregado',
+  cancelado: 'Cancelado',
 };
 
+export type CancelReason = 'sin-existencia' | 'otro';
+
+export const CANCEL_REASON_LABEL: Record<CancelReason, string> = {
+  'sin-existencia': 'Falta de existencia',
+  otro: 'Otro motivo',
+};
+
+// Por qué la caja canceló el pedido. `missing`: productos que se agotaron (ids). El cliente lo ve en su app.
+export interface OrderCancel {
+  reason: CancelReason;
+  missing: string[];
+  note?: string;
+  at: string;
+}
+
 // Botón con el que la caja lleva el pedido a la siguiente etapa
-export const ORDER_NEXT_ACTION: Record<Exclude<OrderStatus, 'entregado'>, string> = {
+export const ORDER_NEXT_ACTION: Record<Exclude<OrderStatus, 'entregado' | 'cancelado'>, string> = {
   pendiente: 'Empezar a preparar',
   preparando: 'Marcar listo',
   listo: 'Entregar y cobrar',
@@ -31,6 +49,8 @@ export function orderNoticeText(status: OrderStatus, folio: string) {
       return `Tu pedido ${folio} está listo para recoger`;
     case 'entregado':
       return `Pedido ${folio} entregado. ¡Gracias!`;
+    case 'cancelado':
+      return `La tienda canceló tu pedido ${folio}`;
   }
 }
 
@@ -61,6 +81,7 @@ export interface PickupOrder {
   deliveredAt?: string;
   payment?: { method: CashMethod; received: number };
   saleId?: string;
+  cancel?: OrderCancel;
   // Código para recoger: lo genera el teléfono del cliente. La caja NUNCA lo muestra, solo lo compara al entregar.
   pickupCode?: string;
 }

@@ -74,6 +74,7 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
       const match = orders.find((o) => o.pickupCode === parsed.code && (!parsed.orderId || o.id === parsed.orderId));
       if (!match) return fail('No hay ningún pedido con ese código.');
       if (match.status === 'entregado') return fail(`El pedido ${match.folio} ya se entregó.`);
+      if (match.status === 'cancelado') return fail(`El pedido ${match.folio} está cancelado.`);
       if (match.status !== 'listo') {
         setError(`El pedido ${match.folio} todavía está en "${ORDER_STATUS_LABEL[match.status]}". Márcalo como listo antes de entregarlo.`);
         return;
