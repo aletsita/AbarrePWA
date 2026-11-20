@@ -54,7 +54,6 @@
   letter-spacing: 0;
 }
 .login-seg ion-segment-button.segment-button-checked { box-shadow: var(--t-shadow); border-radius: 6px; }
-.login-card ion-input ion-icon[slot='start'] { color: var(--t-muted); margin-right: 8px; font-size: 19px; }
 .login-link {
   align-self: flex-end;
   margin-top: -6px;

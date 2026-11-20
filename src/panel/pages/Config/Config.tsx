@@ -1,9 +1,11 @@
-import { IonButton, IonContent, IonIcon, IonInput, IonPage, IonToggle, useIonAlert, useIonToast } from '@ionic/react';
-import { personAddOutline, saveOutline } from 'ionicons/icons';
+import { IonButton, IonContent, IonIcon, IonPage, IonToggle, useIonToast } from '@ionic/react';
+import { callOutline, locationOutline, mailOutline, personAddOutline, personOutline, saveOutline, storefrontOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
+import { AreaField, FormSection, SwitchField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import { initials, money, ROLES, type Role, type Store, type TicketConfig } from '../../../data/models';
 import { PanelHeader } from '../../components/PanelHeader';
+import { UserModal } from './UserModal';
 import './Config.css';
 
 type Tab = 'tienda' | 'usuarios' | 'ticket';
@@ -13,20 +15,38 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'ticket', label: 'Ticket' },
 ];
 
-const STORE_FIELDS: { key: keyof Store; label: string; wide?: boolean; inputmode?: 'tel' | 'email' }[] = [
-  { key: 'name', label: 'Nombre de la tienda' },
-  { key: 'owner', label: 'Dueño' },
-  { key: 'phone', label: 'Teléfono', inputmode: 'tel' },
-  { key: 'email', label: 'Correo', inputmode: 'email' },
-  { key: 'address', label: 'Dirección', wide: true },
-  { key: 'rfc', label: 'RFC' },
-  { key: 'register', label: 'Nombre de la caja' },
+type StoreField = { key: keyof Store; label: string; icon?: string; wide?: boolean; hint?: string; inputMode?: 'tel' | 'email' };
+
+const STORE_SECTIONS: { title: string; text?: string; fields: StoreField[] }[] = [
+  {
+    title: 'Negocio',
+    fields: [
+      { key: 'name', label: 'Nombre de la tienda', icon: storefrontOutline, hint: 'Aparece en el ticket y en el menú' },
+      { key: 'owner', label: 'Dueño', icon: personOutline },
+      { key: 'address', label: 'Dirección', icon: locationOutline, wide: true },
+    ],
+  },
+  {
+    title: 'Contacto',
+    fields: [
+      { key: 'phone', label: 'Teléfono', icon: callOutline, inputMode: 'tel' },
+      { key: 'email', label: 'Correo', icon: mailOutline, inputMode: 'email' },
+    ],
+  },
+  {
+    title: 'Facturación y caja',
+    fields: [
+      { key: 'rfc', label: 'RFC', hint: 'Se imprime en cada ticket' },
+      { key: 'register', label: 'Nombre de la caja', hint: 'Para distinguirla si tienes varias' },
+    ],
+  },
 ];
+const STORE_FIELDS = STORE_SECTIONS.flatMap((g) => g.fields);
 
 export default function Config() {
   const { store, ticketConfig, users, user, updateStore, updateTicketConfig, saveUser } = useApp();
   const [toast] = useIonToast();
-  const [alert] = useIonAlert();
+  const [addingUser, setAddingUser] = useState(false);
   const [tab, setTab] = useState<Tab>('tienda');
   const [form, setForm] = useState<Store>(store);
   const [ticket, setTicket] = useState<TicketConfig>(ticketConfig);
@@ -50,37 +70,6 @@ export default function Config() {
     saved();
   };
 
-  const addUser = () =>
-    alert({
-      header: 'Agregar usuario',
-      message: 'Podrá entrar al panel con este correo.',
-      inputs: [
-        { name: 'name', placeholder: 'Nombre completo', attributes: { autocapitalize: 'words' } },
-        { name: 'email', type: 'email', placeholder: 'Correo' },
-      ],
-      buttons: [
-        { text: 'Cancelar', role: 'cancel' },
-        {
-          text: 'Agregar',
-          handler: (v: { name: string; email: string }) => {
-            const name = v.name.trim();
-            const email = v.email.trim().toLowerCase();
-            if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) {
-              toast({ message: 'Escribe un nombre y un correo válidos', duration: 2200, color: 'danger', position: 'top', cssClass: 'toast-app' });
-              return false;
-            }
-            if (users.some((u) => u.email.toLowerCase() === email)) {
-              toast({ message: 'Ya hay un usuario con ese correo', duration: 2200, color: 'danger', position: 'top', cssClass: 'toast-app' });
-              return false;
-            }
-            saveUser({ name, email, role: 'Cajero', active: true });
-            saved(`${name} agregado como Cajero`);
-            return true;
-          },
-        },
-      ],
-    });
-
   return (
     <IonPage>
       <PanelHeader title="Configuración" />
@@ -98,21 +87,24 @@ export default function Config() {
 
           {tab === 'tienda' && (
             <section className="pcard cfg-card">
-              <div className="cfg-form">
-                {STORE_FIELDS.map((f) => (
-                  <IonInput
-                    key={f.key}
-                    className={`field ${f.wide ? 'cfg-wide' : ''}`}
-                    fill="outline"
-                    label={f.label}
-                    labelPlacement="stacked"
-                    inputmode={f.inputmode}
-                    value={form[f.key]}
-                    disabled={!isOwner}
-                    onIonInput={(e) => setForm((s) => ({ ...s, [f.key]: e.detail.value ?? '' }))}
-                  />
-                ))}
-              </div>
+              {STORE_SECTIONS.map((g) => (
+                <FormSection key={g.title} title={g.title} text={g.text}>
+                  {g.fields.map((f) => (
+                    <TextField
+                      key={f.key}
+                      className={f.wide ? 'is-wide' : ''}
+                      label={f.label}
+                      hint={f.hint}
+                      icon={f.icon}
+                      inputMode={f.inputMode}
+                      value={form[f.key]}
+                      disabled={!isOwner}
+                      error={(f.key === 'name' || f.key === 'register') && !form[f.key].trim() && 'No puede quedar vacío'}
+                      onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
+                    />
+                  ))}
+                </FormSection>
+              ))}
               <div className="cfg-actions">
                 {!isOwner && <span className="muted">Solo el dueño puede cambiar estos datos.</span>}
                 <IonButton className="btn-lg" disabled={!isOwner || !storeDirty} onClick={saveStore}>
@@ -128,7 +120,7 @@ export default function Config() {
               <div className="pcard-head">
                 <h2>Usuarios</h2>
                 {isOwner && (
-                  <IonButton fill="clear" size="small" onClick={addUser}>
+                  <IonButton fill="clear" size="small" onClick={() => setAddingUser(true)}>
                     <IonIcon slot="start" icon={personAddOutline} />
                     Agregar usuario
                   </IonButton>
@@ -187,18 +179,15 @@ export default function Config() {
           {tab === 'ticket' && (
             <div className="cfg-ticket">
               <section className="pcard cfg-card">
-                <div className="cfg-form is-single">
-                  <label className="cfg-area">
-                    <span>Encabezado</span>
-                    <textarea rows={3} value={ticket.header} onChange={(e) => setTicket((t) => ({ ...t, header: e.target.value }))} />
-                  </label>
-                  <label className="cfg-area">
-                    <span>Mensaje al pie</span>
-                    <textarea rows={2} value={ticket.footer} onChange={(e) => setTicket((t) => ({ ...t, footer: e.target.value }))} />
-                  </label>
-                  <IonToggle checked={ticket.showLogo} onIonChange={(e) => setTicket((t) => ({ ...t, showLogo: e.detail.checked }))} justify="space-between">Mostrar logo</IonToggle>
-                  <IonToggle checked={ticket.showEmployee} onIonChange={(e) => setTicket((t) => ({ ...t, showEmployee: e.detail.checked }))} justify="space-between">Mostrar quién atendió</IonToggle>
-                </div>
+                <FormSection title="Texto" text="Cada renglón del encabezado se imprime en una línea; el primero va en negritas.">
+                  <AreaField className="is-wide" label="Encabezado" rows={3} value={ticket.header} onChange={(v) => setTicket((t) => ({ ...t, header: v }))} />
+                  <AreaField className="is-wide" label="Mensaje al pie" rows={2} value={ticket.footer} onChange={(v) => setTicket((t) => ({ ...t, footer: v }))} />
+                </FormSection>
+                <FormSection title="Qué mostrar">
+                  <SwitchField label="Logo" hint="Arriba del nombre de la tienda" checked={ticket.showLogo} onChange={(v) => setTicket((t) => ({ ...t, showLogo: v }))} />
+                  <SwitchField label="Quién atendió" hint="Nombre del cajero al pie del ticket" checked={ticket.showEmployee}
+                    onChange={(v) => setTicket((t) => ({ ...t, showEmployee: v }))} />
+                </FormSection>
                 <div className="cfg-actions">
                   <IonButton
                     className="btn-lg"
@@ -230,6 +219,7 @@ export default function Config() {
           )}
         </div>
       </IonContent>
+      <UserModal isOpen={addingUser} onClose={() => setAddingUser(false)} onAdded={(name, role) => saved(`${name} agregado como ${role}`)} />
     </IonPage>
   );
 }

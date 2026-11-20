@@ -1,4 +1,4 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonInput, IonModal, IonTitle, IonToolbar, useIonToast } from '@ionic/react';
+import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar, useIonToast } from '@ionic/react';
 import {
   arrowDown,
   arrowForward,
@@ -11,6 +11,7 @@ import {
   sparklesOutline,
 } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
+import { FormSection, MoneyField, SelectField, TextField } from '../../../components/Form';
 import { PhotoPicker } from '../../../components/PhotoPicker';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp, type ProductView } from '../../../context/AppContext';
@@ -50,6 +51,17 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   const [notice, setNotice] = useState('');
   const [code, setCode] = useState('');
   const codeInput = useRef<HTMLInputElement>(null);
+  // Texto de los campos numéricos tal como se escribe ("14." no debe volverse 14 a medio teclear)
+  const [nums, setNums] = useState({ cost: '', price: '', stock: '', minStock: '' });
+
+  useEffect(() => {
+    setNums({
+      cost: draft.cost ? String(draft.cost) : '',
+      price: draft.price ? String(draft.price) : '',
+      stock: String(draft.stock),
+      minStock: String(draft.minStock),
+    });
+  }, [draft.id]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -88,6 +100,10 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   };
 
   const set = <K extends keyof Product>(k: K, v: Product[K]) => setDraft((d) => ({ ...d, [k]: v }));
+  const setNum = (k: keyof typeof nums, text: string) => {
+    setNums((n) => ({ ...n, [k]: text }));
+    set(k, Number(text) || 0);
+  };
   const dup = draft.barcode ? findByBarcode(draft.barcode) : undefined;
   const dupOther = dup && dup.id !== draft.id;
   const valid = draft.name.trim() && draft.price > 0 && draft.barcode.trim() && !dupOther;
@@ -134,25 +150,30 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
 
       {step === 'codigo' ? (
         <>
-          <div className="pmodal-body pm-lookup">
-            <label htmlFor="pm-code">Escanea el producto con el lector o escribe su código de barras</label>
-            <div className="pm-code-box">
-              <IonIcon icon={barcodeOutline} />
-              <input
-                id="pm-code"
-                ref={codeInput}
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="7501234567890"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\s/g, ''))}
-                onKeyDown={(e) => e.key === 'Enter' && lookup(code)}
-              />
-            </div>
+          <form
+            className="pmodal-body pm-lookup"
+            onSubmit={(e) => {
+              e.preventDefault();
+              lookup(code);
+            }}
+          >
+            <p className="form-intro">Empieza por el código de barras: si el producto ya existe te llevamos a sus datos.</p>
+            <TextField
+              className="pm-code"
+              label="Código de barras"
+              hint="Escanéalo con el lector o escríbelo."
+              icon={barcodeOutline}
+              inputRef={codeInput}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="Ej. 7501234567890"
+              value={code}
+              onChange={(v) => setCode(v.replace(/\s/g, ''))}
+            />
             <button type="button" className="pm-internal" onClick={() => lookup(`2${String(Date.now()).slice(-11)}`)}>
               El producto no tiene código · generar uno interno
             </button>
-          </div>
+          </form>
           <div className="pmodal-foot">
             <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
             <IonButton className="btn-lg" disabled={!code.trim()} onClick={() => lookup(code)}>
@@ -174,52 +195,43 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
               <div className="pm-head">
                 <PhotoPicker value={draft.photo} onChange={(photo) => set('photo', photo)} />
                 <div className="pm-head-fields">
-                  <IonInput className="field" fill="outline" label="Nombre" labelPlacement="stacked" value={draft.name}
-                    onIonInput={(e) => set('name', e.detail.value ?? '')} placeholder="Ej. Café Legal 200 g" />
+                  <TextField label="Nombre del producto" placeholder="Ej. Café Legal 200 g" value={draft.name} onChange={(v) => set('name', v)} />
                   {product?.sync && <SyncBadge state={product.sync} />}
                 </div>
               </div>
-              <div className="pm-two">
-                <IonInput
-                  className={`field ${dupOther ? 'ion-invalid ion-touched' : ''}`}
-                  fill="outline"
+
+              <FormSection title="Identificación">
+                <TextField
                   label="Código de barras"
-                  labelPlacement="stacked"
-                  inputmode="numeric"
+                  icon={barcodeOutline}
+                  inputMode="numeric"
                   value={draft.barcode}
-                  errorText={dupOther ? `Ya lo usa: ${dup?.name}` : undefined}
-                  onIonInput={(e) => set('barcode', (e.detail.value ?? '').replace(/\s/g, ''))}
+                  error={dupOther && `Ya lo usa ${dup?.name}`}
+                  onChange={(v) => set('barcode', v.replace(/\s/g, ''))}
                 />
-                <label className="pm-select">
-                  <span>Categoría</span>
-                  <select className="fselect" value={draft.category} onChange={(e) => set('category', e.target.value)}>
-                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div className="pm-two">
-                <IonInput className="field" fill="outline" label="Precio de compra" labelPlacement="stacked" inputmode="decimal"
-                  value={draft.cost ? String(draft.cost) : ''} onIonInput={(e) => set('cost', Number(e.detail.value) || 0)}>
-                  <span slot="start" className="muted">$</span>
-                </IonInput>
-                <IonInput className="field" fill="outline" label="Precio de venta" labelPlacement="stacked" inputmode="decimal"
-                  value={draft.price ? String(draft.price) : ''} onIonInput={(e) => set('price', Number(e.detail.value) || 0)}>
-                  <span slot="start" className="muted">$</span>
-                </IonInput>
-              </div>
-              {draft.price > 0 && draft.cost > 0 && (
-                <p className={`pm-margin ${margin > 0 ? 'is-ok' : 'is-bad'}`}>
-                  {margin > 0
-                    ? <>Ganancia de <strong>{money(margin)}</strong> por pieza ({Math.round((margin / draft.price) * 100)} %)</>
-                    : 'El precio de venta es menor o igual al de compra'}
-                </p>
-              )}
-              <div className="pm-two">
-                <IonInput className="field" fill="outline" label="Existencia" labelPlacement="stacked" inputmode="numeric"
-                  value={String(draft.stock)} onIonInput={(e) => set('stock', Number(e.detail.value) || 0)} />
-                <IonInput className="field" fill="outline" label="Avisar cuando queden" labelPlacement="stacked" inputmode="numeric"
-                  value={String(draft.minStock)} onIonInput={(e) => set('minStock', Number(e.detail.value) || 0)} />
-              </div>
+                <SelectField label="Categoría" value={draft.category} onChange={(v) => set('category', v)}>
+                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                </SelectField>
+              </FormSection>
+
+              <FormSection title="Precio">
+                <MoneyField label="Precio de compra" hint="Lo que te cuesta" value={nums.cost} onChange={(v) => setNum('cost', v)} />
+                <MoneyField label="Precio de venta" hint="Lo que cobras" value={nums.price} onChange={(v) => setNum('price', v)} />
+                {draft.price > 0 && draft.cost > 0 && (
+                  <p className={`form-note ${margin > 0 ? 'is-ok' : 'is-bad'}`}>
+                    {margin > 0
+                      ? <>Ganas <strong>{money(margin)}</strong> por pieza ({Math.round((margin / draft.price) * 100)} %)</>
+                      : 'El precio de venta es menor o igual al de compra'}
+                  </p>
+                )}
+              </FormSection>
+
+              <FormSection title="Existencia">
+                <TextField label="Piezas en tienda" inputMode="numeric" value={nums.stock} suffix="pzas"
+                  onChange={(v) => setNum('stock', v.replace(/\D/g, ''))} />
+                <TextField label="Avisar cuando queden" hint="Se marca como poco stock" inputMode="numeric" value={nums.minStock} suffix="pzas"
+                  onChange={(v) => setNum('minStock', v.replace(/\D/g, ''))} />
+              </FormSection>
             </section>
 
             {!isNew && (
@@ -247,7 +259,7 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
 
           <div className="pmodal-foot">
             <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
-            <IonButton className="btn-lg" disabled={!valid} onClick={save}>
+            <IonButton className="btn-lg" disabled={!valid} onClick={() => save()}>
               <IonIcon slot="start" icon={saveOutline} />
               {isNew ? 'Agregar producto' : 'Guardar cambios'}
             </IonButton>

@@ -1,16 +1,57 @@
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonAlert } from '@ionic/react';
-import { add, checkmarkCircle, closeOutline, phonePortraitOutline, refreshOutline, timeOutline } from 'ionicons/icons';
+import { add, alertCircleOutline, checkmarkCircle, closeOutline, phonePortraitOutline, refreshOutline, serverOutline, timeOutline, wifiOutline } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
 import { EmptyState } from '../../../components/EmptyState';
 import { useApp } from '../../../context/AppContext';
 import type { Device } from '../../../data/models';
 import { ago, useNow } from '../../../hooks/useNow';
+import { buildLinkQr, normalizeServer, shortServer } from '../../../lib/link';
+import { URL_SYNC } from '../../../lib/sync';
 import { PanelHeader } from '../../components/PanelHeader';
 import { QrCode } from '../../components/QrCode';
 import './Devices.css';
 
+interface ServerOption {
+  url: string;
+  name: string;
+}
+
+// Direcciones con las que el celular llega al servidor de sincronización.
+// Si VITE_SYNC_URL ya es una dirección pública (no localhost) se usa esa; si no, se le pregunta al servidor.
+function useServerOptions(isOpen: boolean) {
+  const [options, setOptions] = useState<ServerOption[]>([]);
+  const [state, setState] = useState<'buscando' | 'listo' | 'error'>('buscando');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const fixed = /^https?:\/\//.test(URL_SYNC) && !/\/\/(localhost|127\.0\.0\.1)[:/]/.test(URL_SYNC) ? normalizeServer(URL_SYNC) : null;
+    if (fixed) {
+      setOptions([{ url: fixed, name: 'Configurada' }]);
+      setState('listo');
+      return;
+    }
+    let alive = true;
+    setState('buscando');
+    fetch(`${URL_SYNC.replace(/\/$/, '')}/info`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((info: { urls?: ServerOption[] }) => {
+        if (!alive) return;
+        setOptions(info.urls ?? []);
+        setState('listo');
+      })
+      .catch(() => alive && setState('error'));
+    return () => {
+      alive = false;
+    };
+  }, [isOpen]);
+
+  return { options, state };
+}
+
 function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { pairing, newPairingCode, devices, store } = useApp();
+  const { pairing, newPairingCode, devices, store, syncConnected } = useApp();
+  const { options, state } = useServerOptions(isOpen);
+  const [server, setServer] = useState('');
   const now = useNow(1000);
   const known = useRef<Set<string>>(new Set());
   const [linked, setLinked] = useState<Device>();
@@ -28,6 +69,10 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
     const fresh = devices.find((d) => !known.current.has(d.id));
     if (fresh) setLinked(fresh);
   }, [devices, isOpen, linked]);
+
+  useEffect(() => {
+    if (!options.some((o) => o.url === server)) setServer(options[0]?.url ?? '');
+  }, [options, server]);
 
   const left = pairing ? Math.max(0, Math.round((pairing.expiresAt - now) / 1000)) : 0;
   const expired = !!pairing && left === 0;
@@ -51,13 +96,23 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
           </div>
         ) : (
           <>
+            {!syncConnected && (
+              <p className="lk-alert" role="alert">
+                <IonIcon icon={alertCircleOutline} />
+                <span>
+                  Esta caja no está conectada al servidor de sincronización, así que el celular no podrá vincularse.
+                  Enciéndelo en la computadora con <code>npm run dev:server</code>.
+                </span>
+              </p>
+            )}
             <ol className="lk-steps">
+              <li>Conecta el celular a la <strong>misma red Wi‑Fi</strong> que esta computadora.</li>
               <li>En el celular abre Abarré y entra a <strong>Vincular con la caja</strong>.</li>
-              <li>Escanea este código QR o escribe los 6 dígitos.</li>
+              <li>Escanea el código QR, o escribe la dirección y los 6 dígitos.</li>
             </ol>
             <div className="lk-grid">
               <div className={`lk-qr ${expired ? 'is-expired' : ''}`}>
-                {pairing && <QrCode value={`ABARRE-LINK:${pairing.code}`} size={196} />}
+                {pairing && <QrCode value={buildLinkQr(pairing.code, server || null)} size={196} />}
               </div>
               <div className="lk-code">
                 <span>Código</span>
@@ -72,7 +127,31 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                 </IonButton>
               </div>
             </div>
-            <p className="lk-wait">Esperando a que el celular se vincule…</p>
+            <div className="lk-server">
+              <span className="lk-server-icon"><IonIcon icon={serverOutline} /></span>
+              <div>
+                <span className="lk-label">Dirección de la caja</span>
+                {state === 'buscando' && <strong className="muted">Buscando…</strong>}
+                {state === 'error' && <strong className="lk-bad">No se encontró el servidor</strong>}
+                {state === 'listo' && options.length === 0 && <strong className="lk-bad">Esta computadora no está conectada a una red</strong>}
+                {state === 'listo' && options.length === 1 && <strong>{shortServer(server)}</strong>}
+                {state === 'listo' && options.length > 1 && (
+                  <select className="fselect lk-select" value={server} onChange={(e) => setServer(e.target.value)} aria-label="Red para el celular">
+                    {options.map((o) => (
+                      <option key={o.url} value={o.url}>{shortServer(o.url)} · {o.name}</option>
+                    ))}
+                  </select>
+                )}
+                <small>
+                  {options.length > 1
+                    ? 'Elige la red a la que está conectado el celular; el QR se actualiza solo.'
+                    : 'El QR ya la incluye; escríbela solo si vinculas con el código.'}
+                </small>
+              </div>
+            </div>
+            <p className="lk-wait">
+              <IonIcon icon={wifiOutline} /> Esperando a que el celular se vincule…
+            </p>
           </>
         )}
       </div>

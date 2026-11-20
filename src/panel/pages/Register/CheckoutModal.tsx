@@ -11,7 +11,7 @@ import {
   personAddOutline,
   swapHorizontalOutline,
 } from 'ionicons/icons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { availableCredit, initials, money, type PaymentMethod } from '../../../data/models';
 import { CustomerPicker } from '../Customers/CustomerPicker';
@@ -44,24 +44,6 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
   const creditOk = !!customer && charged <= available + 0.005;
 
   const canConfirm = method === 'efectivo' ? paid >= ticketTotal : method === 'credito' ? creditOk : true;
-
-  // Atajos: 1 a 4 eligen el método; Ctrl+Enter confirma
-  useEffect(() => {
-    if (!isOpen || picking) return;
-    const onKey = (e: KeyboardEvent) => {
-      const typing = (e.target as HTMLElement)?.tagName === 'INPUT';
-      const i = ['1', '2', '3', '4'].indexOf(e.key);
-      if (i >= 0 && !typing) {
-        e.preventDefault();
-        setMethod(METHODS[i].id);
-      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && canConfirm) {
-        e.preventDefault();
-        confirm();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
 
   const reset = () => {
     setPaidText('');
@@ -96,7 +78,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         </section>
 
         <div className="co-methods" role="radiogroup" aria-label="Método de pago">
-          {METHODS.map((m, i) => (
+          {METHODS.map((m) => (
             <button
               key={m.id}
               type="button"
@@ -108,7 +90,6 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               {method === m.id && <IonIcon className="co-check" icon={checkmarkCircle} />}
               <IonIcon icon={m.icon} className="co-method-icon" />
               <span>{m.label}</span>
-              <kbd aria-hidden="true">{i + 1}</kbd>
             </button>
           ))}
         </div>

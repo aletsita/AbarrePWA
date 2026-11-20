@@ -8,7 +8,6 @@ import {
   IonPage,
   IonTitle,
   IonToolbar,
-  useIonAlert,
   useIonToast,
 } from '@ionic/react';
 import { CashMovementModal } from './CashMovementModal';
@@ -31,6 +30,7 @@ import { StatCard } from '../../../components/StatCard';
 import { useApp } from '../../../context/AppContext';
 import { money, PAYMENT_LABEL, shortDate, time, type CashCut, type CashMovementType, type PaymentMethod } from '../../../data/models';
 import { PanelHeader } from '../../components/PanelHeader';
+import { PromptModal } from '../../components/PromptModal';
 import { ClosedCut, Difference } from './ClosedCut';
 import './CashCut.css';
 
@@ -40,10 +40,10 @@ const MOVE_ICON: Record<CashMovementType, string> = { entrada: arrowDownCircleOu
 export default function CashCut() {
   const { sales, cashMovements, creditMovements, cuts, closedCutId, closeCut, shift, store, user, addCashMovement, openShift } = useApp();
   const [toast] = useIonToast();
-  const [alert] = useIonAlert();
   const [countedText, setCountedText] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [shiftOpen, setShiftOpen] = useState(false);
   const [viewCut, setViewCut] = useState<CashCut>();
   const countedRef = useRef<HTMLInputElement>(null);
   const reconRef = useRef<HTMLElement>(null);
@@ -107,17 +107,6 @@ export default function CashCut() {
     toast({ message: `Corte #${folio} cerrado`, duration: 1800, color: 'success', position: 'top', cssClass: 'toast-app' });
   };
 
-  const newShift = () =>
-    alert({
-      header: 'Abrir nuevo turno',
-      message: '¿Con cuánto efectivo empieza la caja?',
-      inputs: [{ name: 'fund', type: 'number', placeholder: 'Fondo inicial', value: shift.openingFund, min: 0 }],
-      buttons: [
-        { text: 'Cancelar', role: 'cancel' },
-        { text: 'Abrir turno', handler: (v: { fund: string }) => openShift(Number(v.fund) || 0) },
-      ],
-    });
-
   const methods: PaymentMethod[] = ['efectivo', 'tarjeta', 'transferencia', 'credito'];
   const maxMethod = Math.max(...methods.map(sum), 1);
 
@@ -136,7 +125,7 @@ export default function CashCut() {
             </div>
             <div className="ppage-actions">
               {closed ? (
-                <IonButton className="btn-lg" onClick={newShift}>
+                <IonButton className="btn-lg" onClick={() => setShiftOpen(true)}>
                   <IonIcon slot="start" icon={lockOpenOutline} />
                   Abrir nuevo turno
                 </IonButton>
@@ -284,32 +273,34 @@ export default function CashCut() {
 
           <section className="pcard cut-history">
             <div className="pcard-head"><h2>Cortes anteriores</h2></div>
-            <table className="ptable is-cards">
-              <thead>
-                <tr>
-                  <th>Corte</th>
-                  <th>Fecha</th>
-                  <th>Responsable</th>
-                  <th className="num">Ventas</th>
-                  <th className="num">Esperado</th>
-                  <th className="num">Contado</th>
-                  <th className="num">Diferencia</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cuts.map((c) => (
-                  <tr key={c.id} className="is-click" onClick={() => setViewCut(c)}>
-                    <td className="is-main strong">#{c.folio}</td>
-                    <td data-label="Fecha">{shortDate(c.date)} · {time(c.date)}</td>
-                    <td data-label="Responsable">{c.employee}</td>
-                    <td className="num" data-label="Ventas">{money(c.salesTotal)}</td>
-                    <td className="num" data-label="Esperado">{money(c.expectedCash)}</td>
-                    <td className="num" data-label="Contado">{money(c.countedCash)}</td>
-                    <td className="num is-end"><Difference value={c.countedCash - c.expectedCash} /></td>
+            <div className="ptable-scroll">
+              <table className="ptable is-cards">
+                <thead>
+                  <tr>
+                    <th>Corte</th>
+                    <th>Fecha</th>
+                    <th>Responsable</th>
+                    <th className="num">Ventas</th>
+                    <th className="num">Esperado</th>
+                    <th className="num">Contado</th>
+                    <th className="num">Diferencia</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {cuts.map((c) => (
+                    <tr key={c.id} className="is-click" onClick={() => setViewCut(c)}>
+                      <td className="is-main strong">#{c.folio}</td>
+                      <td data-label="Fecha">{shortDate(c.date)} · {time(c.date)}</td>
+                      <td data-label="Responsable">{c.employee}</td>
+                      <td className="num" data-label="Ventas">{money(c.salesTotal)}</td>
+                      <td className="num" data-label="Esperado">{money(c.expectedCash)}</td>
+                      <td className="num" data-label="Contado">{money(c.countedCash)}</td>
+                      <td className="num is-end"><Difference value={c.countedCash - c.expectedCash} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         </div>
       </IonContent>
@@ -357,6 +348,18 @@ export default function CashCut() {
         </IonHeader>
         <div className="pmodal-body">{viewCut && <ClosedCut cut={viewCut} />}</div>
       </IonModal>
+      <PromptModal
+        isOpen={shiftOpen}
+        title="Abrir nuevo turno"
+        text="Cuenta el efectivo con el que empieza el cajón."
+        label="Fondo inicial"
+        hint="Billetes y monedas para dar cambio"
+        initial={String(shift.openingFund)}
+        money
+        confirmText="Abrir turno"
+        onClose={() => setShiftOpen(false)}
+        onSave={(v) => openShift(Number(v) || 0)}
+      />
       <CashMovementModal
         isOpen={moveOpen}
         onClose={() => setMoveOpen(false)}

@@ -404,6 +404,7 @@ function reducer(s: Data, a: Action): Data {
 interface AppState extends Omit<Data, 'products' | 'version'> {
   products: ProductView[];
   online: boolean;
+  syncConnected: boolean;
   uploading: boolean;
   pending: PendingItem[];
   lastUpload: { count: number; at: number } | null;
@@ -462,6 +463,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastUpload, setLastUpload] = useState<{ count: number; at: number } | null>(null);
 
   const [online, setOnline] = useState(navigator.onLine);
+  const [syncConnected, setSyncConnected] = useState(false);
   const [presence, setPresence] = useState<Record<string, number>>({});
   const presenceRef = useRef(presence);
   presenceRef.current = presence;
@@ -490,6 +492,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ch.post({ type: 'WHO' });
         share();
       },
+      setSyncConnected,
     );
     channel.current = ch;
     const onMessage = (msg: Message) => {
@@ -695,6 +698,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     products: view.products,
     pending: view.pending,
     online,
+    syncConnected,
     uploading,
     lastUpload,
 

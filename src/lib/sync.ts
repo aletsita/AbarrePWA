@@ -11,10 +11,15 @@ export interface SyncLink {
   close: () => void;
 }
 
-const URL_SYNC = import.meta.env.VITE_SYNC_URL ?? '/__sync';
+export const URL_SYNC = import.meta.env.VITE_SYNC_URL ?? '/__sync';
 
 // Une las pestañas del mismo navegador (BroadcastChannel) y los equipos de la misma red (servidor)
-export function openSync(channelName: string, onMessage: (msg: unknown) => void, onConnect: () => void): SyncLink {
+export function openSync(
+  channelName: string,
+  onMessage: (msg: unknown) => void,
+  onConnect: () => void,
+  onStatus?: (connected: boolean) => void,
+): SyncLink {
   const me = uid();
   const seen = new Set<string>();
   let relay = false;
@@ -39,6 +44,7 @@ export function openSync(channelName: string, onMessage: (msg: unknown) => void,
     es = new EventSource(URL_SYNC);
     es.onopen = () => {
       relay = true;
+      onStatus?.(true);
       onConnect();
     };
     es.onmessage = (e) => {
@@ -50,6 +56,7 @@ export function openSync(channelName: string, onMessage: (msg: unknown) => void,
     };
     es.onerror = () => {
       relay = false;
+      onStatus?.(false);
     };
   }
 

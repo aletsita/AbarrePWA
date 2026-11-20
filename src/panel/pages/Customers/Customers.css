@@ -35,9 +35,8 @@
 .cu-moves li { display: flex; align-items: center; gap: 12px; min-height: 58px; }
 .cu-moves li + li { border-top: 1px solid var(--t-border); }
 
-.cu-form { display: flex; flex-direction: column; gap: 14px; }
-.cu-limit-note { margin: -4px 2px 0; font-size: 0.86rem; color: var(--t-muted); }
-.cu-limit-note.is-bad { color: var(--ion-color-danger); }
+.cu-avail { display: flex; align-items: center; min-height: 48px; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; color: var(--ion-color-success-shade); }
+.cu-avail.is-bad { color: var(--ion-color-danger-shade); }
 
 /* Selector de cliente */
 .cp-body { padding-top: 0 !important; }

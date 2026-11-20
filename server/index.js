@@ -3,6 +3,7 @@
 // En producción también sirve el build de la web (dist/) para tener un solo despliegue.
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { networkInterfaces } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,6 +20,11 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS ?? DEFAULT_ORIGINS.join(','))
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+// Sin ALLOWED_ORIGINS también se aceptan equipos de la red local (la web o el celular abiertos por IP)
+const ALLOW_LAN = !process.env.ALLOWED_ORIGINS;
+const LAN_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})(:\d+)?$/;
+// Dirección que la caja pone en el QR cuando el servidor está detrás de un dominio (https://tu-dominio.com/__sync)
+const PUBLIC_SYNC_URL = process.env.PUBLIC_SYNC_URL?.trim() || null;
 const DIST = resolve(process.env.DIST_DIR ?? join(fileURLToPath(new URL('.', import.meta.url)), '..', 'dist'));
 const SERVE_DIST = existsSync(join(DIST, 'index.html'));
 
@@ -41,7 +47,7 @@ const clients = new Set();
 function cors(req, res) {
   const origin = req.headers.origin;
   if (!origin) return;
-  if (ORIGINS.includes('*') || ORIGINS.includes(origin)) {
+  if (ORIGINS.includes('*') || ORIGINS.includes(origin) || (ALLOW_LAN && LAN_ORIGIN.test(origin))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -50,8 +56,33 @@ function cors(req, res) {
   res.setHeader('Vary', 'Origin');
 }
 
+// Direcciones IPv4 de la red local con las que un celular puede llegar a este servidor
+function lanUrls() {
+  const urls = [];
+  for (const [name, list] of Object.entries(networkInterfaces())) {
+    for (const a of list ?? []) {
+      if (a.family !== 'IPv4' || a.internal || a.address.startsWith('169.254.')) continue;
+      // Los adaptadores virtuales (VirtualBox, WSL, Docker…) van al final: el celular casi nunca está en esa red
+      const virtual = /virtual|vbox|vmware|wsl|docker|hyper-v|vethernet|loopback/i.test(name);
+      urls.push({ url: `http://${a.address}:${PORT}/__sync`, name, virtual });
+    }
+  }
+  return urls.sort((a, b) => Number(a.virtual) - Number(b.virtual) || Number(!a.url.includes('//192.168.')) - Number(!b.url.includes('//192.168.')));
+}
+
+function info(res) {
+  const urls = [...(PUBLIC_SYNC_URL ? [{ url: PUBLIC_SYNC_URL, name: 'público', virtual: false }] : []), ...lanUrls()];
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify({ app: 'abarre-sync', port: PORT, clients: clients.size, urls }));
+}
+
 function sync(req, res) {
   cors(req, res);
+
+  if (req.method === 'GET' && new URL(req.url ?? '/', 'http://x').pathname === '/__sync/info') {
+    info(res);
+    return;
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -139,5 +170,7 @@ const server = createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`Sincronización en http://${HOST}:${PORT}/__sync`);
   console.log(SERVE_DIST ? `Sirviendo la web desde ${DIST}` : 'Sin build de la web (dist/): solo sincronización');
-  console.log(`Orígenes permitidos: ${ORIGINS.join(', ')}`);
+  console.log(`Orígenes permitidos: ${ORIGINS.join(', ')}${ALLOW_LAN ? ' y equipos de la red local' : ''}`);
+  const lan = lanUrls();
+  if (lan.length) console.log(`Para el celular (misma Wi-Fi): ${lan.map((u) => u.url).join('  ·  ')}`);
 });

@@ -35,7 +35,6 @@
   transition: border-color 0.12s, background 0.12s;
 }
 .co-method-icon { font-size: 28px; color: var(--t-muted); }
-.co-method kbd { position: absolute; top: 6px; left: 6px; }
 .co-method.is-active { border-color: var(--ion-color-primary); background: var(--t-primary-bg); color: var(--ion-color-primary); box-shadow: 0 0 0 1px var(--ion-color-primary); }
 .co-method.is-active .co-method-icon { color: var(--ion-color-primary); }
 .co-check { position: absolute; top: 7px; right: 7px; font-size: 18px; color: var(--ion-color-primary); }
