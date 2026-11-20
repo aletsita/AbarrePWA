@@ -23,12 +23,14 @@ import {
   type PaymentMethod,
   type Product,
   type Sale,
+  type SaleItem,
   type Shift,
   type Store,
   type TicketConfig,
   type User,
 } from '../data/models';
-import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
+import { nextStatus, orderFolio, reservedStock, type OrderRequest, type PickupOrder } from '../data/pickup';
+import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, ORDERS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
 import { openSync, type SyncLink } from '../lib/sync';
 
 export interface TicketLine {
@@ -103,6 +105,8 @@ interface Data {
   pairing: Pairing | null;
   closedCutId: string | null;
   lastSaleId: string | null;
+  // Pide y recoge
+  orders: PickupOrder[];
 }
 
 type StockEntry = { productId: string; qty: number };
@@ -133,7 +137,11 @@ type Action =
   | { type: 'ACCOUNT_UPDATE'; id: string; name: string; customerId: string | null }
   | { type: 'UPSERT_CUSTOMER'; customer: Customer }
   | { type: 'CREDIT_PAYMENT'; movement: CreditMovement }
-  | { type: 'REPLACE_DATA'; data: Data };
+  | { type: 'REPLACE_DATA'; data: Data }
+  // Pide y recoge: el pedido llega por el canal de sincronización, igual que un producto escaneado
+  | { type: 'ORDER_RECEIVED'; request: OrderRequest }
+  | { type: 'ORDER_ADVANCE'; id: string; from: PickupOrder['status']; at: number }
+  | { type: 'ORDER_DELIVER'; id: string; sale: Sale; payment: { method: CashMethod; received: number }; pickupCode: string };
 
 type Message = Action | { type: 'PING'; key: string } | { type: 'BYE'; key: string } | { type: 'WHO' } | { type: 'SNAPSHOT'; data: Data };
 
@@ -182,6 +190,7 @@ function seedData(): Data {
     pairing: null,
     closedCutId: null,
     lastSaleId: null,
+    orders: ORDERS,
   };
 }
 
@@ -205,7 +214,11 @@ function write(key: string, value: unknown) {
 
 function loadData(): Data {
   const saved = read<Data | null>(DATA_KEY, null);
-  return saved && saved.version === VERSION ? saved : seedData();
+  if (!saved || saved.version !== VERSION) return seedData();
+  // Datos guardados antes de Pide y recoge: reciben los pedidos de ejemplo que aún no se entregan
+  if (!saved.orders) return { ...saved, orders: ORDERS.filter((o) => o.status !== 'entregado') };
+  // Pedidos de ejemplo guardados antes de que existiera el código para recoger
+  return { ...saved, orders: saved.orders.map((o) => (o.pickupCode ? o : { ...o, pickupCode: ORDERS.find((x) => x.id === o.id)?.pickupCode })) };
 }
 
 function addToTicket(ticket: TicketLine[], product: Product, qty: number, source: TicketLine['source'], at: number) {
@@ -280,6 +293,7 @@ function reducer(s: Data, a: Action): Data {
         sent: s.sent.map((x) => (x.status === 'en-caja' && inActive(s, x) ? { ...x, status: 'cancelado' } : x)),
       };
     case 'CONFIRM_SALE': {
+      if (a.sale.orderId && s.sales.some((x) => x.id === a.sale.id || x.orderId === a.sale.orderId)) return s;
       const moves: Movement[] = a.sale.items.map((i) => ({
         id: `${a.sale.id}-${i.productId}`,
         productId: i.productId,
@@ -311,10 +325,15 @@ function reducer(s: Data, a: Action): Data {
           const it = a.sale.items.find((i) => i.productId === p.id);
           return it ? { ...p, stock: Math.max(0, p.stock - it.qty) } : p;
         }),
-        ticket: [],
-        account: resetAccount(s, Date.parse(a.sale.date)),
-        sent: s.sent.map((x) => (x.status === 'en-caja' && inActive(s, x) ? { ...x, status: 'cobrado' } : x)),
-        lastSaleId: a.sale.id,
+        // La venta de un pedido no sale de la cuenta abierta: esa se queda como está
+        ...(a.sale.orderId
+          ? {}
+          : {
+              ticket: [],
+              account: resetAccount(s, Date.parse(a.sale.date)),
+              sent: s.sent.map((x) => (x.status === 'en-caja' && inActive(s, x) ? { ...x, status: 'cobrado' as const } : x)),
+              lastSaleId: a.sale.id,
+            }),
       };
     }
     case 'MARK_SALE_SYNCED':
@@ -355,6 +374,55 @@ function reducer(s: Data, a: Action): Data {
       return { ...s, devices: s.devices.map((d) => (d.id === a.id ? { ...d, lastSeen: iso(a.at) } : d)) };
     case 'REPLACE_DATA':
       return a.data;
+    case 'ORDER_RECEIVED': {
+      // Los precios y la existencia los pone la caja; si algo no alcanza, el pedido no se acepta
+      const r = a.request;
+      if (s.orders.some((o) => o.id === r.id) || !/^\d{6}$/.test(String(r.pickupCode ?? ''))) return s;
+      const qty: Record<string, number> = {};
+      for (const it of r.items) qty[it.productId] = (qty[it.productId] ?? 0) + Math.floor(it.qty);
+      const reserved = reservedStock(s.orders);
+      const items: SaleItem[] = [];
+      for (const [id, n] of Object.entries(qty)) {
+        const p = s.products.find((x) => x.id === id);
+        if (!p || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
+        items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
+      }
+      if (!items.length) return s;
+      const n = Math.max(0, ...s.orders.map((o) => Number(o.folio.slice(2)) || 0)) + 1;
+      const at = iso(r.at);
+      const order: PickupOrder = {
+        id: r.id,
+        folio: orderFolio(n),
+        customer: r.customer,
+        items,
+        note: (r.note ?? '').trim().slice(0, 300),
+        total: items.reduce((t, i) => t + i.qty * i.price, 0),
+        status: 'pendiente',
+        createdAt: at,
+        updatedAt: at,
+        pickupCode: r.pickupCode,
+      };
+      return { ...s, orders: [order, ...s.orders] };
+    }
+    case 'ORDER_ADVANCE': {
+      // Solo avanza una etapa; "entregado" exige cobro (ORDER_DELIVER)
+      const o = s.orders.find((x) => x.id === a.id);
+      const next = o && nextStatus(o.status);
+      if (!o || o.status !== a.from || !next || next === 'entregado') return s;
+      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, status: next, updatedAt: iso(a.at) } : x)) };
+    }
+    case 'ORDER_DELIVER': {
+      const o = s.orders.find((x) => x.id === a.id);
+      // Sin el código del cliente no se entrega, venga de esta caja o de otro equipo
+      if (!o || o.status !== 'listo' || (o.pickupCode && o.pickupCode !== a.pickupCode)) return s;
+      const after = reducer(s, { type: 'CONFIRM_SALE', sale: a.sale });
+      return {
+        ...after,
+        orders: after.orders.map((x) =>
+          x.id === a.id ? { ...x, status: 'entregado', updatedAt: a.sale.date, deliveredAt: a.sale.date, payment: a.payment, saleId: a.sale.id } : x,
+        ),
+      };
+    }
     case 'SET_PAIRING':
       return { ...s, pairing: a.pairing };
     case 'CLOSE_CUT':
@@ -429,6 +497,10 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
   ticketRemove: (productId: string) => void;
   ticketClear: () => void;
   confirmSale: (method: PaymentMethod, paid: number) => Sale;
+
+  receiveOrder: (request: OrderRequest) => void;
+  advanceOrder: (id: string) => void;
+  deliverOrder: (id: string, method: CashMethod, received: number, pickupCode: string) => Sale | null;
 
   accounts: AccountView[];
   newAccount: () => void;
@@ -684,6 +756,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [dispatch, employee, addCreditPayment],
   );
 
+  const advanceOrder = useCallback(
+    (id: string) => {
+      const o = dataRef.current.orders.find((x) => x.id === id);
+      if (o) dispatch({ type: 'ORDER_ADVANCE', id, from: o.status, at: Date.now() });
+    },
+    [dispatch],
+  );
+
+  // Entregar y cobrar: la venta entra por el mismo flujo que una de mostrador, una sola vez por pedido
+  const deliverOrder = useCallback(
+    (id: string, method: CashMethod, received: number, pickupCode: string) => {
+      const s = dataRef.current;
+      const o = s.orders.find((x) => x.id === id);
+      if (!o || o.status !== 'listo') return s.sales.find((x) => x.orderId === id) ?? null;
+      if (o.pickupCode && o.pickupCode !== pickupCode) return null;
+      const folio = Math.max(...s.sales.map((x) => x.folio), 1000) + 1;
+      const offline = !navigator.onLine;
+      const sale: Sale = {
+        id: `pedido-${o.id}`,
+        folio,
+        date: new Date().toISOString(),
+        items: o.items,
+        total: o.total,
+        method,
+        employee,
+        paid: method === 'efectivo' ? received : undefined,
+        pending: offline || undefined,
+        customerName: o.customer.name,
+        origin: 'pedido',
+        orderId: o.id,
+        orderFolio: o.folio,
+      };
+      dispatch({ type: 'ORDER_DELIVER', id, sale, payment: { method, received: method === 'efectivo' ? received : o.total }, pickupCode });
+      if (offline) setQueue((q) => [...q, { id: uid(), kind: 'venta', saleId: sale.id, at: Date.now() }]);
+      return sale;
+    },
+    [dispatch, employee],
+  );
+
   const ticketTotal = sumLines(data.ticket);
   const accounts: AccountView[] = [
     { ...data.account, lines: data.ticket, active: true },
@@ -741,6 +852,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ticketRemove: (productId) => dispatch({ type: 'TICKET_REMOVE', productId }),
     ticketClear: () => dispatch({ type: 'TICKET_CLEAR' }),
     confirmSale,
+    receiveOrder: (request) => dispatch({ type: 'ORDER_RECEIVED', request }),
+    advanceOrder,
+    deliverOrder,
 
     accounts,
     newAccount: () => dispatch({ type: 'ACCOUNT_NEW', id: uid(), at: Date.now() }),

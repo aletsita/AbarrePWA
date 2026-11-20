@@ -53,6 +53,7 @@ Basta un solo despliegue: el servidor sirve la web y la sincronización. Detrás
 | `/` | Redirige a la caja |
 | `/panel/login` | Iniciar sesión o crear cuenta |
 | `/panel/caja` | Caja: búsqueda por código, cuenta en tiempo real y cobro |
+| `/panel/pedidos` | Pide y recoge: pedidos de clientes por estado, preparación, entrega y cobro |
 | `/panel/venta-completada` | Ticket de la venta |
 | `/panel/inventario` | Productos, existencias y alta por código de barras |
 | `/panel/ventas` | Historial de ventas y reimpresión de tickets |
@@ -72,6 +73,18 @@ El acceso viene prellenado: `donpepe@correo.mx` (Dueño) con contraseña `abarre
 - **Más vendidos**, debajo del buscador, agrega con un toque los productos que más salen.
 - **Nueva cuenta** deja la cuenta actual en espera y abre otra; las pestañas de arriba cambian entre las cuentas abiertas.
 - **A crédito**, al cobrar, carga la venta a la cuenta de un cliente; los abonos se registran en **Clientes**.
+
+### Pide y recoge (vista previa)
+
+Tus clientes piden desde su celular y pagan al recoger en tienda, en efectivo, con tarjeta o por transferencia. Todavía no hay API: los pedidos viven en los datos de la caja, igual que los productos. Al empezar hay uno de ejemplo en cada estado, y los nuevos llegan por el canal de sincronización (mensaje `ORDER_RECEIVED`, ver [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md)).
+
+- **Pedidos** muestra una lista por pestañas: *Pendientes*, *Preparando*, *Listos* y *Entregados*. El número del menú cuenta los pendientes. Cuando entra un pedido nuevo suena un aviso y aparece una alerta en cualquier pantalla.
+- Cada pedido avanza una etapa a la vez: **Empezar a preparar**, **Marcar listo** y **Entregar**.
+- **Para entregar se necesita el código del cliente.** Su app lo genera al confirmar el pedido y lo muestra como QR y 6 dígitos cuando el pedido está listo. En la caja, **Entregar** (o **Entregar con código**, que busca el pedido por el código) pide escribirlo o escanearlo con la cámara o con un lector USB. Después de 5 intentos fallidos se bloquea un minuto. Con el código correcto se abre el cobro de siempre, sin crédito. La entrega registra la venta una sola vez, descuenta existencias y permite imprimir el ticket.
+- Para probar con los pedidos de ejemplo, estos son sus códigos: P-0002 `418362` (listo), P-0003 `529083`, P-0004 `771640` y P-0005 `305218`.
+- Mientras un pedido no se entrega, sus piezas quedan apartadas. Si después se venden en mostrador y ya no alcanzan, el pedido lo avisa.
+- **Ventas** filtra por origen (*En tienda* / *Pide y recoge*) y muestra el folio del pedido. **Corte** separa las ventas por origen en pantalla, en Excel y en la impresión.
+- **Inventario → Mostrar en la app** decide si el producto aparece en el catálogo de los clientes.
 
 ### Vincular un celular
 

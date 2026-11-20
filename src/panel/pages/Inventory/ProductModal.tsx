@@ -11,7 +11,7 @@ import {
   sparklesOutline,
 } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
-import { FormSection, MoneyField, SelectField, TextField } from '../../../components/Form';
+import { FormSection, MoneyField, SelectField, SwitchField, TextField } from '../../../components/Form';
 import { PhotoPicker } from '../../../components/PhotoPicker';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp, type ProductView } from '../../../context/AppContext';
@@ -231,6 +231,15 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
                   onChange={(v) => setNum('stock', v.replace(/\D/g, ''))} />
                 <TextField label="Avisar cuando queden" hint="Se marca como poco stock" inputMode="numeric" value={nums.minStock} suffix="pzas"
                   onChange={(v) => setNum('minStock', v.replace(/\D/g, ''))} />
+              </FormSection>
+
+              <FormSection title="Pide y recoge">
+                <SwitchField
+                  label="Mostrar en la app"
+                  hint={draft.showInApp === false ? 'Tus clientes no lo ven en el catálogo' : draft.stock > 0 ? 'Tus clientes pueden pedirlo desde su celular' : 'Aparece como agotado hasta que haya existencia'}
+                  checked={draft.showInApp !== false}
+                  onChange={(v) => set('showInApp', v)}
+                />
               </FormSection>
             </section>
 
