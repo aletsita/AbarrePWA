@@ -29,7 +29,7 @@ import {
   type TicketConfig,
   type User,
 } from '../data/models';
-import { nextStatus, orderFolio, reservedStock, type OrderRequest, type PickupOrder } from '../data/pickup';
+import { ACTIVE_STATUSES, nextStatus, orderFolio, reservedStock, type CancelReason, type OrderRequest, type PickupOrder } from '../data/pickup';
 import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, ORDERS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
 import { openSync, type SyncLink } from '../lib/sync';
 
@@ -141,7 +141,8 @@ type Action =
   // Pide y recoge: el pedido llega por el canal de sincronización, igual que un producto escaneado
   | { type: 'ORDER_RECEIVED'; request: OrderRequest }
   | { type: 'ORDER_ADVANCE'; id: string; from: PickupOrder['status']; at: number }
-  | { type: 'ORDER_DELIVER'; id: string; sale: Sale; payment: { method: CashMethod; received: number }; pickupCode: string };
+  | { type: 'ORDER_DELIVER'; id: string; sale: Sale; payment: { method: CashMethod; received: number }; pickupCode: string }
+  | { type: 'ORDER_CANCEL'; id: string; reason: CancelReason; missing: string[]; note?: string; at: number };
 
 type Message = Action | { type: 'PING'; key: string } | { type: 'BYE'; key: string } | { type: 'WHO' } | { type: 'SNAPSHOT'; data: Data };
 
@@ -428,6 +429,13 @@ function reducer(s: Data, a: Action): Data {
         ),
       };
     }
+    case 'ORDER_CANCEL': {
+      // Solo se cancela lo que no se ha entregado; sus piezas dejan de estar apartadas
+      const o = s.orders.find((x) => x.id === a.id);
+      if (!o || !ACTIVE_STATUSES.includes(o.status)) return s;
+      const cancel = { reason: a.reason, missing: a.missing.filter((id) => o.items.some((i) => i.productId === id)), ...(a.note ? { note: a.note } : {}), at: iso(a.at) };
+      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, status: 'cancelado', updatedAt: cancel.at, cancel } : x)) };
+    }
     case 'SET_PAIRING':
       return { ...s, pairing: a.pairing };
     case 'CLOSE_CUT':
@@ -505,6 +513,7 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
 
   receiveOrder: (request: OrderRequest) => void;
   advanceOrder: (id: string) => void;
+  cancelOrder: (id: string, reason: CancelReason, missing: string[], note?: string) => void;
   deliverOrder: (id: string, method: CashMethod, received: number, pickupCode: string) => Sale | null;
 
   accounts: AccountView[];
@@ -859,6 +868,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     confirmSale,
     receiveOrder: (request) => dispatch({ type: 'ORDER_RECEIVED', request }),
     advanceOrder,
+    cancelOrder: (id, reason, missing, note) => dispatch({ type: 'ORDER_CANCEL', id, reason, missing, note: note?.trim() || undefined, at: Date.now() }),
     deliverOrder,
 
     accounts,
