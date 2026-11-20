@@ -13,6 +13,8 @@ export interface Product {
   minStock: number;
   barcode: string;
   photo?: string;
+  // Texto que ven los clientes en el detalle del producto
+  description?: string;
   // Pide y recoge: si aparece en el catálogo de la app de clientes (sin valor = sí)
   showInApp?: boolean;
 }

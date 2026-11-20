@@ -11,7 +11,7 @@ import {
   sparklesOutline,
 } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
-import { FormSection, MoneyField, SelectField, SwitchField, TextField } from '../../../components/Form';
+import { AreaField, FormSection, MoneyField, SelectField, SwitchField, TextField } from '../../../components/Form';
 import { PhotoPicker } from '../../../components/PhotoPicker';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp, type ProductView } from '../../../context/AppContext';
@@ -234,6 +234,15 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
               </FormSection>
 
               <FormSection title="Pide y recoge">
+                <AreaField
+                  label="Descripción"
+                  optional
+                  hint="La ven tus clientes en el detalle del producto"
+                  placeholder="Ej. Café soluble clásico, frasco de 200 g."
+                  maxLength={300}
+                  value={draft.description ?? ''}
+                  onChange={(v) => set('description', v)}
+                />
                 <SwitchField
                   label="Mostrar en la app"
                   hint={draft.showInApp === false ? 'Tus clientes no lo ven en el catálogo' : draft.stock > 0 ? 'Tus clientes pueden pedirlo desde su celular' : 'Aparece como agotado hasta que haya existencia'}

@@ -55,21 +55,21 @@ export const USERS: User[] = [
 const [JOSE, ANA] = [USERS[0].name, USERS[1].name];
 
 export const PRODUCTS: Product[] = [
-  { id: 'p01', name: 'Coca-Cola 600 ml', category: 'Bebidas', price: 20, cost: 14.5, stock: 48, minStock: 12, barcode: '7501055300075' },
-  { id: 'p02', name: 'Sabritas Original 45 g', category: 'Botanas', price: 21, cost: 15.8, stock: 6, minStock: 8, barcode: '7501011115217' },
-  { id: 'p03', name: 'Pan blanco Bimbo grande', category: 'Panadería', price: 52, cost: 41, stock: 9, minStock: 4, barcode: '7441029502120' },
-  { id: 'p04', name: 'Leche Lala entera 1 L', category: 'Lácteos', price: 29, cost: 23.5, stock: 3, minStock: 6, barcode: '7501020515008' },
-  { id: 'p05', name: 'Maruchan camarón y chile', category: 'Abarrotes', price: 17, cost: 11.9, stock: 36, minStock: 10, barcode: '0041789002113' },
-  { id: 'p06', name: 'Huevo blanco 12 pzas', category: 'Abarrotes', price: 48, cost: 39, stock: 0, minStock: 4, barcode: '7501234500129' },
-  { id: 'p07', name: 'Tortillas de maíz 1 kg', category: 'Tortillería', price: 24, cost: 18, stock: 14, minStock: 5, barcode: '7501234500211' },
-  { id: 'p08', name: 'Frijol negro La Sierra 430 g', category: 'Abarrotes', price: 26, cost: 19.4, stock: 18, minStock: 6, barcode: '7501042300120' },
-  { id: 'p09', name: 'Aceite Nutrioli 850 ml', category: 'Abarrotes', price: 46, cost: 37.2, stock: 2, minStock: 4, barcode: '7501039120187' },
-  { id: 'p10', name: 'Azúcar estándar 1 kg', category: 'Abarrotes', price: 32, cost: 25, stock: 20, minStock: 6, barcode: '7501234500334' },
-  { id: 'p11', name: 'Jabón Zote rosa 400 g', category: 'Limpieza', price: 25, cost: 18.6, stock: 11, minStock: 5, barcode: '7501025400118' },
-  { id: 'p12', name: 'Papel higiénico Pétalo 4 rollos', category: 'Limpieza', price: 38, cost: 29.9, stock: 0, minStock: 3, barcode: '7501019001234' },
-  { id: 'p13', name: 'Galletas Marías Gamesa', category: 'Galletas', price: 22, cost: 16.2, stock: 15, minStock: 6, barcode: '7501000610119' },
-  { id: 'p14', name: 'Agua Ciel 1 L', category: 'Bebidas', price: 14, cost: 9.1, stock: 30, minStock: 12, barcode: '7501055310067' },
-  { id: 'p15', name: 'Chiles La Costeña 220 g', category: 'Enlatados', price: 19, cost: 13.7, stock: 5, minStock: 5, barcode: '7501017004121' },
+  { id: 'p01', name: 'Coca-Cola 600 ml', category: 'Bebidas', price: 20, cost: 14.5, stock: 48, minStock: 12, barcode: '7501055300075', description: 'Refresco de cola clásico en botella de 600 ml. Sírvelo bien frío.' },
+  { id: 'p02', name: 'Sabritas Original 45 g', category: 'Botanas', price: 21, cost: 15.8, stock: 6, minStock: 8, barcode: '7501011115217', description: 'Papas fritas con sal, crujientes y doradas. Bolsa de 45 g.' },
+  { id: 'p03', name: 'Pan blanco Bimbo grande', category: 'Panadería', price: 52, cost: 41, stock: 9, minStock: 4, barcode: '7441029502120', description: 'Pan de caja suave, ideal para sándwiches y tostadas. Presentación grande.' },
+  { id: 'p04', name: 'Leche Lala entera 1 L', category: 'Lácteos', price: 29, cost: 23.5, stock: 3, minStock: 6, barcode: '7501020515008', description: 'Leche de vaca entera pasteurizada, 1 litro. Mantener en refrigeración.' },
+  { id: 'p05', name: 'Maruchan camarón y chile', category: 'Abarrotes', price: 17, cost: 11.9, stock: 36, minStock: 10, barcode: '0041789002113', description: 'Sopa instantánea sabor camarón con chile. Lista en 3 minutos con agua caliente.' },
+  { id: 'p06', name: 'Huevo blanco 12 pzas', category: 'Abarrotes', price: 48, cost: 39, stock: 0, minStock: 4, barcode: '7501234500129', description: 'Huevo blanco fresco, paquete de 12 piezas.' },
+  { id: 'p07', name: 'Tortillas de maíz 1 kg', category: 'Tortillería', price: 24, cost: 18, stock: 14, minStock: 5, barcode: '7501234500211', description: 'Tortillas de maíz recién hechas de la tortillería, 1 kg.' },
+  { id: 'p08', name: 'Frijol negro La Sierra 430 g', category: 'Abarrotes', price: 26, cost: 19.4, stock: 18, minStock: 6, barcode: '7501042300120', description: 'Frijoles negros refritos listos para servir, lata de 430 g.' },
+  { id: 'p09', name: 'Aceite Nutrioli 850 ml', category: 'Abarrotes', price: 46, cost: 37.2, stock: 2, minStock: 4, barcode: '7501039120187', description: 'Aceite vegetal comestible para cocinar y freír, botella de 850 ml.' },
+  { id: 'p10', name: 'Azúcar estándar 1 kg', category: 'Abarrotes', price: 32, cost: 25, stock: 20, minStock: 6, barcode: '7501234500334', description: 'Azúcar estándar para endulzar bebidas y repostería, bolsa de 1 kg.' },
+  { id: 'p11', name: 'Jabón Zote rosa 400 g', category: 'Limpieza', price: 25, cost: 18.6, stock: 11, minStock: 5, barcode: '7501025400118', description: 'Jabón de lavandería en barra para ropa blanca y de color, 400 g.' },
+  { id: 'p12', name: 'Papel higiénico Pétalo 4 rollos', category: 'Limpieza', price: 38, cost: 29.9, stock: 0, minStock: 3, barcode: '7501019001234', description: 'Papel higiénico suave de hoja doble, paquete de 4 rollos.' },
+  { id: 'p13', name: 'Galletas Marías Gamesa', category: 'Galletas', price: 22, cost: 16.2, stock: 15, minStock: 6, barcode: '7501000610119', description: 'Galletas Marías tradicionales, perfectas con café o leche.' },
+  { id: 'p14', name: 'Agua Ciel 1 L', category: 'Bebidas', price: 14, cost: 9.1, stock: 30, minStock: 12, barcode: '7501055310067', description: 'Agua purificada embotellada, 1 litro.' },
+  { id: 'p15', name: 'Chiles La Costeña 220 g', category: 'Enlatados', price: 19, cost: 13.7, stock: 5, minStock: 5, barcode: '7501017004121', description: 'Chiles jalapeños en escabeche con zanahoria y cebolla, lata de 220 g.' },
 ];
 
 function item(id: string, qty: number): SaleItem {

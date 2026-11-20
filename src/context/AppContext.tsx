@@ -217,8 +217,13 @@ function loadData(): Data {
   if (!saved || saved.version !== VERSION) return seedData();
   // Datos guardados antes de Pide y recoge: reciben los pedidos de ejemplo que aún no se entregan
   if (!saved.orders) return { ...saved, orders: ORDERS.filter((o) => o.status !== 'entregado') };
-  // Pedidos de ejemplo guardados antes de que existiera el código para recoger
-  return { ...saved, orders: saved.orders.map((o) => (o.pickupCode ? o : { ...o, pickupCode: ORDERS.find((x) => x.id === o.id)?.pickupCode })) };
+  return {
+    ...saved,
+    // Pedidos de ejemplo guardados antes de que existiera el código para recoger
+    orders: saved.orders.map((o) => (o.pickupCode ? o : { ...o, pickupCode: ORDERS.find((x) => x.id === o.id)?.pickupCode })),
+    // Productos de ejemplo guardados antes de que existiera la descripción
+    products: saved.products.map((p) => (p.description !== undefined ? p : { ...p, description: PRODUCTS.find((x) => x.id === p.id)?.description })),
+  };
 }
 
 function addToTicket(ticket: TicketLine[], product: Product, qty: number, source: TicketLine['source'], at: number) {
