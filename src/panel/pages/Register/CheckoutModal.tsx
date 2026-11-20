@@ -13,7 +13,8 @@ import {
 } from 'ionicons/icons';
 import { useState } from 'react';
 import { useApp } from '../../../context/AppContext';
-import { availableCredit, initials, money, type PaymentMethod } from '../../../data/models';
+import { availableCredit, initials, money, type CashMethod, type PaymentMethod } from '../../../data/models';
+import { PICKUP_METHODS } from '../../../data/pickup';
 import { CustomerPicker } from '../Customers/CustomerPicker';
 import './CheckoutModal.css';
 
@@ -24,8 +25,20 @@ const METHODS: { id: PaymentMethod; label: string; icon: string }[] = [
   { id: 'credito', label: 'A crédito', icon: bookOutline },
 ];
 
-export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { ticketTotal, ticketCount, confirmSale, account, customers, linkCustomer } = useApp();
+// Pide y recoge: cobrar un pedido en lugar de la cuenta abierta (sin crédito)
+export interface OrderCharge {
+  folio: string;
+  total: number;
+  count: number;
+  onConfirm: (method: CashMethod, paid: number) => void;
+}
+
+export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onClose: () => void; order?: OrderCharge }) {
+  const app = useApp();
+  const { confirmSale, account, customers, linkCustomer } = app;
+  const ticketTotal = order ? order.total : app.ticketTotal;
+  const ticketCount = order ? order.count : app.ticketCount;
+  const methods = order ? METHODS.filter((m) => (PICKUP_METHODS as PaymentMethod[]).includes(m.id)) : METHODS;
   const router = useIonRouter();
   const [method, setMethod] = useState<PaymentMethod>('efectivo');
   const [paidText, setPaidText] = useState('');
@@ -53,6 +66,12 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
   const confirm = () => {
     if (!canConfirm) return;
+    if (order) {
+      if (method === 'credito') return;
+      order.onConfirm(method, method === 'efectivo' ? paid : ticketTotal);
+      onClose();
+      return;
+    }
     confirmSale(method, method === 'efectivo' ? paid : method === 'credito' ? upfront : ticketTotal);
     onClose();
     router.push('/panel/venta-completada', 'forward');
@@ -62,7 +81,7 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     <IonModal isOpen={isOpen} onDidDismiss={() => { onClose(); reset(); }} className="pmodal">
       <IonHeader className="ion-no-border">
         <IonToolbar>
-          <IonTitle>Cobrar · {account.name}</IonTitle>
+          <IonTitle>{order ? `Cobrar pedido ${order.folio}` : `Cobrar · ${account.name}`}</IonTitle>
           <IonButtons slot="end">
             <IonButton onClick={onClose} aria-label="Cerrar">
               <IonIcon slot="icon-only" icon={closeOutline} />
@@ -77,8 +96,8 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           <strong className="money">{money(ticketTotal)}</strong>
         </section>
 
-        <div className="co-methods" role="radiogroup" aria-label="Método de pago">
-          {METHODS.map((m) => (
+        <div className={`co-methods ${order ? 'is-three' : ''}`} role="radiogroup" aria-label="Método de pago">
+          {methods.map((m) => (
             <button
               key={m.id}
               type="button"
@@ -189,10 +208,10 @@ export function CheckoutModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       </div>
 
       <div className="pmodal-foot">
-        <IonButton fill="outline" className="btn-lg" onClick={onClose}>Volver a la cuenta</IonButton>
+        <IonButton fill="outline" className="btn-lg" onClick={onClose}>{order ? 'Volver al pedido' : 'Volver a la cuenta'}</IonButton>
         <IonButton color="success" className="btn-lg co-confirm" disabled={!canConfirm} onClick={confirm}>
           <IonIcon slot="start" icon={checkmarkDone} />
-          {method === 'credito' ? 'Cargar a su cuenta' : 'Confirmar venta'}
+          {method === 'credito' ? 'Cargar a su cuenta' : order ? 'Entregar y cobrar' : 'Confirmar venta'}
         </IonButton>
       </div>
 

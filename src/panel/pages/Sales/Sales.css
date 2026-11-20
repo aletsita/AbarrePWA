@@ -12,3 +12,5 @@
 .sd-paid { margin: 4px 6px 0; text-align: right; color: var(--t-muted); }
 .sales-customer { display: block; font-size: 0.78rem; color: var(--t-muted); }
 @media (max-width: 767px) { .sales-customer { display: inline; margin-left: 6px; } }
+.sales-origin { color: var(--t-muted); font-size: 0.86rem; }
+.pill.is-pickup { background: var(--t-warning-bg); color: var(--t-warning-text); }

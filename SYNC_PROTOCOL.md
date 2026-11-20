@@ -107,6 +107,11 @@ Cada cliente aplica estas acciones con el mismo reducer (`reducer` en `AppContex
 | `UPSERT_CUSTOMER` | `customer: Customer` | caja. El reducer conserva el `balance` que ya tenía el cliente (0 si es nuevo) |
 | `CREDIT_PAYMENT` | `movement: CreditMovement` (`type: 'abono'`) | caja: abono de un cliente, resta `amount` a su `balance` |
 | `REPLACE_DATA` | `data: Data` | no se publica: el celular la aplica localmente al recibir un `SNAPSHOT` |
+| `ORDER_RECEIVED` | `request: OrderRequest` (`{ id, customer: { name, phone }, items: { productId, qty }[], note?, at, pickupCode }`) | app de clientes (hoy simulado; ver abajo) |
+| `ORDER_ADVANCE` | `id: string, from: OrderStatus, at: number` | caja |
+| `ORDER_DELIVER` | `id: string, sale: Sale, payment: { method: CashMethod; received: number }, pickupCode: string` | caja, después de verificar el código del cliente |
+
+`OrderRequest`, `PickupOrder`, `OrderStatus` y los textos de los estados están en `src/data/pickup.ts` (único lugar donde se definen).
 
 Los tipos `Product`, `Sale`, `Device`, `CashCut`, `Shift`, `CashMovement`, `Customer`, `CreditMovement`, `Store`, `TicketConfig` y `User` están en `src/data/models.ts`.
 
@@ -116,6 +121,17 @@ Los tipos `Product`, `Sale`, `Device`, `CashCut`, `Shift`, `CashMovement`, `Cust
 - `SCAN_TO_REGISTER` guarda en el envío `accountId = account.id`. `REMOVE_SENT` quita las piezas de la cuenta a la que llegaron, esté activa o en espera; `CONFIRM_SALE` y `TICKET_CLEAR` solo cambian el estado de los envíos de la cuenta activa (o sin `accountId`).
 - Al cobrar (`CONFIRM_SALE`) o cancelar (`TICKET_CLEAR`) la cuenta activa queda vacía, con el mismo `id`, `customerId: null` y el siguiente nombre `Cuenta N` libre entre las cuentas en espera.
 - Una venta con `method: 'credito'` y `customerId` crea en `CONFIRM_SALE` el `CreditMovement` `{ id: 'cr-' + sale.id, type: 'cargo', amount: sale.total, saleId }` y suma `sale.total` al `balance` del cliente. Si el cliente abona algo al momento, la caja publica después un `CREDIT_PAYMENT` con `saleId` y `sale.paid` es ese abono.
+
+#### Pide y recoge (vista previa sin API)
+
+Mientras no exista la API, los pedidos viven en `Data.orders`, igual que los productos, y llegan por este mismo canal.
+
+- `ORDER_RECEIVED`: la caja ignora los precios que traiga la petición, toma los del catálogo y une las líneas repetidas. Si algún producto no existe, tiene `showInApp: false` o pide más que `stock − piezas apartadas` (pedidos `pendiente`, `preparando` o `listo`), el pedido no se acepta. Si se acepta, entra como `pendiente` con el siguiente folio `P-0001`. Un `id` repetido se ignora.
+- `ORDER_ADVANCE` solo aplica si el pedido sigue en `from` y lo mueve una etapa (`pendiente → preparando → listo`). Para llegar a `entregado` se usa `ORDER_DELIVER`.
+- `pickupCode` son 6 dígitos que genera el teléfono del cliente al confirmar el pedido; sin él, el pedido no se acepta. La caja lo guarda pero nunca lo muestra. El teléfono lo enseña como QR (`abarre:recoger:<id>:<código>`) cuando el pedido está listo.
+- `ORDER_DELIVER` solo aplica a un pedido `listo` y cuyo `pickupCode` coincida con el del mensaje. Aplica `CONFIRM_SALE` con `sale.id = 'pedido-' + id`, `origin: 'pedido'`, `orderId` y `orderFolio`. Así descuenta existencia y entra en Ventas y en el corte. Después marca el pedido como `entregado`, con `payment`, `deliveredAt` y `saleId`.
+- `CONFIRM_SALE` con `sale.orderId` es idempotente: si ya hay una venta con ese `id` u `orderId`, no hace nada. Además no toca la cuenta abierta (`ticket`, `account`, `sent`, `lastSaleId`).
+- `Product.showInApp` (sin valor = `true`), `Sale.origin` (sin valor = `'tienda'`), `CashCut.storeSales` y `CashCut.pickupSales` son opcionales. Los datos anteriores siguen siendo válidos y `VERSION` no cambió. La caja agrega `orders` a los datos guardados que no lo traen.
 
 ### `Data` (versión 5)
 
@@ -142,6 +158,7 @@ interface Data {
   pairing: { code: string; expiresAt: number } | null;
   closedCutId: string | null;
   lastSaleId: string | null;
+  orders?: PickupOrder[]; // Pide y recoge; el celular puede no tenerlo
 }
 ```
 

@@ -28,7 +28,7 @@ import {
 import { useMemo, useRef, useState } from 'react';
 import { StatCard } from '../../../components/StatCard';
 import { useApp } from '../../../context/AppContext';
-import { money, PAYMENT_LABEL, shortDate, time, type CashCut, type CashMovementType, type PaymentMethod } from '../../../data/models';
+import { money, ORIGIN_LABEL, PAYMENT_LABEL, saleOrigin, shortDate, time, type CashCut, type CashMovementType, type PaymentMethod, type SaleOrigin } from '../../../data/models';
 import { PanelHeader } from '../../components/PanelHeader';
 import { PromptModal } from '../../components/PromptModal';
 import { ClosedCut, Difference } from './ClosedCut';
@@ -54,6 +54,9 @@ export default function CashCut() {
   const byMethod = (m: PaymentMethod) => today.filter((s) => s.method === m);
   const sum = (m: PaymentMethod) => byMethod(m).reduce((n, s) => n + s.total, 0);
   const cashSales = sum('efectivo');
+  // Los pedidos entregados ya son ventas del turno: aquí solo se separan por origen
+  const byOrigin = (o: SaleOrigin) => today.filter((s) => saleOrigin(s) === o);
+  const originSum = (o: SaleOrigin) => byOrigin(o).reduce((n, s) => n + s.total, 0);
   const cashIn = cashMovements.filter((c) => c.type === 'entrada').reduce((n, c) => n + c.amount, 0);
   const cashOut = cashMovements.filter((c) => c.type !== 'entrada').reduce((n, c) => n + c.amount, 0);
   const payments = creditMovements.filter((m) => m.type === 'abono' && m.date >= shift.openedAt);
@@ -94,6 +97,8 @@ export default function CashCut() {
       cashSales,
       cardSales: sum('tarjeta'),
       transferSales: sum('transferencia'),
+      storeSales: originSum('tienda'),
+      pickupSales: originSum('pedido'),
       creditSales: sum('credito'),
       creditPaid,
       creditCash,
@@ -173,6 +178,35 @@ export default function CashCut() {
                               <span className="bar-tip" role="tooltip">
                                 <strong>{PAYMENT_LABEL[m]}</strong>
                                 {n} {n === 1 ? 'venta' : 'ventas'} · {money(v)} · {pct} % del día
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </section>
+
+                  <section className="pcard">
+                    <div className="pcard-head"><h2>Ventas por origen</h2></div>
+                    <div className="pcard-body">
+                      <ul className="bars" aria-label="Ventas por origen">
+                        {(Object.keys(ORIGIN_LABEL) as SaleOrigin[]).map((o) => {
+                          const v = originSum(o);
+                          const pct = total ? Math.round((v / total) * 100) : 0;
+                          const n = byOrigin(o).length;
+                          const cash = byOrigin(o).filter((s) => s.method === 'efectivo').reduce((t, s) => t + s.total, 0);
+                          return (
+                            <li key={o} className="bar-row" tabIndex={0}>
+                              <span className="bar-label">{ORIGIN_LABEL[o]}</span>
+                              <span className="bar-track">
+                                <span className="bar-fill" style={{ width: `${(v / Math.max(total, 1)) * 100}%` }} />
+                              </span>
+                              <span className="bar-value">
+                                <strong className="money">{money(v)}</strong> <span>{pct} %</span>
+                              </span>
+                              <span className="bar-tip" role="tooltip">
+                                <strong>{ORIGIN_LABEL[o]}</strong>
+                                {n} {n === 1 ? 'venta' : 'ventas'} · {money(cash)} en efectivo
                               </span>
                             </li>
                           );
@@ -317,6 +351,7 @@ export default function CashCut() {
         <div className="pmodal-body">
           <dl className="recon-list">
             <div><dt>Ventas del turno</dt><dd className="money">{money(total)} · {today.length}</dd></div>
+            <div><dt>En tienda · Pide y recoge</dt><dd className="money">{money(originSum('tienda'))} · {money(originSum('pedido'))}</dd></div>
             <div><dt>Efectivo esperado</dt><dd className="money">{money(expected)}</dd></div>
             <div className="is-total"><dt>Efectivo contado</dt><dd className="money">{money(counted ?? 0)}</dd></div>
           </dl>

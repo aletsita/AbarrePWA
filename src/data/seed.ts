@@ -14,6 +14,7 @@ import type {
   TicketConfig,
   User,
 } from './models';
+import type { PickupOrder } from './pickup';
 
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
@@ -110,6 +111,15 @@ export const SHIFT: Shift = {
 };
 
 export const SALES: Sale[] = [
+  {
+    ...sale(1049, hoursAgo(0.1), [item('p11', 1), item('p13', 2)], 'efectivo'),
+    id: 'pedido-o1',
+    paid: 100,
+    customerName: 'Andrea Castillo',
+    origin: 'pedido',
+    orderId: 'o1',
+    orderFolio: 'P-0001',
+  },
   sale(1048, hoursAgo(0.3), [item('p01', 2), item('p02', 1)], 'efectivo'),
   sale(1047, hoursAgo(0.8), [item('p04', 2), item('p03', 1), item('p07', 1)], 'tarjeta', ANA),
   sale(1046, hoursAgo(1.4), [item('p05', 3)], 'efectivo', ANA),
@@ -204,4 +214,35 @@ export const CUTS: CashCut[] = [
 export const DEVICES: Device[] = [
   { id: 'd1', name: 'Celular de José', model: 'Motorola moto g54', owner: JOSE, lastSeen: hoursAgo(0.3), register: STORE.register },
   { id: 'd2', name: 'Celular de Ana', model: 'Samsung Galaxy A15', owner: ANA, lastSeen: dayAt(1, 20, 12), register: STORE.register },
+];
+
+// Pide y recoge: pedidos de ejemplo, uno en cada estado
+// pickupCode lo generaría el teléfono del cliente; aquí son fijos para poder probar la entrega (ver README)
+function order(n: number, id: string, pickupCode: string, createdAt: string, name: string, phone: string, items: SaleItem[], status: PickupOrder['status'], note = ''): PickupOrder {
+  return {
+    id,
+    folio: `P-${String(n).padStart(4, '0')}`,
+    customer: { name, phone },
+    items,
+    note,
+    total: items.reduce((s, i) => s + i.qty * i.price, 0),
+    status,
+    createdAt,
+    updatedAt: createdAt,
+    pickupCode,
+  };
+}
+
+export const ORDERS: PickupOrder[] = [
+  order(5, 'o5', '305218', hoursAgo(0.05), 'Mariana López', '55 6789 0011', [item('p01', 2), item('p13', 1)], 'pendiente', 'Paso en 15 minutos'),
+  order(4, 'o4', '771640', hoursAgo(0.25), 'Carlos Ramírez', '55 4321 8765', [item('p05', 4), item('p14', 2)], 'pendiente'),
+  order(3, 'o3', '529083', hoursAgo(0.5), 'Lucía Gómez', '55 1209 3344', [item('p03', 1), item('p04', 2), item('p07', 1)], 'preparando', 'Las tortillas calientitas, por favor'),
+  order(2, 'o2', '418362', hoursAgo(0.9), 'Pedro Sánchez', '55 7788 9900', [item('p08', 2), item('p10', 1)], 'listo'),
+  {
+    ...order(1, 'o1', '660194', hoursAgo(1.3), 'Andrea Castillo', '55 2233 4455', [item('p11', 1), item('p13', 2)], 'entregado'),
+    updatedAt: hoursAgo(0.1),
+    deliveredAt: hoursAgo(0.1),
+    payment: { method: 'efectivo', received: 100 },
+    saleId: 'pedido-o1',
+  },
 ];

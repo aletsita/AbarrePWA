@@ -1,0 +1,90 @@
+/* Lista */
+.ord-list { margin: 0; padding: 0; list-style: none; }
+.ord-row { display: flex; align-items: center; gap: 12px; padding: 0 22px; border-top: 1px solid var(--t-border); }
+.ord-row:hover { background: var(--t-row-hover); }
+.ord-row:last-child { border-radius: 0 0 var(--t-radius) var(--t-radius); }
+.ord-row-main {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 16px 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ord-row-main:hover .ord-row-who strong { text-decoration: underline; text-underline-offset: 3px; }
+.ord-row-main:focus-visible { outline: 2px solid var(--ion-color-primary); outline-offset: -2px; border-radius: 6px; }
+.ord-row-folio { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ord-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ion-color-danger); }
+.ord-row-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ord-row-who strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ord-row-who small { color: var(--t-muted); font-size: 0.82rem; }
+.ord-row-who em { font-style: normal; color: var(--ion-color-danger); }
+.ord-row-total { font-weight: 700; }
+.ord-row-act { flex: none; min-width: 168px; margin: 0; --border-radius: 10px; font-weight: 600; }
+
+@media (max-width: 599px) {
+  .ord-row { flex-wrap: wrap; gap: 0; padding: 0 16px 14px; }
+  .ord-row-main { grid-template-columns: 62px minmax(0, 1fr) auto; padding-bottom: 10px; }
+  .ord-row-act { flex: 1 1 100%; min-width: 0; }
+}
+
+/* Detalle */
+.ord-phone { display: inline-flex; align-items: center; gap: 6px; color: var(--ion-color-primary); text-decoration: none; }
+.ord-note { margin: 0 0 12px; color: var(--t-side-text); font-style: italic; }
+.ord-warn { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; color: var(--ion-color-danger); font-size: 0.88rem; font-weight: 600; }
+.ord-items { margin: 0; padding: 0; list-style: none; }
+.ord-items li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--t-border); }
+.ord-items strong { display: inline-block; min-width: 1.6em; }
+
+/* Código para recoger */
+.pc-body { display: flex; flex-direction: column; }
+.pc-lead { margin: 0 0 18px; color: var(--t-muted); }
+.pc-lead strong { color: var(--t-ink); }
+.pc-label { font-weight: 600; margin-bottom: 8px; }
+.pc-input {
+  width: 100%;
+  height: 64px;
+  padding: 0 16px;
+  border: 1px solid var(--t-border-strong);
+  border-radius: 12px;
+  background: var(--t-surface);
+  color: var(--t-ink);
+  font: inherit;
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pc-input::placeholder { color: var(--t-border-strong); }
+.pc-input:focus { outline: none; border-color: var(--ion-color-primary); box-shadow: 0 0 0 3px rgba(var(--ion-color-primary-rgb), 0.18); }
+.pc-input[aria-invalid='true'] { border-color: var(--ion-color-danger); }
+.pc-help { display: flex; align-items: flex-start; gap: 6px; min-height: 1.4em; margin: 8px 0 16px; color: var(--t-muted); font-size: 0.86rem; }
+.pc-help.is-error { color: var(--ion-color-danger); font-weight: 600; }
+.pc-help ion-icon { flex: none; font-size: 17px; }
+.pc-camera-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  border: 1px dashed var(--t-border-strong);
+  border-radius: 12px;
+  background: none;
+  color: var(--t-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pc-camera-btn:hover:not(:disabled) { border-color: var(--ion-color-primary); color: var(--ion-color-primary); }
+.pc-camera-btn ion-icon { font-size: 20px; }
+.pc-camera { position: relative; overflow: hidden; border-radius: 12px; background: #000; aspect-ratio: 4 / 3; }
+.pc-camera video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pc-camera-text { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); color: #fff; font-size: 0.86rem; text-align: center; }
