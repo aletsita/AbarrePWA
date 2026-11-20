@@ -7,7 +7,7 @@ Contrato entre **tendero-web** (la caja y el servidor) y **tendero-mobile** (la 
 
 ## Transporte
 
-El servidor (`server/index.js` en tendero-web) solo reenvía mensajes: no los guarda ni los interpreta. Cada cliente recibe lo que publica cualquier cliente, también lo que publicó él mismo, y descarta lo suyo comparando `from`.
+El servidor (`server/index.js` en tendero-web) reenvía los mensajes sin cambiarlos. Cada cliente recibe lo que publica cualquier cliente, también lo que publicó él mismo, y descarta lo suyo comparando `from`. La API de la app del celular (`server/api.js`, ver `API.md` en tendero-mobile) escucha el canal: guarda una copia de lo que trae cada `SNAPSHOT` (productos, usuarios y pedidos) y sigue `ORDER_ADVANCE` / `ORDER_DELIVER`. También publica como un equipo más (`from: servidor-…`): `WHO` cuando necesita datos al momento y `ORDER_RECEIVED` con los pedidos de los clientes.
 
 ### `GET /__sync`: recibir (Server-Sent Events)
 
@@ -107,9 +107,10 @@ Cada cliente aplica estas acciones con el mismo reducer (`reducer` en `AppContex
 | `UPSERT_CUSTOMER` | `customer: Customer` | caja. El reducer conserva el `balance` que ya tenía el cliente (0 si es nuevo) |
 | `CREDIT_PAYMENT` | `movement: CreditMovement` (`type: 'abono'`) | caja: abono de un cliente, resta `amount` a su `balance` |
 | `REPLACE_DATA` | `data: Data` | no se publica: el celular la aplica localmente al recibir un `SNAPSHOT` |
-| `ORDER_RECEIVED` | `request: OrderRequest` (`{ id, customer: { name, phone }, items: { productId, qty }[], note?, at, pickupCode }`) | app de clientes (hoy simulado; ver abajo) |
+| `ORDER_RECEIVED` | `request: OrderRequest` (`{ id, customer: { name, phone }, items: { productId, qty }[], note?, at, pickupCode }`) | servidor (API de la app de clientes; ver abajo) |
 | `ORDER_ADVANCE` | `id: string, from: OrderStatus, at: number` | caja |
 | `ORDER_DELIVER` | `id: string, sale: Sale, payment: { method: CashMethod; received: number }, pickupCode: string` | caja, después de verificar el código del cliente |
+| `ORDER_CANCEL` | `id: string, reason: 'sin-existencia' \| 'otro', missing: string[], note?: string, at: number` | caja |
 
 `OrderRequest`, `PickupOrder`, `OrderStatus` y los textos de los estados están en `src/data/pickup.ts` (único lugar donde se definen).
 
@@ -122,16 +123,17 @@ Los tipos `Product`, `Sale`, `Device`, `CashCut`, `Shift`, `CashMovement`, `Cust
 - Al cobrar (`CONFIRM_SALE`) o cancelar (`TICKET_CLEAR`) la cuenta activa queda vacía, con el mismo `id`, `customerId: null` y el siguiente nombre `Cuenta N` libre entre las cuentas en espera.
 - Una venta con `method: 'credito'` y `customerId` crea en `CONFIRM_SALE` el `CreditMovement` `{ id: 'cr-' + sale.id, type: 'cargo', amount: sale.total, saleId }` y suma `sale.total` al `balance` del cliente. Si el cliente abona algo al momento, la caja publica después un `CREDIT_PAYMENT` con `saleId` y `sale.paid` es ese abono.
 
-#### Pide y recoge (vista previa sin API)
+#### Pide y recoge
 
-Mientras no exista la API, los pedidos viven en `Data.orders`, igual que los productos, y llegan por este mismo canal.
+Los pedidos viven en `Data.orders`, igual que los productos. Los clientes los hacen en la API del servidor, que se los manda a la caja por este canal con `ORDER_RECEIVED` y confirma con el siguiente `SNAPSHOT` que la caja los aceptó.
 
 - `ORDER_RECEIVED`: la caja ignora los precios que traiga la petición, toma los del catálogo y une las líneas repetidas. Si algún producto no existe, tiene `showInApp: false` o pide más que `stock − piezas apartadas` (pedidos `pendiente`, `preparando` o `listo`), el pedido no se acepta. Si se acepta, entra como `pendiente` con el siguiente folio `P-0001`. Un `id` repetido se ignora.
 - `ORDER_ADVANCE` solo aplica si el pedido sigue en `from` y lo mueve una etapa (`pendiente → preparando → listo`). Para llegar a `entregado` se usa `ORDER_DELIVER`.
 - `pickupCode` son 6 dígitos que genera el teléfono del cliente al confirmar el pedido; sin él, el pedido no se acepta. La caja lo guarda pero nunca lo muestra. El teléfono lo enseña como QR (`abarre:recoger:<id>:<código>`) cuando el pedido está listo.
+- `ORDER_CANCEL` solo aplica a un pedido `pendiente`, `preparando` o `listo`: lo deja `cancelado` con `cancel: { reason, missing, note?, at }` (`missing` son ids de productos del pedido que se agotaron). Sus piezas dejan de estar apartadas. El cliente lo ve en su app y decide si quita el pedido o elige otros productos.
 - `ORDER_DELIVER` solo aplica a un pedido `listo` y cuyo `pickupCode` coincida con el del mensaje. Aplica `CONFIRM_SALE` con `sale.id = 'pedido-' + id`, `origin: 'pedido'`, `orderId` y `orderFolio`. Así descuenta existencia y entra en Ventas y en el corte. Después marca el pedido como `entregado`, con `payment`, `deliveredAt` y `saleId`.
 - `CONFIRM_SALE` con `sale.orderId` es idempotente: si ya hay una venta con ese `id` u `orderId`, no hace nada. Además no toca la cuenta abierta (`ticket`, `account`, `sent`, `lastSaleId`).
-- `Product.showInApp` (sin valor = `true`), `Sale.origin` (sin valor = `'tienda'`), `CashCut.storeSales` y `CashCut.pickupSales` son opcionales. Los datos anteriores siguen siendo válidos y `VERSION` no cambió. La caja agrega `orders` a los datos guardados que no lo traen.
+- `Product.showInApp` (sin valor = `true`), `Product.description` (texto que ven los clientes; la caja se la pone a los productos de ejemplo guardados sin ella), `Sale.origin` (sin valor = `'tienda'`), `CashCut.storeSales` y `CashCut.pickupSales` son opcionales. Los datos anteriores siguen siendo válidos y `VERSION` no cambió. La caja agrega `orders` a los datos guardados que no lo traen.
 
 ### `Data` (versión 5)
 
