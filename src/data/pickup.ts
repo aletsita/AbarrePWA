@@ -1,6 +1,7 @@
 // Pide y recoge: estados de un pedido y sus textos. ÚNICO lugar donde se definen.
 // Un pedido solo avanza, una etapa a la vez: pendiente → preparando → listo → entregado.
-// Mientras no se entrega, la caja puede cancelarlo (por ejemplo, si se agotó un producto).
+// Mientras no se entrega, la caja puede cancelarlo. Si se agotó un producto, en lugar de cancelarlo le avisa
+// al cliente (issue): el pedido sigue en pie y el cliente cambia ese producto por otro, lo quita o cancela.
 import type { CashMethod, SaleItem } from './models';
 
 export type OrderStatus = 'pendiente' | 'preparando' | 'listo' | 'entregado' | 'cancelado';
@@ -16,12 +17,20 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   cancelado: 'Cancelado',
 };
 
-export type CancelReason = 'sin-existencia' | 'otro';
+// cliente: lo canceló el cliente desde su app (por ejemplo, después de que se agotó un producto)
+export type CancelReason = 'sin-existencia' | 'otro' | 'cliente';
 
 export const CANCEL_REASON_LABEL: Record<CancelReason, string> = {
   'sin-existencia': 'Falta de existencia',
   otro: 'Otro motivo',
+  cliente: 'El cliente lo canceló',
 };
+
+// La caja avisó que se agotaron estos productos (ids). Mientras esté, el pedido espera al cliente.
+export interface OrderIssue {
+  missing: string[];
+  at: string;
+}
 
 // Por qué la caja canceló el pedido. `missing`: productos que se agotaron (ids). El cliente lo ve en su app.
 export interface OrderCancel {
@@ -82,6 +91,9 @@ export interface PickupOrder {
   payment?: { method: CashMethod; received: number };
   saleId?: string;
   cancel?: OrderCancel;
+  issue?: OrderIssue;
+  // Cuándo el cliente cambió los productos del pedido (después de un aviso de producto agotado)
+  editedAt?: string;
   // Código para recoger: lo genera el teléfono del cliente. La caja NUNCA lo muestra, solo lo compara al entregar.
   pickupCode?: string;
 }

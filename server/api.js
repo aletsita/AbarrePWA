@@ -2,8 +2,10 @@
 // Ver API.md en tendero-mobile. Los datos se guardan en server/data/api.json.
 //
 // La caja sigue siendo la dueña del inventario y de los pedidos: este servidor escucha los mensajes que
-// pasan por el canal de sincronización (SNAPSHOT, ORDER_ADVANCE, ORDER_DELIVER), guarda una copia de los
-// productos, los usuarios y los pedidos de la caja, y le manda los pedidos nuevos con ORDER_RECEIVED.
+// pasan por el canal de sincronización (SNAPSHOT, ORDER_*, ventas y cambios de productos), guarda una copia de
+// los productos, los usuarios y los pedidos de la caja, y le manda los pedidos nuevos con ORDER_RECEIVED y los
+// cambios que hace el cliente con ORDER_EDIT y ORDER_CANCEL.
+// La tienda está abierta mientras la caja está conectada (manda PING) y su turno no está cerrado.
 // Quien inicia sesión con el correo de un usuario activo de la caja (Dueño, Cajero, Inventario) entra
 // como personal de la tienda; cualquier otra cuenta entra como cliente.
 import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
@@ -20,6 +22,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const CAJA_WAIT_MS = 3000;
 const CATALOG_FRESH_MS = 10000;
 const MAX_TRIES = 3;
+const CAJA_ALIVE_MS = 12000;
 
 // ---------- datos ----------
 
@@ -124,6 +127,35 @@ function staffOf(email) {
 
 const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone });
 const publicOrder = ({ userId: _u, tries: _t, ...o }) => o;
+const ACTIVE = ['pendiente', 'preparando', 'listo'];
+
+// ---------- tienda abierta o cerrada ----------
+
+let cajaSeenAt = 0; // último PING o SNAPSHOT de la caja (en memoria: al arrancar se espera a que hable)
+let lastStore = '';
+
+function storeStatus() {
+  const name = db.caja?.storeName;
+  if (!cajaSeenAt || Date.now() - cajaSeenAt > CAJA_ALIVE_MS) {
+    return { abierta: false, motivo: 'sin-conexion', mensaje: 'La tienda no está conectada en este momento.', ...(name ? { nombre: name } : {}) };
+  }
+  if (db.caja?.closed) return { abierta: false, motivo: 'turno-cerrado', mensaje: 'La tienda ya cerró su turno.', ...(name ? { nombre: name } : {}) };
+  return { abierta: true, ...(name ? { nombre: name } : {}) };
+}
+
+function requireOpen() {
+  const st = storeStatus();
+  if (!st.abierta) throw new HttpError(503, st.motivo === 'turno-cerrado' ? 'tienda-cerrada' : 'tienda-desconectada', `${st.mensaje} Intenta más tarde.`);
+}
+
+// Avisa en vivo a todos los clientes conectados cuando la tienda abre o cierra
+function checkStore() {
+  const st = JSON.stringify(storeStatus());
+  if (st === lastStore) return;
+  lastStore = st;
+  streams.forEach((set) => set.forEach((res) => res.write(`event: tienda\ndata: ${st}\n\n`)));
+}
+setInterval(checkStore, 3000).unref();
 
 // ---------- canal con la caja ----------
 
@@ -162,35 +194,110 @@ function freshSnapshot(timeout = CAJA_WAIT_MS) {
 // Cada mensaje que pasa por el canal (index.js lo llama al reenviarlo)
 export function onRelayMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
-  if (msg.type === 'SNAPSHOT' && msg.data) onSnapshot(msg.data);
-  else if (msg.type === 'ORDER_ADVANCE') {
-    const o = db.orders.find((x) => x.id === msg.id);
-    if (o && o.status === msg.from) setStatus(o, STEPS[STEPS.indexOf(msg.from) + 1], msg.at);
-  } else if (msg.type === 'ORDER_DELIVER') {
-    const o = db.orders.find((x) => x.id === msg.id);
-    if (o) setStatus(o, 'entregado');
-  } else if (msg.type === 'ORDER_CANCEL') {
-    const o = db.orders.find((x) => x.id === msg.id);
-    if (o) cancelOrder(o, { reason: msg.reason, missing: msg.missing ?? [], ...(msg.note ? { note: msg.note } : {}), at: new Date(msg.at ?? Date.now()).toISOString() });
+  const o = typeof msg.id === 'string' ? db.orders.find((x) => x.id === msg.id) : null;
+  const c = typeof msg.id === 'string' ? db.caja?.orders.find((x) => x.id === msg.id) : null;
+  switch (msg.type) {
+    case 'SNAPSHOT':
+      if (msg.data) onSnapshot(msg.data);
+      break;
+    case 'PING':
+      if (msg.key === 'panel') cajaSeenAt = Date.now();
+      break;
+    case 'BYE':
+      // La caja se quedó sin internet o se cerró
+      if (msg.key === 'panel') cajaSeenAt = 0;
+      break;
+    case 'CLOSE_CUT':
+      if (db.caja) db.caja.closed = true;
+      break;
+    case 'OPEN_SHIFT':
+      if (db.caja) db.caja.closed = false;
+      break;
+    case 'ORDER_ADVANCE':
+      if (c && c.status === msg.from) c.status = STEPS[STEPS.indexOf(msg.from) + 1];
+      if (o && o.status === msg.from && !o.issue) setStatus(o, STEPS[STEPS.indexOf(msg.from) + 1], msg.at);
+      break;
+    case 'ORDER_DELIVER':
+      if (c) c.status = 'entregado';
+      applySale(msg.sale);
+      if (o) setStatus(o, 'entregado');
+      break;
+    case 'ORDER_CANCEL':
+      if (c) c.status = 'cancelado';
+      if (o) cancelOrder(o, { reason: msg.reason, missing: msg.missing ?? [], ...(msg.note ? { note: msg.note } : {}), at: new Date(msg.at ?? Date.now()).toISOString() });
+      break;
+    case 'ORDER_ISSUE': {
+      const at = new Date(msg.at ?? Date.now()).toISOString();
+      if (c) c.issue = { missing: msg.missing ?? [], at };
+      if (o && ACTIVE.includes(o.status)) {
+        o.issue = { missing: (msg.missing ?? []).filter((id) => o.items.some((i) => i.productId === id)), at };
+        save();
+        emit(o);
+      }
+      break;
+    }
+    // Existencias al momento para el catálogo, sin esperar el siguiente SNAPSHOT de la caja
+    case 'CONFIRM_SALE':
+      applySale(msg.sale);
+      break;
+    case 'UPSERT_PRODUCT':
+      if (db.caja && msg.product?.id) db.caja.products = [msg.product, ...db.caja.products.filter((p) => p.id !== msg.product.id)];
+      break;
+    case 'ADD_STOCK':
+      for (const e of msg.entries ?? []) {
+        const p = db.caja?.products.find((x) => x.id === e.productId);
+        if (p) p.stock += Number(e.qty) || 0;
+      }
+      break;
+  }
+  if (['PING', 'BYE', 'SNAPSHOT', 'CLOSE_CUT', 'OPEN_SHIFT'].includes(msg.type)) checkStore();
+}
+
+// Una venta descuenta su existencia una sola vez (puede llegar como CONFIRM_SALE o dentro de ORDER_DELIVER)
+const appliedSales = new Set();
+function applySale(sale) {
+  if (!db.caja || !sale?.id || appliedSales.has(sale.id)) return;
+  appliedSales.add(sale.id);
+  for (const i of sale.items ?? []) {
+    const p = db.caja.products.find((x) => x.id === i.productId);
+    if (p) p.stock = Math.max(0, p.stock - i.qty);
   }
 }
 
 function onSnapshot(data) {
   whoPending = false;
+  cajaSeenAt = Date.now();
+  appliedSales.clear();
   db.caja = {
     at: Date.now(),
+    storeName: data.store?.name,
+    closed: !!data.closedCutId,
     products: Array.isArray(data.products) ? data.products : [],
     users: Array.isArray(data.users) ? data.users.map(({ name, email, role, active }) => ({ name, email, role, active })) : [],
-    orders: Array.isArray(data.orders) ? data.orders.map(({ id, folio, status, items, cancel }) => ({ id, folio, status, items, cancel })) : [],
+    orders: Array.isArray(data.orders)
+      ? data.orders.map(({ id, folio, status, items, total, cancel, issue, editedAt }) => ({ id, folio, status, items, total, cancel, issue, editedAt }))
+      : [],
   };
-  // Reconcilia los pedidos: folio y estado de la caja; reenvía los que no le llegaron
+  // Reconcilia los pedidos: folio, estado y productos de la caja; reenvía lo que no le llegó
   for (const o of db.orders) {
     const c = db.caja.orders.find((x) => x.id === o.id);
     if (c) {
       o.folio = c.folio;
       o.tries = 0;
-      if (c.status === 'cancelado') cancelOrder(o, c.cancel ?? { reason: 'otro', missing: [], at: new Date().toISOString() });
+      const before = JSON.stringify([o.items, o.issue ?? null]);
+      if (Array.isArray(c.items) && c.items.length) {
+        o.items = c.items.map(({ productId, name, price, qty }) => ({ productId, name, price, qty }));
+        o.total = round(c.total ?? o.items.reduce((t, i) => t + i.price * i.qty, 0));
+      }
+      if (c.issue && ACTIVE.includes(c.status)) o.issue = c.issue;
+      else delete o.issue;
+      if (c.editedAt) o.editedAt = c.editedAt;
+      if (o.status === 'cancelado' && o.cancel?.reason === 'cliente' && ACTIVE.includes(c.status)) {
+        // El cliente lo canceló mientras la caja no estaba: se le vuelve a avisar
+        publish({ type: 'ORDER_CANCEL', id: o.id, reason: 'cliente', missing: [], at: Date.parse(o.cancel.at) });
+      } else if (c.status === 'cancelado') cancelOrder(o, c.cancel ?? { reason: 'otro', missing: [], at: new Date().toISOString() });
       else setStatus(o, c.status);
+      if (before !== JSON.stringify([o.items, o.issue ?? null])) emit(o);
     } else if (o.status !== 'entregado' && o.status !== 'cancelado' && o.folio && (o.tries ?? 0) < MAX_TRIES) {
       sendToCaja(o);
     }
@@ -217,10 +324,11 @@ function sendToCaja(o) {
 }
 
 // Catálogo para los clientes: lo visible en la app, con la existencia menos lo apartado por pedidos
-function catalogOf(caja) {
+// (sin contar el pedido `exceptId`, para cuando el cliente cambia los productos de ese mismo pedido)
+function catalogOf(caja, exceptId) {
   const reserved = {};
   for (const o of caja.orders) {
-    if (o.status === 'entregado' || o.status === 'cancelado') continue;
+    if (o.id === exceptId || !ACTIVE.includes(o.status)) continue;
     for (const i of o.items ?? []) reserved[i.productId] = (reserved[i.productId] ?? 0) + i.qty;
   }
   return caja.products
@@ -264,7 +372,9 @@ function setStatus(o, status, at = Date.now()) {
 function cancelOrder(o, cancel) {
   if (o.status === 'cancelado' || o.status === 'entregado') return;
   o.status = 'cancelado';
-  o.cancel = { reason: cancel.reason === 'sin-existencia' ? 'sin-existencia' : 'otro', missing: cancel.missing ?? [], ...(cancel.note ? { note: cancel.note } : {}), at: cancel.at };
+  delete o.issue;
+  const reason = ['sin-existencia', 'cliente'].includes(cancel.reason) ? cancel.reason : 'otro';
+  o.cancel = { reason, missing: cancel.missing ?? [], ...(cancel.note ? { note: cancel.note } : {}), at: cancel.at };
   o.history.push({ status: 'cancelado', at: cancel.at });
   save();
   emit(o);
@@ -277,6 +387,7 @@ function openStream(req, res, token) {
   const set = streams.get(c.sub) ?? new Set();
   set.add(res);
   streams.set(c.sub, set);
+  res.write(`event: tienda\ndata: ${JSON.stringify(storeStatus())}\n\n`);
   const keep = setInterval(() => res.write(': ping\n\n'), 15000);
   req.on('close', () => {
     clearInterval(keep);
@@ -301,7 +412,7 @@ function validateRegister(b) {
 }
 
 async function route(method, path, token, body, headers) {
-  const m = path.match(/^\/pedidos\/([^/]+)(\/resolver)?$/);
+  const m = path.match(/^\/pedidos\/([^/]+)(\/resolver|\/cambiar|\/cancelar)?$/);
   const key = m && m[1] !== 'eventos' ? `${method} /pedidos/:id${m[2] ?? ''}` : `${method} ${path}`;
 
   switch (key) {
@@ -342,6 +453,11 @@ async function route(method, path, token, body, headers) {
       return [200, publicUser(db.users.find((u) => u.id === c.sub))];
     }
 
+    case 'GET /tienda': {
+      verify(token);
+      return [200, storeStatus()];
+    }
+
     case 'GET /catalogo': {
       verify(token);
       const caja = await currentCaja();
@@ -376,6 +492,32 @@ async function route(method, path, token, body, headers) {
       return [200, publicOrder(o)];
     }
 
+    case 'POST /pedidos/:id/cambiar': {
+      // Se agotó un producto: el cliente manda la lista nueva de productos (los que sigue queriendo y los que
+      // eligió en lugar de los agotados). El pedido es el mismo: conserva su folio y su código.
+      const c = requireRole(token, 'cliente');
+      const o = db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && x.folio);
+      if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
+      if (!ACTIVE.includes(o.status)) throw new HttpError(409, 'no-activo', 'Este pedido ya no se puede cambiar.');
+      if (!o.issue) throw new HttpError(409, 'sin-aviso', 'La tienda no pidió cambios en este pedido.');
+      return [200, await editOrder(o, body)];
+    }
+
+    case 'POST /pedidos/:id/cancelar': {
+      // El cliente cancela su pedido (por ejemplo, porque se agotó algo y ya no lo quiere)
+      const c = requireRole(token, 'cliente');
+      const o = db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && x.folio);
+      if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
+      if (!ACTIVE.includes(o.status)) throw new HttpError(409, 'no-activo', 'Este pedido ya no se puede cancelar.');
+      const at = Date.now();
+      publish({ type: 'ORDER_CANCEL', id: o.id, reason: 'cliente', missing: [], at });
+      cancelOrder(o, { reason: 'cliente', missing: [], at: new Date(at).toISOString() });
+      o.resolved = { action: 'quitar', at: new Date(at).toISOString() };
+      save();
+      emit(o);
+      return [200, publicOrder(o)];
+    }
+
     case 'POST /pedidos':
       return [201, await createOrder(requireRole(token, 'cliente'), body, headers['idempotency-key'] ?? '')];
   }
@@ -397,6 +539,7 @@ async function createOrder(c, body, key) {
     throw new HttpError(422, 'datos-invalidos', 'Falta el código para recoger.', { fields: { pickupCode: 'Debe tener 6 dígitos.' } });
   }
 
+  requireOpen();
   // Precios y existencia al momento, directo de la caja
   const caja = await freshSnapshot();
   if (!caja) throw new HttpError(503, 'tienda-desconectada', 'La tienda no está conectada en este momento. Intenta en un rato.');
@@ -436,6 +579,40 @@ async function createOrder(c, body, key) {
   db.idem[`${c.sub}:${key}`] = order.id;
   save();
   return publicOrder(order);
+}
+
+// Cambio de productos de un pedido con aviso de producto agotado. La caja lo aplica (ORDER_EDIT) y su
+// siguiente SNAPSHOT confirma que lo aceptó.
+async function editOrder(o, body) {
+  const items = Array.isArray(body.items) ? body.items.map((i) => ({ productId: String(i.productId ?? ''), qty: i.qty })) : [];
+  if (!items.length || items.some((i) => !i.productId || !Number.isInteger(i.qty) || i.qty < 1)) {
+    throw new HttpError(422, 'datos-invalidos', 'El pedido debe tener al menos un producto.');
+  }
+  requireOpen();
+  const caja = await freshSnapshot();
+  if (!caja) throw new HttpError(503, 'tienda-desconectada', 'La tienda no está conectada en este momento. Intenta en un rato.');
+  const products = catalogOf(caja, o.id);
+  const changes = [];
+  for (const i of items) {
+    const p = products.find((x) => x.id === i.productId);
+    if (!p || p.stock < 1) changes.push({ kind: 'no-disponible', productId: i.productId, name: p?.name ?? 'Producto' });
+    else if (p.stock < i.qty) changes.push({ kind: 'existencia', productId: p.id, name: p.name, requested: i.qty, available: p.stock });
+  }
+  const conflict = (message) => ({ code: 'pedido-cambio', message, changes, products: products.filter((p) => items.some((i) => i.productId === p.id)) });
+  if (changes.length) throw new HttpError(409, 'pedido-cambio', 'Algunos productos ya no alcanzan.', conflict('Algunos productos ya no alcanzan.'));
+
+  const before = o.editedAt;
+  publish({ type: 'ORDER_EDIT', id: o.id, items, at: Date.now() });
+  const editedAt = (caja) => caja?.orders.find((x) => x.id === o.id)?.editedAt;
+  let after = await freshSnapshot();
+  if (after && (!editedAt(after) || editedAt(after) === before)) after = (await freshSnapshot()) ?? after;
+  if (!after) throw new HttpError(503, 'tienda-desconectada', 'La tienda no respondió. Intenta de nuevo.');
+  if (!editedAt(after) || editedAt(after) === before) {
+    throw new HttpError(409, 'pedido-cambio', 'La tienda no pudo aceptar el cambio. Revisa los productos.', conflict('La tienda no pudo aceptar el cambio.'));
+  }
+  save();
+  emit(o);
+  return publicOrder(o);
 }
 
 function conflictOf(items, products, expectedTotal) {

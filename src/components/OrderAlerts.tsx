@@ -31,8 +31,28 @@ export function OrderAlerts() {
   const router = useIonRouter();
   const [toast] = useIonToast();
   const known = useRef<Set<string> | null>(null);
+  // Respuestas del cliente a un aviso de producto agotado: cambió productos o canceló
+  const answers = useRef<Map<string, string> | null>(null);
 
   useEffect(() => {
+    const answerOf = (o: (typeof orders)[number]) => (o.cancel?.reason === 'cliente' ? 'cancelo' : o.editedAt ?? '');
+    const prev = answers.current;
+    answers.current = new Map(orders.map((o) => [o.id, answerOf(o)]));
+    if (prev && user) {
+      const changed = orders.filter((o) => prev.has(o.id) && answerOf(o) && prev.get(o.id) !== answerOf(o));
+      changed.forEach((o) =>
+        toast({
+          header: o.cancel?.reason === 'cliente' ? `${o.customer.name} canceló ${o.folio}` : `${o.customer.name} cambió ${o.folio}`,
+          message: o.cancel?.reason === 'cliente' ? 'Ya no prepares este pedido.' : `Nuevo total ${money(o.total)}. Ya puedes seguir preparándolo.`,
+          duration: 8000,
+          color: o.cancel?.reason === 'cliente' ? 'medium' : 'primary',
+          position: 'top',
+          cssClass: 'toast-app',
+          buttons: [{ text: 'Ver pedidos', handler: () => router.push('/panel/pedidos', 'none') }],
+        }),
+      );
+    }
+
     const ids = new Set(orders.map((o) => o.id));
     if (!known.current) {
       known.current = ids;

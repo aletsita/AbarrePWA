@@ -15,6 +15,9 @@ const CAMERA_TEXT = {
   'sin-camara': 'No se encontró una cámara.',
 };
 
+// En el campo solo entran los 6 dígitos del código
+const sanitize = (raw: string) => raw.replace(/\D/g, '').slice(0, 6);
+
 interface Props {
   isOpen: boolean;
   // Pedido que se va a entregar; sin él, el código busca entre los pedidos listos
@@ -33,6 +36,9 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
   const fails = useRef(0);
   const [lockedUntil, setLockedUntil] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Un lector USB "teclea" el contenido del QR (abarre:recoger:…) y Enter. Como empieza con una letra, se
+  // junta aparte y nunca entra al campo
+  const reader = useRef('');
   const locked = lockedUntil > Date.now();
 
   useEffect(() => {
@@ -42,6 +48,7 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
   }, [lockedUntil]);
 
   const reset = () => {
+    reader.current = '';
     setText('');
     setError('');
     setCamera(false);
@@ -54,8 +61,8 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
       setLockedUntil(Date.now() + LOCK_MS);
       setError('Demasiados intentos. Espera un minuto y vuelve a intentarlo.');
     } else setError(msg);
-    setText('');
-    inputRef.current?.focus();
+    // Los números se quedan a la vista (seleccionados) para revisarlos o escribir encima
+    window.setTimeout(() => inputRef.current?.select());
   };
 
   const check = (raw: string) => {
@@ -68,13 +75,24 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
     let found: PickupOrder | undefined;
     if (order) {
       if (parsed.orderId && parsed.orderId !== order.id) return fail(`Ese código es de otro pedido, no del ${order.folio}.`);
-      if (order.pickupCode !== parsed.code) return fail('El código no coincide. Pídele al cliente que lo revise en su app.');
+      if (order.pickupCode !== parsed.code) {
+        const other = orders.find((o) => o.id !== order.id && o.pickupCode === parsed.code);
+        return fail(
+          other
+            ? `Ese código es del pedido ${other.folio} (${other.customer.name}), no del ${order.folio}. Ciérralo y entrega el ${other.folio}.`
+            : `El código no coincide con el del ${order.folio}. Pídele al cliente que lo revise en su app.`,
+        );
+      }
       found = order;
     } else {
       const match = orders.find((o) => o.pickupCode === parsed.code && (!parsed.orderId || o.id === parsed.orderId));
       if (!match) return fail('No hay ningún pedido con ese código.');
       if (match.status === 'entregado') return fail(`El pedido ${match.folio} ya se entregó.`);
       if (match.status === 'cancelado') return fail(`El pedido ${match.folio} está cancelado.`);
+      if (match.issue) {
+        setError(`El pedido ${match.folio} está esperando a que el cliente cambie un producto agotado.`);
+        return;
+      }
       if (match.status !== 'listo') {
         setError(`El pedido ${match.folio} todavía está en "${ORDER_STATUS_LABEL[match.status]}". Márcalo como listo antes de entregarlo.`);
         return;
@@ -127,16 +145,41 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
           className="pc-input"
           inputMode="numeric"
           autoComplete="off"
-          placeholder="000 000"
-          maxLength={80}
+          placeholder="000000"
+          maxLength={6}
           value={text}
           disabled={locked}
           aria-invalid={!!error}
           aria-describedby="pc-help"
-          // Un lector USB escribe el contenido del QR y Enter; a mano se escriben los 6 dígitos
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (reader.current) {
+                e.preventDefault();
+                const raw = reader.current;
+                reader.current = '';
+                check(raw);
+              }
+              return;
+            }
+            if (e.key.length !== 1 || e.ctrlKey || e.metaKey) return;
+            if (reader.current || /[a-z]/i.test(e.key)) {
+              e.preventDefault();
+              reader.current = (reader.current + e.key).slice(0, 120);
+            }
+          }}
+          onPaste={(e) => {
+            // Pegar el texto del QR también funciona; cualquier otra cosa se reduce a sus dígitos
+            const raw = e.clipboardData.getData('text');
+            if (/[a-z]/i.test(raw)) {
+              e.preventDefault();
+              check(raw);
+            }
+          }}
           onChange={(e) => {
-            setText(e.target.value);
+            const next = sanitize(e.target.value);
+            setText(next);
             setError('');
+            if (/^\d{6}$/.test(next)) check(next);
           }}
         />
         <p id="pc-help" className={`pc-help ${error ? 'is-error' : ''}`} role={error ? 'alert' : undefined}>
