@@ -3,18 +3,18 @@ import {
   alertCircleOutline,
   bagCheckOutline,
   callOutline,
-  checkmarkDoneOutline,
   closeCircleOutline,
   closeOutline,
+  createOutline,
   flameOutline,
+  hourglassOutline,
   printOutline,
   qrCodeOutline,
   timeOutline,
-  trashOutline,
+  warningOutline,
 } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { EmptyState } from '../../../components/EmptyState';
-import { StatCard } from '../../../components/StatCard';
 import { useApp } from '../../../context/AppContext';
 import { isToday, money, PAYMENT_LABEL, time } from '../../../data/models';
 import { ACTIVE_STATUSES, CANCEL_REASON_LABEL, ORDER_NEXT_ACTION, ORDER_STATUS_LABEL, reservedStock, type OrderStatus, type PickupOrder } from '../../../data/pickup';
@@ -26,16 +26,16 @@ import { PickupCodeModal } from './PickupCodeModal';
 import './Orders.css';
 
 const NEW_MS = 2 * 60000;
-const TABS: { id: OrderStatus; label: string }[] = [
-  { id: 'pendiente', label: 'Pendientes' },
-  { id: 'preparando', label: 'Preparando' },
-  { id: 'listo', label: 'Listos' },
-  { id: 'entregado', label: 'Entregados' },
-  { id: 'cancelado', label: 'Cancelados' },
-];
+const PREVIEW_ITEMS = 3;
 
-// Entregados y cancelados se ordenan del más reciente; los demás, del más antiguo (el que lleva más esperando)
-const closed = (st: OrderStatus) => st === 'entregado' || st === 'cancelado';
+type View = 'curso' | 'entregado' | 'cancelado';
+
+// Tablero: una columna por etapa, del pedido que lleva más tiempo esperando al más nuevo
+const COLUMNS: { status: Exclude<OrderStatus, 'entregado' | 'cancelado'>; title: string; empty: string; icon: string }[] = [
+  { status: 'pendiente', title: 'Pendientes', empty: 'Sin pedidos nuevos', icon: timeOutline },
+  { status: 'preparando', title: 'Preparando', empty: 'Nada en preparación', icon: flameOutline },
+  { status: 'listo', title: 'Listos para recoger', empty: 'Nada esperando al cliente', icon: bagCheckOutline },
+];
 
 function ago(iso: string, now: number) {
   const min = Math.floor((now - Date.parse(iso)) / 60000);
@@ -46,15 +46,16 @@ function ago(iso: string, now: number) {
 }
 
 const pieces = (o: PickupOrder) => o.items.reduce((n, i) => n + i.qty, 0);
+const closedAt = (o: PickupOrder) => o.deliveredAt ?? o.updatedAt;
 
 export default function Orders() {
-  const { orders, products, sales, store, ticketConfig, advanceOrder, deliverOrder, cancelOrder } = useApp();
-  const [tab, setTab] = useState<OrderStatus>(() => ACTIVE_STATUSES.find((st) => orders.some((o) => o.status === st)) ?? 'pendiente');
+  const { orders, products, sales, store, ticketConfig, advanceOrder, deliverOrder, cancelOrder, reportShortage } = useApp();
+  const [view, setView] = useState<View>('curso');
   const [openId, setOpenId] = useState<string>();
   // Entrega en dos pasos: primero el código del cliente, después el cobro
   const [verifying, setVerifying] = useState<{ order?: PickupOrder } | null>(null);
   const [charging, setCharging] = useState<{ order: PickupOrder; code: string }>();
-  const [cancelling, setCancelling] = useState<PickupOrder>();
+  const [problem, setProblem] = useState<PickupOrder>();
   const [now, setNow] = useState(Date.now());
   const [toast] = useIonToast();
 
@@ -63,18 +64,14 @@ export default function Orders() {
     return () => window.clearInterval(t);
   }, []);
 
-  const byStatus = (st: OrderStatus) =>
-    orders
-      .filter((o) => o.status === st)
-      .sort((a, b) =>
-        closed(st)
-          ? Date.parse(b.deliveredAt ?? b.updatedAt) - Date.parse(a.deliveredAt ?? a.updatedAt)
-          : Date.parse(a.createdAt) - Date.parse(b.createdAt),
-      );
-  const list = byStatus(tab).filter((o) => !closed(tab) || isToday(o.deliveredAt ?? o.updatedAt));
+  const column = (st: OrderStatus) => orders.filter((o) => o.status === st).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  const history = (st: 'entregado' | 'cancelado') =>
+    orders.filter((o) => o.status === st && isToday(closedAt(o))).sort((a, b) => Date.parse(closedAt(b)) - Date.parse(closedAt(a)));
   const sumOf = (l: PickupOrder[]) => l.reduce((n, o) => n + o.total, 0);
-  const deliveredToday = byStatus('entregado').filter((o) => isToday(o.deliveredAt ?? o.updatedAt));
   const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
+  const waiting = active.filter((o) => o.issue);
+  const delivered = history('entregado');
+  const cancelled = history('cancelado');
   const open = orders.find((o) => o.id === openId);
 
   // Existencia que hoy le falta a un pedido (por ejemplo, si se vendió en mostrador después)
@@ -87,9 +84,9 @@ export default function Orders() {
     });
   };
 
-  const askCancel = (o: PickupOrder) => {
+  const askProblem = (o: PickupOrder) => {
     setOpenId(undefined);
-    setCancelling(o);
+    setProblem(o);
   };
 
   const act = (o: PickupOrder) => {
@@ -103,6 +100,59 @@ export default function Orders() {
   const sale = open?.saleId ? sales.find((s) => s.id === open.saleId) : undefined;
   const openMissing = open ? shortages(open) : [];
 
+  const card = (o: PickupOrder) => {
+    const fresh = o.status === 'pendiente' && now - Date.parse(o.createdAt) < NEW_MS;
+    const missing = !o.issue && shortages(o).length > 0;
+    const rest = o.items.length - PREVIEW_ITEMS;
+    return (
+      <li key={o.id} className={`ob-card ${o.issue ? 'is-waiting' : ''} ${fresh ? 'is-new' : ''}`}>
+        <button type="button" className="ob-card-main" onClick={() => setOpenId(o.id)} aria-label={`${o.folio}, ${o.customer.name}, ${money(o.total)}`}>
+          <span className="ob-card-top">
+            <strong className="ob-folio">
+              {fresh && <span className="ord-dot" aria-hidden="true" />}
+              {o.folio}
+            </strong>
+            <span className="ob-ago">{ago(o.createdAt, now)}</span>
+          </span>
+          <span className="ob-who">{o.customer.name}</span>
+          <ul className="ob-items">
+            {o.items.slice(0, PREVIEW_ITEMS).map((i) => (
+              <li key={i.productId} className={o.issue?.missing.includes(i.productId) ? 'is-out' : ''}>
+                <b>{i.qty}×</b> {i.name}
+              </li>
+            ))}
+            {rest > 0 && <li className="ob-more">y {rest} {rest === 1 ? 'producto más' : 'productos más'}</li>}
+          </ul>
+          <span className="ob-card-foot">
+            <span className="muted">{pieces(o)} {pieces(o) === 1 ? 'pieza' : 'piezas'}</span>
+            <strong className="money">{money(o.total)}</strong>
+          </span>
+          {o.issue && (
+            <span className="ob-flag is-waiting"><IonIcon icon={hourglassOutline} />Esperando al cliente</span>
+          )}
+          {missing && (
+            <span className="ob-flag is-warn"><IonIcon icon={warningOutline} />Falta existencia</span>
+          )}
+          {o.editedAt && !o.issue && (
+            <span className="ob-flag is-edited"><IonIcon icon={createOutline} />El cliente cambió productos</span>
+          )}
+        </button>
+        <div className="ob-card-actions">
+          {o.issue ? (
+            <IonButton fill="outline" color="medium" className="ob-act" disabled>Esperando respuesta</IonButton>
+          ) : (
+            <IonButton fill={o.status === 'listo' ? 'solid' : 'outline'} color={o.status === 'listo' ? 'success' : undefined} className="ob-act" onClick={() => act(o)}>
+              {o.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[o.status as keyof typeof ORDER_NEXT_ACTION]}
+            </IonButton>
+          )}
+          <IonButton fill="clear" color="danger" className="ob-problem" onClick={() => askProblem(o)} aria-label={`Problema con ${o.folio}`} title="Producto agotado o cancelar">
+            <IonIcon slot="icon-only" icon={alertCircleOutline} />
+          </IonButton>
+        </div>
+      </li>
+    );
+  };
+
   return (
     <IonPage>
       <PanelHeader title="Pedidos" />
@@ -111,7 +161,10 @@ export default function Orders() {
           <div className="ppage-head">
             <div>
               <h1>Pedidos</h1>
-              <p>{active.length ? `${active.length} por entregar · ${money(active.reduce((n, o) => n + o.total, 0))}` : 'Nada por entregar'}</p>
+              <p>
+                {active.length ? `${active.length} por entregar · ${money(sumOf(active))}` : 'Nada por entregar'}
+                {waiting.length > 0 && ` · ${waiting.length} esperando al cliente`}
+              </p>
             </div>
             <div className="ppage-actions">
               <IonButton className="btn-lg" onClick={() => setVerifying({})}>
@@ -121,77 +174,65 @@ export default function Orders() {
             </div>
           </div>
 
-          <div className="kpis">
-            <StatCard tone="danger" icon={timeOutline} label="Pendientes" value={String(byStatus('pendiente').length)} hint="Por empezar a preparar"
-              active={tab === 'pendiente'} onClick={() => setTab('pendiente')} />
-            <StatCard tone="primary" icon={flameOutline} label="Preparando" value={String(byStatus('preparando').length)} hint={money(sumOf(byStatus('preparando')))}
-              active={tab === 'preparando'} onClick={() => setTab('preparando')} />
-            <StatCard tone="warning" icon={bagCheckOutline} label="Listos para recoger" value={String(byStatus('listo').length)} hint={`${money(sumOf(byStatus('listo')))} por cobrar`}
-              active={tab === 'listo'} onClick={() => setTab('listo')} />
-            <StatCard tone="success" icon={checkmarkDoneOutline} label="Entregados hoy" value={String(deliveredToday.length)} hint={money(sumOf(deliveredToday))}
-              active={tab === 'entregado'} onClick={() => setTab('entregado')} />
+          <div className="ob-views" role="tablist" aria-label="Pedidos">
+            {([
+              ['curso', 'En curso', active.length],
+              ['entregado', 'Entregados hoy', delivered.length],
+              ['cancelado', 'Cancelados hoy', cancelled.length],
+            ] as [View, string, number][]).map(([id, label, n]) => (
+              <button key={id} type="button" role="tab" aria-selected={view === id} className={`ob-view ${view === id ? 'is-active' : ''}`} onClick={() => setView(id)}>
+                {label}
+                <span className="ob-count">{n}</span>
+              </button>
+            ))}
           </div>
 
-          <div className="filters">
-            <div className="fchips" role="group" aria-label="Estado">
-              {TABS.map((t) => (
-                <button key={t.id} type="button" className={`fchip ${tab === t.id ? 'is-active' : ''}`} aria-pressed={tab === t.id} onClick={() => setTab(t.id)}>
-                  {t.label}
-                </button>
-              ))}
+          {view === 'curso' ? (
+            <div className="ob-board">
+              {COLUMNS.map((c) => {
+                const list = column(c.status);
+                return (
+                  <section key={c.status} className={`ob-col is-${c.status}`} aria-label={c.title}>
+                    <header className="ob-col-head">
+                      <IonIcon icon={c.icon} aria-hidden="true" />
+                      <h2>{c.title}</h2>
+                      <span className="ob-count">{list.length}</span>
+                      {list.length > 0 && <span className="ob-col-sum money">{money(sumOf(list))}</span>}
+                    </header>
+                    {list.length === 0 ? <p className="ob-empty">{c.empty}</p> : <ul className="ob-cards">{list.map(card)}</ul>}
+                  </section>
+                );
+              })}
             </div>
-          </div>
-
-          <section className="pcard">
-            {list.length === 0 ? (
-              <EmptyState
-                art="cart"
-                title={
-                  tab === 'entregado' ? 'Aún no entregas pedidos hoy' : tab === 'cancelado' ? 'No has cancelado pedidos hoy' : `Sin pedidos ${TABS.find((t) => t.id === tab)!.label.toLowerCase()}`
-                }
-                text="Los pedidos que hagan tus clientes desde la app aparecen aquí."
-              />
-            ) : (
-              <>
-                <div className="pcard-head"><h2>{list.length} {list.length === 1 ? 'pedido' : 'pedidos'} · {money(sumOf(list))}</h2></div>
+          ) : (
+            <section className="pcard">
+              {(view === 'entregado' ? delivered : cancelled).length === 0 ? (
+                <EmptyState
+                  art="cart"
+                  title={view === 'entregado' ? 'Aún no entregas pedidos hoy' : 'No hay pedidos cancelados hoy'}
+                  text="Los pedidos que hagan tus clientes desde la app aparecen aquí."
+                />
+              ) : (
                 <ul className="ord-list">
-                  {list.map((o) => {
-                    const fresh = o.status === 'pendiente' && now - Date.parse(o.createdAt) < NEW_MS;
-                    const missing = shortages(o).length > 0;
-                    return (
-                      <li key={o.id} className="ord-row">
-                        <button type="button" className="ord-row-main" onClick={() => setOpenId(o.id)}>
-                          <span className="ord-row-folio">
-                            {fresh && <span className="ord-dot" aria-label="Nuevo" />}
-                            {o.folio}
-                          </span>
-                          <span className="ord-row-who">
-                            <strong>{o.customer.name}</strong>
-                            <small>
-                              {pieces(o)} {pieces(o) === 1 ? 'pieza' : 'piezas'} · {closed(o.status) ? time(o.deliveredAt ?? o.updatedAt) : ago(o.createdAt, now)}
-                              {missing && <em> · falta existencia</em>}
-                              {o.cancel && <em> · {CANCEL_REASON_LABEL[o.cancel.reason].toLowerCase()}</em>}
-                            </small>
-                          </span>
-                          <span className="ord-row-total money">{money(o.total)}</span>
-                        </button>
-                        {o.status !== 'entregado' && o.status !== 'cancelado' && (
-                          <>
-                            <IonButton fill={o.status === 'listo' ? 'solid' : 'outline'} color={o.status === 'listo' ? 'success' : undefined} className="ord-row-act" onClick={() => act(o)}>
-                              {o.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[o.status]}
-                            </IonButton>
-                            <IonButton fill="clear" color="danger" className="ord-row-cancel" onClick={() => askCancel(o)} aria-label={`Cancelar ${o.folio}`} title="Cancelar pedido">
-                              <IonIcon slot="icon-only" icon={trashOutline} />
-                            </IonButton>
-                          </>
-                        )}
-                      </li>
-                    );
-                  })}
+                  {(view === 'entregado' ? delivered : cancelled).map((o) => (
+                    <li key={o.id} className="ord-row">
+                      <button type="button" className="ord-row-main" onClick={() => setOpenId(o.id)}>
+                        <span className="ord-row-folio">{o.folio}</span>
+                        <span className="ord-row-who">
+                          <strong>{o.customer.name}</strong>
+                          <small>
+                            {pieces(o)} {pieces(o) === 1 ? 'pieza' : 'piezas'} · {time(closedAt(o))}
+                            {o.cancel && <em> · {CANCEL_REASON_LABEL[o.cancel.reason].toLowerCase()}</em>}
+                          </small>
+                        </span>
+                        <span className="ord-row-total money">{money(o.total)}</span>
+                      </button>
+                    </li>
+                  ))}
                 </ul>
-              </>
-            )}
-          </section>
+              )}
+            </section>
+          )}
         </div>
       </IonContent>
 
@@ -222,17 +263,32 @@ export default function Orders() {
               </dl>
 
               {open.note && <p className="ord-note">“{open.note}”</p>}
+              {open.issue && (
+                <p className="ord-waiting">
+                  <IonIcon icon={hourglassOutline} />
+                  <span>
+                    <strong>Esperando al cliente</strong> · le avisaste a las {time(open.issue.at)} que se agotó:{' '}
+                    {open.items.filter((i) => open.issue!.missing.includes(i.productId)).map((i) => i.name).join(', ')}. Puede elegir otro producto, quitarlo o cancelar.
+                  </span>
+                </p>
+              )}
+              {open.editedAt && !open.issue && open.status !== 'cancelado' && (
+                <p className="ord-edited">
+                  <IonIcon icon={createOutline} />
+                  El cliente cambió los productos a las {time(open.editedAt)}.
+                </p>
+              )}
               {open.cancel && (
                 <p className="ord-cancelled">
                   <IonIcon icon={closeCircleOutline} />
                   <span>
-                    <strong>Cancelado por {CANCEL_REASON_LABEL[open.cancel.reason].toLowerCase()}</strong> · {time(open.cancel.at)}
+                    <strong>{open.cancel.reason === 'cliente' ? 'Lo canceló el cliente' : `Cancelado por ${CANCEL_REASON_LABEL[open.cancel.reason].toLowerCase()}`}</strong> · {time(open.cancel.at)}
                     {open.cancel.missing.length > 0 && <> · Se agotó: {open.items.filter((i) => open.cancel!.missing.includes(i.productId)).map((i) => i.name).join(', ')}</>}
                     {open.cancel.note && <> · “{open.cancel.note}”</>}
                   </span>
                 </p>
               )}
-              {openMissing.length > 0 && (
+              {!open.issue && openMissing.length > 0 && (
                 <p className="ord-warn">
                   <IonIcon icon={alertCircleOutline} />
                   Ya no alcanza: {openMissing.map((i) => i.name).join(', ')}.
@@ -241,7 +297,7 @@ export default function Orders() {
 
               <ul className="ord-items">
                 {open.items.map((i) => (
-                  <li key={i.productId}>
+                  <li key={i.productId} className={open.issue?.missing.includes(i.productId) ? 'is-out' : ''}>
                     <span><strong>{i.qty}</strong> {i.name}</span>
                     <span className="money">{money(i.qty * i.price)}</span>
                   </li>
@@ -262,13 +318,15 @@ export default function Orders() {
                 )
               ) : open.status !== 'cancelado' && (
                 <>
-                  <IonButton fill="clear" color="danger" className="btn-lg" onClick={() => askCancel(open)}>
-                    <IonIcon slot="start" icon={trashOutline} />
-                    Cancelar pedido
+                  <IonButton fill="clear" color="danger" className="btn-lg" onClick={() => askProblem(open)}>
+                    <IonIcon slot="start" icon={alertCircleOutline} />
+                    Producto agotado o cancelar
                   </IonButton>
-                  <IonButton className="btn-lg" color={open.status === 'listo' ? 'success' : undefined} onClick={() => act(open)}>
-                    {open.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[open.status]}
-                  </IonButton>
+                  {!open.issue && (
+                    <IonButton className="btn-lg" color={open.status === 'listo' ? 'success' : undefined} onClick={() => act(open)}>
+                      {open.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[open.status]}
+                    </IonButton>
+                  )}
                 </>
               )}
             </div>
@@ -277,13 +335,19 @@ export default function Orders() {
       </IonModal>
 
       <CancelOrderModal
-        order={cancelling}
-        shortages={cancelling ? shortages(cancelling).map((i) => i.productId) : []}
-        onClose={() => setCancelling(undefined)}
-        onConfirm={(reason, missing, note) => {
-          const o = cancelling!;
-          cancelOrder(o.id, reason, missing, note);
-          setCancelling(undefined);
+        order={problem}
+        shortages={problem ? shortages(problem).map((i) => i.productId) : []}
+        onClose={() => setProblem(undefined)}
+        onShortage={(missing) => {
+          const o = problem!;
+          reportShortage(o.id, missing);
+          setProblem(undefined);
+          toast({ message: `Le avisamos a ${o.customer.name} que se agotó un producto de ${o.folio}.`, duration: 3500, color: 'warning', position: 'top', cssClass: 'toast-app' });
+        }}
+        onCancel={(note) => {
+          const o = problem!;
+          cancelOrder(o.id, 'otro', [], note);
+          setProblem(undefined);
           toast({ message: `${o.folio} cancelado. Le avisamos a ${o.customer.name}.`, duration: 3500, color: 'medium', position: 'top', cssClass: 'toast-app' });
         }}
       />
@@ -310,7 +374,7 @@ export default function Orders() {
             onConfirm: (method, paid) => {
               const s = deliverOrder(charging.order.id, method, paid, charging.code);
               if (!s) return;
-              setTab('entregado');
+              setView('entregado');
               toast({
                 message: `${charging.order.folio} entregado · venta #${s.folio}`,
                 duration: 4000,

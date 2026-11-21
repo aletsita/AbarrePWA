@@ -142,7 +142,11 @@ type Action =
   | { type: 'ORDER_RECEIVED'; request: OrderRequest }
   | { type: 'ORDER_ADVANCE'; id: string; from: PickupOrder['status']; at: number }
   | { type: 'ORDER_DELIVER'; id: string; sale: Sale; payment: { method: CashMethod; received: number }; pickupCode: string }
-  | { type: 'ORDER_CANCEL'; id: string; reason: CancelReason; missing: string[]; note?: string; at: number };
+  | { type: 'ORDER_CANCEL'; id: string; reason: CancelReason; missing: string[]; note?: string; at: number }
+  // Se agotó algo: el pedido sigue en pie y espera a que el cliente lo cambie (ORDER_EDIT) o lo cancele
+  | { type: 'ORDER_ISSUE'; id: string; missing: string[]; at: number }
+  // Lo manda el servidor cuando el cliente cambia los productos de su pedido
+  | { type: 'ORDER_EDIT'; id: string; items: { productId: string; qty: number }[]; at: number };
 
 type Message = Action | { type: 'PING'; key: string } | { type: 'BYE'; key: string } | { type: 'WHO' } | { type: 'SNAPSHOT'; data: Data };
 
@@ -383,7 +387,8 @@ function reducer(s: Data, a: Action): Data {
     case 'ORDER_RECEIVED': {
       // Los precios y la existencia los pone la caja; si algo no alcanza, el pedido no se acepta
       const r = a.request;
-      if (s.orders.some((o) => o.id === r.id) || !/^\d{6}$/.test(String(r.pickupCode ?? ''))) return s;
+      // Con el turno cerrado la tienda no acepta pedidos
+      if (s.closedCutId || s.orders.some((o) => o.id === r.id) || !/^\d{6}$/.test(String(r.pickupCode ?? ''))) return s;
       const qty: Record<string, number> = {};
       for (const it of r.items) qty[it.productId] = (qty[it.productId] ?? 0) + Math.floor(it.qty);
       const reserved = reservedStock(s.orders);
@@ -414,13 +419,14 @@ function reducer(s: Data, a: Action): Data {
       // Solo avanza una etapa; "entregado" exige cobro (ORDER_DELIVER)
       const o = s.orders.find((x) => x.id === a.id);
       const next = o && nextStatus(o.status);
-      if (!o || o.status !== a.from || !next || next === 'entregado') return s;
+      // Mientras espera al cliente por un producto agotado no avanza
+      if (!o || o.issue || o.status !== a.from || !next || next === 'entregado') return s;
       return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, status: next, updatedAt: iso(a.at) } : x)) };
     }
     case 'ORDER_DELIVER': {
       const o = s.orders.find((x) => x.id === a.id);
       // Sin el código del cliente no se entrega, venga de esta caja o de otro equipo
-      if (!o || o.status !== 'listo' || (o.pickupCode && o.pickupCode !== a.pickupCode)) return s;
+      if (!o || o.issue || o.status !== 'listo' || (o.pickupCode && o.pickupCode !== a.pickupCode)) return s;
       const after = reducer(s, { type: 'CONFIRM_SALE', sale: a.sale });
       return {
         ...after,
@@ -434,7 +440,31 @@ function reducer(s: Data, a: Action): Data {
       const o = s.orders.find((x) => x.id === a.id);
       if (!o || !ACTIVE_STATUSES.includes(o.status)) return s;
       const cancel = { reason: a.reason, missing: a.missing.filter((id) => o.items.some((i) => i.productId === id)), ...(a.note ? { note: a.note } : {}), at: iso(a.at) };
-      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, status: 'cancelado', updatedAt: cancel.at, cancel } : x)) };
+      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, status: 'cancelado', updatedAt: cancel.at, cancel, issue: undefined } : x)) };
+    }
+    case 'ORDER_ISSUE': {
+      const o = s.orders.find((x) => x.id === a.id);
+      const missing = o ? a.missing.filter((id) => o.items.some((i) => i.productId === id)) : [];
+      if (!o || !ACTIVE_STATUSES.includes(o.status) || !missing.length) return s;
+      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, issue: { missing, at: iso(a.at) }, updatedAt: iso(a.at) } : x)) };
+    }
+    case 'ORDER_EDIT': {
+      // Mismas reglas que un pedido nuevo: precios de la caja y existencia sin contar lo que este pedido ya apartaba
+      const o = s.orders.find((x) => x.id === a.id);
+      if (!o || !o.issue || !ACTIVE_STATUSES.includes(o.status)) return s;
+      const qty: Record<string, number> = {};
+      for (const it of a.items) qty[it.productId] = (qty[it.productId] ?? 0) + Math.floor(it.qty);
+      const reserved = reservedStock(s.orders, o.id);
+      const items: SaleItem[] = [];
+      for (const [id, n] of Object.entries(qty)) {
+        const p = s.products.find((x) => x.id === id);
+        if (!p || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
+        items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
+      }
+      if (!items.length) return s;
+      const at = iso(a.at);
+      const edited: PickupOrder = { ...o, items, total: items.reduce((t, i) => t + i.qty * i.price, 0), issue: undefined, editedAt: at, updatedAt: at };
+      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? edited : x)) };
     }
     case 'SET_PAIRING':
       return { ...s, pairing: a.pairing };
@@ -514,6 +544,7 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
   receiveOrder: (request: OrderRequest) => void;
   advanceOrder: (id: string) => void;
   cancelOrder: (id: string, reason: CancelReason, missing: string[], note?: string) => void;
+  reportShortage: (id: string, missing: string[]) => void;
   deliverOrder: (id: string, method: CashMethod, received: number, pickupCode: string) => Sale | null;
 
   accounts: AccountView[];
@@ -869,6 +900,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     receiveOrder: (request) => dispatch({ type: 'ORDER_RECEIVED', request }),
     advanceOrder,
     cancelOrder: (id, reason, missing, note) => dispatch({ type: 'ORDER_CANCEL', id, reason, missing, note: note?.trim() || undefined, at: Date.now() }),
+    reportShortage: (id, missing) => dispatch({ type: 'ORDER_ISSUE', id, missing, at: Date.now() }),
     deliverOrder,
 
     accounts,
