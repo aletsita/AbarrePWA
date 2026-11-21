@@ -108,9 +108,11 @@ Cada cliente aplica estas acciones con el mismo reducer (`reducer` en `AppContex
 | `CREDIT_PAYMENT` | `movement: CreditMovement` (`type: 'abono'`) | caja: abono de un cliente, resta `amount` a su `balance` |
 | `REPLACE_DATA` | `data: Data` | no se publica: el celular la aplica localmente al recibir un `SNAPSHOT` |
 | `ORDER_RECEIVED` | `request: OrderRequest` (`{ id, customer: { name, phone }, items: { productId, qty }[], note?, at, pickupCode }`) | servidor (API de la app de clientes; ver abajo) |
-| `ORDER_ADVANCE` | `id: string, from: OrderStatus, at: number` | caja |
-| `ORDER_DELIVER` | `id: string, sale: Sale, payment: { method: CashMethod; received: number }, pickupCode: string` | caja, después de verificar el código del cliente |
-| `ORDER_CANCEL` | `id: string, reason: 'sin-existencia' \| 'otro', missing: string[], note?: string, at: number` | caja |
+| `ORDER_ADVANCE` | `id: string, from: OrderStatus, at: number` | caja y celular de la tienda |
+| `ORDER_DELIVER` | `id: string, sale: Sale, payment: { method: CashMethod; received: number }, pickupCode: string` | caja o celular de la tienda, después de verificar el código del cliente |
+| `ORDER_CANCEL` | `id: string, reason: 'sin-existencia' \| 'otro' \| 'cliente', missing: string[], note?: string, at: number` | caja (`sin-existencia`, `otro`) y servidor (`cliente`: el cliente canceló desde su app) |
+| `ORDER_ISSUE` | `id: string, missing: string[], at: number` | caja: se agotó algún producto y el pedido espera a que el cliente decida |
+| `ORDER_EDIT` | `id: string, items: { productId, qty }[], at: number` | servidor: el cliente cambió los productos de un pedido con aviso |
 
 `OrderRequest`, `PickupOrder`, `OrderStatus` y los textos de los estados están en `src/data/pickup.ts` (único lugar donde se definen).
 
@@ -127,12 +129,15 @@ Los tipos `Product`, `Sale`, `Device`, `CashCut`, `Shift`, `CashMovement`, `Cust
 
 Los pedidos viven en `Data.orders`, igual que los productos. Los clientes los hacen en la API del servidor, que se los manda a la caja por este canal con `ORDER_RECEIVED` y confirma con el siguiente `SNAPSHOT` que la caja los aceptó.
 
-- `ORDER_RECEIVED`: la caja ignora los precios que traiga la petición, toma los del catálogo y une las líneas repetidas. Si algún producto no existe, tiene `showInApp: false` o pide más que `stock − piezas apartadas` (pedidos `pendiente`, `preparando` o `listo`), el pedido no se acepta. Si se acepta, entra como `pendiente` con el siguiente folio `P-0001`. Un `id` repetido se ignora.
-- `ORDER_ADVANCE` solo aplica si el pedido sigue en `from` y lo mueve una etapa (`pendiente → preparando → listo`). Para llegar a `entregado` se usa `ORDER_DELIVER`.
+- `ORDER_RECEIVED` se ignora si el turno está cerrado (`closedCutId`). Además la caja ignora los precios que traiga la petición, toma los del catálogo y une las líneas repetidas. Si algún producto no existe, tiene `showInApp: false` o pide más que `stock − piezas apartadas` (pedidos `pendiente`, `preparando` o `listo`), el pedido no se acepta. Si se acepta, entra como `pendiente` con el siguiente folio `P-0001`. Un `id` repetido se ignora.
+- `ORDER_ADVANCE` y `ORDER_DELIVER` no aplican a un pedido con `issue`. `ORDER_ADVANCE` solo aplica si el pedido sigue en `from` y lo mueve una etapa (`pendiente → preparando → listo`). Para llegar a `entregado` se usa `ORDER_DELIVER`.
 - `pickupCode` son 6 dígitos que genera el teléfono del cliente al confirmar el pedido; sin él, el pedido no se acepta. La caja lo guarda pero nunca lo muestra. El teléfono lo enseña como QR (`abarre:recoger:<id>:<código>`) cuando el pedido está listo.
-- `ORDER_CANCEL` solo aplica a un pedido `pendiente`, `preparando` o `listo`: lo deja `cancelado` con `cancel: { reason, missing, note?, at }` (`missing` son ids de productos del pedido que se agotaron). Sus piezas dejan de estar apartadas. El cliente lo ve en su app y decide si quita el pedido o elige otros productos.
+- `ORDER_CANCEL` solo aplica a un pedido `pendiente`, `preparando` o `listo`: lo deja `cancelado` con `cancel: { reason, missing, note?, at }` (`missing` son ids de productos del pedido que se agotaron). Sus piezas dejan de estar apartadas. Borra `issue`. Con `reason: 'cliente'` el pedido lo canceló el propio cliente.
+- `ORDER_ISSUE` aplica a un pedido `pendiente`, `preparando` o `listo` si `missing` trae algún producto del pedido: le pone `issue: { missing, at }` sin cancelarlo ni cambiar su estado; sus piezas siguen apartadas. El cliente decide en su app: elegir otro producto o quitar lo agotado (los dos llegan como `ORDER_EDIT`) o cancelar el pedido (`ORDER_CANCEL` con `reason: 'cliente'`).
+- `ORDER_EDIT` solo aplica a un pedido activo con `issue`. Revisa las líneas igual que `ORDER_RECEIVED` (sin contar lo que ya apartaba este mismo pedido) y, si todas alcanzan, cambia `items` y `total`, borra `issue` y pone `editedAt`. El folio y el `pickupCode` no cambian.
 - `ORDER_DELIVER` solo aplica a un pedido `listo` y cuyo `pickupCode` coincida con el del mensaje. Aplica `CONFIRM_SALE` con `sale.id = 'pedido-' + id`, `origin: 'pedido'`, `orderId` y `orderFolio`. Así descuenta existencia y entra en Ventas y en el corte. Después marca el pedido como `entregado`, con `payment`, `deliveredAt` y `saleId`.
 - `CONFIRM_SALE` con `sale.orderId` es idempotente: si ya hay una venta con ese `id` u `orderId`, no hace nada. Además no toca la cuenta abierta (`ticket`, `account`, `sent`, `lastSaleId`).
+- El servidor considera la tienda **cerrada** si la caja no ha mandado `PING` con `key: 'panel'` en 12 s (o mandó `BYE`), o si el turno está cerrado. Mientras tanto la API no acepta pedidos nuevos.
 - `Product.showInApp` (sin valor = `true`), `Product.description` (texto que ven los clientes; la caja se la pone a los productos de ejemplo guardados sin ella), `Sale.origin` (sin valor = `'tienda'`), `CashCut.storeSales` y `CashCut.pickupSales` son opcionales. Los datos anteriores siguen siendo válidos y `VERSION` no cambió. La caja agrega `orders` a los datos guardados que no lo traen.
 
 ### `Data` (versión 5)
@@ -160,7 +165,7 @@ interface Data {
   pairing: { code: string; expiresAt: number } | null;
   closedCutId: string | null;
   lastSaleId: string | null;
-  orders?: PickupOrder[]; // Pide y recoge; el celular puede no tenerlo
+  orders?: PickupOrder[]; // Pide y recoge; el celular lo agrega si no viene
 }
 ```
 
