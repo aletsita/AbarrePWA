@@ -18,7 +18,7 @@ import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createCheckout, PaymentError, paymentsReady, verifySignature } from './payments.js';
+import { createCheckout, PaymentError, paymentsReady, retrieveCheckout, verifySignature } from './payments.js';
 
 const FILE = process.env.API_DATA ?? join(dirname(fileURLToPath(import.meta.url)), 'data', 'api.json');
 const DAY = 86400;
@@ -679,7 +679,9 @@ async function route(method, path, token, body, headers) {
 
     case 'GET /pedidos': {
       const c = requireRole(token, 'cliente');
-      return [200, db.orders.filter((o) => o.userId === c.sub && (o.folio || o.payment)).map(publicOrder)];
+      const list = db.orders.filter((o) => o.userId === c.sub && (o.folio || o.payment));
+      await Promise.all(list.map(reconcilePayment));
+      return [200, list.map(publicOrder)];
     }
 
     case 'GET /pedidos/:id': {
@@ -687,6 +689,7 @@ async function route(method, path, token, body, headers) {
       // El pedido de otra persona responde igual que uno que no existe
       const o = mine(c);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
+      await reconcilePayment(o);
       return [200, publicOrder(o)];
     }
 
@@ -739,6 +742,7 @@ async function route(method, path, token, body, headers) {
       const o = mine(c);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
       if (o.payment?.method !== 'en_linea') throw new HttpError(409, 'sin-pago-en-linea', 'Este pedido se paga en la tienda.');
+      await reconcilePayment(o);
       if (o.payment.status === 'pagado') return [200, publicOrder(o)];
       if (o.status === 'cancelado' || !['pendiente_de_pago', 'fallido'].includes(o.payment.status)) {
         throw new HttpError(409, 'no-se-puede-pagar', 'Este pedido ya no se puede pagar.');
@@ -839,6 +843,31 @@ async function startCheckout(o, base) {
   save();
   emit(o);
 }
+
+// ---------- respaldo: preguntar a Stripe ----------
+
+// Si un webhook no llegó (por ejemplo, `stripe listen` estaba cerrado), el servidor le pregunta a Stripe por la
+// sesión del pedido. La confirmación sigue siendo del servidor con datos de Stripe, nunca de la app.
+const RECONCILE_MS = 20000;
+const lastAsked = new Map(); // id del pedido → cuándo se preguntó
+
+async function reconcilePayment(o, minGap = 5000) {
+  if (o.payment?.method !== 'en_linea' || o.payment.status !== 'pendiente_de_pago' || !o.checkout?.id || !paymentsReady()) return;
+  if (Date.now() - (lastAsked.get(o.id) ?? 0) < minGap) return;
+  lastAsked.set(o.id, Date.now());
+  const s = await retrieveCheckout(o.checkout.id);
+  if (!s || o.payment.status !== 'pendiente_de_pago') return;
+  if (s.payment_status === 'paid') confirmPaid(o, s);
+  else if (s.status === 'expired') {
+    o.payment.status = 'fallido';
+    emit(o);
+  } else return;
+  save();
+}
+
+setInterval(() => {
+  for (const o of db.orders) if (o.payment?.status === 'pendiente_de_pago') void reconcilePayment(o, RECONCILE_MS - 1000);
+}, RECONCILE_MS).unref();
 
 // ---------- webhook de Stripe ----------
 

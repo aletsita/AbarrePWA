@@ -83,6 +83,17 @@ export async function createCheckout({ orderId, items, successUrl, cancelUrl, id
   return { id: data.id, url: data.url, expiresAt: data.expires_at };
 }
 
+// Estado actual de una sesión, preguntado directo a Stripe (respaldo por si un webhook no llegó)
+export async function retrieveCheckout(id) {
+  let res;
+  try {
+    res = await request(`${API}/checkout/sessions/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${secretKey()}` } });
+  } catch {
+    return null;
+  }
+  return res.ok ? res.json().catch(() => null) : null;
+}
+
 // Encabezado Stripe-Signature: t=1700000000,v1=firma[,v1=otra]. La firma es HMAC-SHA256 de `${t}.${cuerpo}`.
 export function verifySignature(raw, header, secret = webhookSecret(), now = Math.floor(Date.now() / 1000)) {
   if (!secret || typeof header !== 'string') return false;

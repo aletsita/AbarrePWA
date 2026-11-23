@@ -95,7 +95,13 @@ async function newClient() {
 
 // Stripe de mentiras: guarda lo que se le pidió y regresa una sesión por llave de idempotencia
 const stripeCalls = [];
-setPaymentsFetch(async (url, init) => {
+// Sesiones que Stripe ya cobró (para probar el respaldo cuando no llega el webhook)
+const paidSessions = new Set();
+setPaymentsFetch(async (url, init = {}) => {
+  if (!init.method) {
+    const id = decodeURIComponent(url.split('/').pop());
+    return new Response(JSON.stringify({ id, status: paidSessions.has(id) ? 'complete' : 'open', payment_status: paidSessions.has(id) ? 'paid' : 'unpaid', payment_intent: `pi_${id}`, amount_total: 1000 }), { status: 200 });
+  }
   const key = init.headers['Idempotency-Key'];
   stripeCalls.push({ url, key, body: new URLSearchParams(init.body) });
   return new Response(JSON.stringify({ id: `cs_${key}`, url: `https://checkout.stripe.test/${key}`, expires_at: Math.floor(Date.now() / 1000) + 1800 }), { status: 200 });
@@ -333,6 +339,15 @@ describe('pago en línea', () => {
     const done = (await call('GET', `/pedidos/${o.id}`, { token })).data;
     assert.equal(done.status, 'entregado');
     assert.equal(relay(msg).body.code, 'codigo-usado');
+  });
+
+  test('si el webhook no llega, el servidor le pregunta a Stripe al consultar el pedido', async () => {
+    const token = await newClient();
+    const o = await newPaidableOrder(token, [{ productId: 'pan', qty: 1, price: 10 }]);
+    paidSessions.add(`cs_checkout-${o.id}-1`);
+    const r = (await call('GET', `/pedidos/${o.id}`, { token })).data;
+    assert.equal(r.payment.status, 'pagado');
+    assert.match(r.pickupCode, /^[A-HJ-NP-Z2-9]{6}$/);
   });
 
   test('evento de pago sin pedido conocido se ignora', () => {
