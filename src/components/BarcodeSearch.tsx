@@ -15,6 +15,8 @@ interface Props {
   placeholder?: string;
   autoFocus?: boolean;
   allowQty?: boolean;
+  // Caja: piezas que todavía se pueden vender; marca "Sin stock" en la lista
+  availableFor?: (productId: string) => number;
   keyboardToggle?: boolean;
   blurOnPick?: boolean;
   size?: 'md' | 'lg';
@@ -33,6 +35,7 @@ export const BarcodeSearch = forwardRef<BarcodeSearchHandle, Props>(function Bar
     placeholder = 'Código de barras o nombre',
     autoFocus,
     allowQty,
+    availableFor,
     keyboardToggle,
     blurOnPick,
     size = 'md',
@@ -148,7 +151,9 @@ export const BarcodeSearch = forwardRef<BarcodeSearchHandle, Props>(function Bar
                 <span className="bsearch-name">
                   <strong>{p.name}</strong>
                   <span>
-                    {p.barcode} · {p.stock} pzas {p.sync && <SyncBadge state={p.sync} compact />}
+                    {p.barcode} ·{' '}
+                    {availableFor && availableFor(p.id) <= 0 ? <b className="stock-out">Sin stock</b> : `${availableFor ? availableFor(p.id) : p.stock} pzas`}{' '}
+                    {p.sync && <SyncBadge state={p.sync} compact />}
                   </span>
                 </span>
                 <span className="bsearch-price money">

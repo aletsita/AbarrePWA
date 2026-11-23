@@ -213,3 +213,16 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Etiqueta de producto sin piezas disponibles */
+.stock-out { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--t-danger-bg); color: var(--ion-color-danger-shade); font-size: 0.74rem; font-weight: 750; }
+
+/* Formularios en el celular (360–599 px): botones de al menos 44 px para el dedo y texto de 16 px
+   en los campos para que iOS no haga zoom. Con interactive-widget=resizes-content (index.html) el teclado
+   encoge la pantalla, así que el pie de los modales con el botón principal queda a la vista. */
+@media (max-width: 599px) {
+  ion-button:not(.btn-xl):not(.btn-lg) { min-height: 44px; }
+  ion-button[size='small'] { --padding-start: 12px; --padding-end: 12px; }
+  input, select, textarea { font-size: max(1rem, 16px); }
+  .pmodal-body :is(input, select, textarea):focus { scroll-margin-block: 96px; }
+}
