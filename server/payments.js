@@ -19,11 +19,16 @@ export function setPaymentsFetch(fn) {
 const secretKey = () => process.env.STRIPE_SECRET_KEY?.trim() ?? '';
 const webhookSecret = () => process.env.STRIPE_WEBHOOK_SECRET?.trim() ?? '';
 
-export function paymentsReady() {
+// Qué falta para cobrar en línea (null = listo). Solo claves de prueba: el paso a producción lo decide la tienda después.
+export function paymentsProblem() {
   const key = secretKey();
-  // Solo claves de prueba: el paso a producción lo decide la tienda después
-  return key.startsWith('sk_test_') && !!webhookSecret();
+  if (!key) return 'falta STRIPE_SECRET_KEY.';
+  if (!key.startsWith('sk_test_')) return 'STRIPE_SECRET_KEY debe ser una clave de pruebas (sk_test_…).';
+  if (!webhookSecret()) return 'falta STRIPE_WEBHOOK_SECRET (lo da `stripe listen`).';
+  return null;
 }
+
+export const paymentsReady = () => !paymentsProblem();
 
 // Formulario anidado al estilo de Stripe: line_items[0][price_data][currency]=mxn
 function form(data, prefix = '', out = new URLSearchParams()) {

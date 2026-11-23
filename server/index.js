@@ -8,6 +8,7 @@ import { networkInterfaces } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { api, connectRelay, gate, onRelayMessage } from './api.js';
+import { paymentsProblem } from './payments.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -205,6 +206,8 @@ server.listen(PORT, HOST, () => {
   console.log(`Sincronización en http://${HOST}:${PORT}/__sync · API en http://${HOST}:${PORT}/api`);
   console.log(SERVE_DIST ? `Sirviendo la web desde ${DIST}` : 'Sin build de la web (dist/): solo sincronización');
   console.log(`Orígenes permitidos: ${ORIGINS.join(', ')}${ALLOW_LAN ? ' y equipos de la red local' : ''}`);
+  const pay = paymentsProblem();
+  console.log(pay ? `⚠ Pago en línea desactivado: ${pay} Los clientes no podrán hacer pedidos (ver README).` : 'Pago en línea: Stripe en modo de pruebas.');
   const lan = lanUrls();
   if (lan.length) console.log(`Para el celular (misma Wi-Fi): ${lan.map((u) => u.url).join('  ·  ')}`);
 });
