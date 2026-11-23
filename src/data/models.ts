@@ -1,4 +1,5 @@
-export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'credito';
+// en_linea: pedido pagado en la app (Stripe); al entregarlo no se cobra
+export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'en_linea';
 
 // Formas de pago con las que entra dinero (las ventas a crédito no traen dinero, los abonos sí)
 export type CashMethod = Exclude<PaymentMethod, 'credito'>;
@@ -115,6 +116,8 @@ export interface CashCut {
   cashSales: number;
   cardSales: number;
   transferSales: number;
+  // Pedidos pagados en la app: entran en ventas pero no en el efectivo de la caja
+  onlineSales?: number;
   creditSales?: number;
   creditPaid?: number;
   creditCash?: number;
@@ -219,6 +222,7 @@ export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   tarjeta: 'Tarjeta',
   transferencia: 'Transferencia',
   credito: 'Crédito',
+  en_linea: 'En línea',
 };
 
 export const availableCredit = (c: Customer) => Math.max(0, c.creditLimit - c.balance);

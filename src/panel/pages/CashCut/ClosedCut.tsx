@@ -43,6 +43,7 @@ export function ClosedCut({ cut }: { cut: CashCut }) {
             <div><dt>Efectivo</dt><dd className="money">{money(cut.cashSales)}</dd></div>
             <div><dt>Tarjeta</dt><dd className="money">{money(cut.cardSales)}</dd></div>
             <div><dt>Transferencia</dt><dd className="money">{money(cut.transferSales)}</dd></div>
+            {!!cut.onlineSales && <div><dt>En línea</dt><dd className="money">{money(cut.onlineSales)}</dd></div>}
             <div><dt>A crédito</dt><dd className="money">{money(cut.creditSales ?? 0)}</dd></div>
             <div><dt>Abonos de clientes</dt><dd className="money">{money(cut.creditPaid ?? 0)}</dd></div>
           </dl>

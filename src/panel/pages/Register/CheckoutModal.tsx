@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { availableCredit, initials, money, type CashMethod, type PaymentMethod } from '../../../data/models';
 import { PICKUP_METHODS } from '../../../data/pickup';
-import { piecesLabel } from '../../../domain/stock';
+import { piecesLabel, shortfallText, type Shortfall } from '../../../domain/stock';
 import { CustomerPicker } from '../Customers/CustomerPicker';
 import './CheckoutModal.css';
 
@@ -31,7 +31,8 @@ export interface OrderCharge {
   folio: string;
   total: number;
   count: number;
-  onConfirm: (method: CashMethod, paid: number) => void;
+  // Regresa un mensaje si no se pudo (por ejemplo, el servidor dice que ya no alcanza el inventario)
+  onConfirm: (method: CashMethod, paid: number) => Promise<string | null>;
 }
 
 export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onClose: () => void; order?: OrderCharge }) {
@@ -47,6 +48,9 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
   const [paidText, setPaidText] = useState('');
   const [upfrontText, setUpfrontText] = useState('');
   const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // Lo que respondió el servidor si no dejó cobrar (por ejemplo, otra caja se llevó la última pieza)
+  const [refused, setRefused] = useState<{ message: string; shortages?: Shortfall[] } | null>(null);
 
   const customer = customers.find((c) => c.id === account.customerId);
   const paid = Number(paidText) || 0;
@@ -62,20 +66,28 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
   const canConfirm = shortages.length === 0 && (method === 'efectivo' ? paid >= ticketTotal : method === 'credito' ? creditOk : true);
 
   const reset = () => {
+    setRefused(null);
     setPaidText('');
     setUpfrontText('');
     setMethod('efectivo');
   };
 
-  const confirm = () => {
-    if (!canConfirm) return;
+  const confirm = async () => {
+    if (!canConfirm || busy) return;
+    setRefused(null);
+    setBusy(true);
     if (order) {
-      if (method === 'credito') return;
-      order.onConfirm(method, method === 'efectivo' ? paid : ticketTotal);
+      if (method === 'credito' || method === 'en_linea') return setBusy(false);
+      const fail = await order.onConfirm(method, method === 'efectivo' ? paid : ticketTotal);
+      setBusy(false);
+      if (fail) return setRefused({ message: fail });
       onClose();
       return;
     }
-    confirmSale(method, method === 'efectivo' ? paid : method === 'credito' ? upfront : ticketTotal);
+    // El servidor vuelve a revisar el inventario: si alguien más se llevó la pieza, no se cobra
+    const r = await confirmSale(method, method === 'efectivo' ? paid : method === 'credito' ? upfront : ticketTotal);
+    setBusy(false);
+    if (!r.ok) return setRefused({ message: r.message, shortages: r.shortages });
     onClose();
     router.push('/panel/venta-completada', 'forward');
   };
@@ -99,6 +111,13 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
           <strong className="money">{money(ticketTotal)}</strong>
         </section>
 
+        {refused && (
+          <section className="co-short" role="alert">
+            <strong>No se cobró</strong>
+            <span>{refused.shortages?.length ? shortfallText(refused.shortages) : refused.message}</span>
+            {refused.shortages?.length ? <span>Quita o ajusta esas piezas y vuelve a cobrar.</span> : null}
+          </section>
+        )}
         {shortages.length > 0 && (
           <section className="co-short" role="alert">
             <IonIcon icon={alertCircleOutline} />
@@ -146,7 +165,7 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
                 value={paidText}
                 autoFocus
                 onChange={(e) => setPaidText(e.target.value.replace(/[^\d.]/g, ''))}
-                onKeyDown={(e) => e.key === 'Enter' && confirm()}
+                onKeyDown={(e) => e.key === 'Enter' && void confirm()}
               />
             </div>
             <div className="co-quick">
@@ -207,7 +226,7 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
                 placeholder="0.00"
                 value={upfrontText}
                 onChange={(e) => setUpfrontText(e.target.value.replace(/[^\d.]/g, ''))}
-                onKeyDown={(e) => e.key === 'Enter' && confirm()}
+                onKeyDown={(e) => e.key === 'Enter' && void confirm()}
               />
             </div>
             {customer && (
@@ -230,7 +249,7 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
 
       <div className="pmodal-foot">
         <IonButton fill="outline" className="btn-lg" onClick={onClose}>{order ? 'Volver al pedido' : 'Volver a la cuenta'}</IonButton>
-        <IonButton color="success" className="btn-lg co-confirm" disabled={!canConfirm} onClick={confirm}>
+        <IonButton color="success" className="btn-lg co-confirm" disabled={!canConfirm || busy} onClick={() => void confirm()}>
           <IonIcon slot="start" icon={checkmarkDone} />
           {method === 'credito' ? 'Cargar a su cuenta' : order ? 'Entregar y cobrar' : 'Confirmar venta'}
         </IonButton>

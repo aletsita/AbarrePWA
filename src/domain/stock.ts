@@ -27,3 +27,15 @@ export function clampToAvailable(requested: number, available: number): { qty: n
 
 export const piecesLabel = (n: number) => `${n} ${n === 1 ? 'pieza' : 'piezas'}`;
 export const availableLabel = (n: number) => `${piecesLabel(n)} ${n === 1 ? 'disponible' : 'disponibles'}`;
+
+// Lo que falta de un producto, como lo responde el servidor en un 409 (`faltantes`)
+export interface Shortfall {
+  productId: string;
+  name: string;
+  requested: number;
+  available: number;
+  missing: number;
+}
+
+export const shortfallText = (list: Shortfall[]) =>
+  list.map((s) => `${s.name}: ${s.available ? `solo hay ${availableLabel(s.available)}` : 'no hay disponible'} (faltan ${s.missing})`).join(' · ');
