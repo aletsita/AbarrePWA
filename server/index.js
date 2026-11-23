@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { api, connectRelay, onRelayMessage } from './api.js';
+import { api, connectRelay, gate, onRelayMessage } from './api.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -114,13 +114,23 @@ function sync(req, res) {
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
       const line = body.replace(/\r?\n/g, '');
-      clients.forEach((c) => c.write(`data: ${line}\n\n`));
-      // La API escucha el canal: catálogo, usuarios y pedidos de la caja
+      let msg = null;
       try {
-        onRelayMessage(JSON.parse(line)?.msg);
+        msg = JSON.parse(line)?.msg;
       } catch {
         /* mensaje que no es JSON */
       }
+      // Lo que mueve existencias se revisa antes de reenviarlo; si no pasa, nadie lo recibe.
+      // Revisar, reenviar y aplicar ocurre sin pausas: otra petición no se puede meter en medio.
+      const denied = gate(msg);
+      if (denied) {
+        res.writeHead(denied.status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(denied.body));
+        return;
+      }
+      clients.forEach((c) => c.write(`data: ${line}\n\n`));
+      // La API escucha el canal: catálogo, usuarios y pedidos de la caja
+      onRelayMessage(msg);
       res.writeHead(204);
       res.end();
     });
