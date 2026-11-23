@@ -23,7 +23,8 @@ const webhookSecret = () => process.env.STRIPE_WEBHOOK_SECRET?.trim() ?? '';
 export function paymentsProblem() {
   const key = secretKey();
   if (!key) return 'falta STRIPE_SECRET_KEY.';
-  if (!key.startsWith('sk_test_')) return 'STRIPE_SECRET_KEY debe ser una clave de pruebas (sk_test_…).';
+  // sk_test_: clave secreta de pruebas; rk_test_: restringida de pruebas (necesita permiso de escritura en Checkout Sessions)
+  if (!/^(sk|rk)_test_/.test(key)) return 'STRIPE_SECRET_KEY debe ser una clave de pruebas (sk_test_… o rk_test_…).';
   if (!webhookSecret()) return 'falta STRIPE_WEBHOOK_SECRET (lo da `stripe listen`).';
   return null;
 }
