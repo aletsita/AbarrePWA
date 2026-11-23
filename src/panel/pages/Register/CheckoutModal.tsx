@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { availableCredit, initials, money, type CashMethod, type PaymentMethod } from '../../../data/models';
 import { PICKUP_METHODS } from '../../../data/pickup';
+import { piecesLabel } from '../../../domain/stock';
 import { CustomerPicker } from '../Customers/CustomerPicker';
 import './CheckoutModal.css';
 
@@ -36,6 +37,8 @@ export interface OrderCharge {
 export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onClose: () => void; order?: OrderCharge }) {
   const app = useApp();
   const { confirmSale, account, customers, linkCustomer } = app;
+  // Un pedido ya tiene sus piezas apartadas; la cuenta de mostrador se revisa contra lo disponible
+  const shortages = order ? [] : app.ticketShortages;
   const ticketTotal = order ? order.total : app.ticketTotal;
   const ticketCount = order ? order.count : app.ticketCount;
   const methods = order ? METHODS.filter((m) => (PICKUP_METHODS as PaymentMethod[]).includes(m.id)) : METHODS;
@@ -56,7 +59,7 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
   const available = customer ? availableCredit(customer) : 0;
   const creditOk = !!customer && charged <= available + 0.005;
 
-  const canConfirm = method === 'efectivo' ? paid >= ticketTotal : method === 'credito' ? creditOk : true;
+  const canConfirm = shortages.length === 0 && (method === 'efectivo' ? paid >= ticketTotal : method === 'credito' ? creditOk : true);
 
   const reset = () => {
     setPaidText('');
@@ -95,6 +98,24 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
           <span>Total a cobrar · {ticketCount} {ticketCount === 1 ? 'artículo' : 'artículos'}</span>
           <strong className="money">{money(ticketTotal)}</strong>
         </section>
+
+        {shortages.length > 0 && (
+          <section className="co-short" role="alert">
+            <IonIcon icon={alertCircleOutline} />
+            <div>
+              <strong>No se puede cobrar: falta inventario</strong>
+              <ul>
+                {shortages.map((s) => (
+                  <li key={s.product.id}>
+                    {s.product.name}: en la cuenta {s.qty}, disponibles {s.available}
+                    {' '}(faltan {piecesLabel(s.qty - s.available)})
+                  </li>
+                ))}
+              </ul>
+              <p>Ajusta las cantidades en la cuenta. Lo demás ya está apartado por pedidos o en otras cuentas.</p>
+            </div>
+          </section>
+        )}
 
         <div className={`co-methods ${order ? 'is-three' : ''}`} role="radiogroup" aria-label="Método de pago">
           {methods.map((m) => (

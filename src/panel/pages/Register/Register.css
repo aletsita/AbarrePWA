@@ -248,3 +248,8 @@
 .reg-acc-customer:hover { border-color: var(--ion-color-primary); color: var(--ion-color-primary); }
 .reg-acc-customer.is-set { border-style: solid; border-color: transparent; background: var(--t-warning-bg); color: var(--t-warning-text); }
 .reg-acc-customer ion-icon { font-size: 15px; }
+
+/* Disponible: sin stock y líneas que ya no alcanzan */
+.quick-item.is-out { opacity: 0.6; border-style: dashed; }
+.src-tag.is-short { color: var(--ion-color-danger-shade); font-weight: 700; }
+.reg-row.is-short { background: var(--t-danger-bg); }

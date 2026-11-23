@@ -32,6 +32,7 @@ import {
 import { ACTIVE_STATUSES, nextStatus, orderFolio, reservedStock, type CancelReason, type OrderRequest, type PickupOrder } from '../data/pickup';
 import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, ORDERS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
 import { openSync, type SyncLink } from '../lib/sync';
+import { availableStock, piecesByProduct } from '../domain/stock';
 
 export interface TicketLine {
   product: Product;
@@ -63,6 +64,12 @@ export interface OpenAccount {
 }
 
 export type AccountInfo = Omit<OpenAccount, 'lines'>;
+
+export interface Shortage {
+  product: Product;
+  qty: number;
+  available: number;
+}
 
 export interface AccountView extends AccountInfo {
   active: boolean;
@@ -112,7 +119,7 @@ interface Data {
 type StockEntry = { productId: string; qty: number };
 
 type Action =
-  | { type: 'SCAN_TO_REGISTER'; product: Product; qty: number; sentId: string; at: number; deviceId: string }
+  | { type: 'SCAN_TO_REGISTER'; product: Product; qty: number; sentId: string; at: number; deviceId: string; accountId?: string }
   | { type: 'REMOVE_SENT'; sentId: string }
   | { type: 'TICKET_ADD'; product: Product; qty: number; at: number }
   | { type: 'TICKET_QTY'; productId: string; delta: number }
@@ -263,16 +270,30 @@ const inActive = (s: Data, x: SentItem) => !x.accountId || x.accountId === s.acc
 
 function reducer(s: Data, a: Action): Data {
   switch (a.type) {
-    case 'SCAN_TO_REGISTER':
+    case 'SCAN_TO_REGISTER': {
+      // El celular elige la cuenta; sin accountId, o si esa cuenta ya no está abierta, va a la activa
+      const parkedTarget = a.accountId && a.accountId !== s.account.id ? s.parked.find((p) => p.id === a.accountId) : undefined;
       return {
         ...s,
-        ticket: addToTicket(s.ticket, a.product, a.qty, 'movil', a.at),
+        ticket: parkedTarget ? s.ticket : addToTicket(s.ticket, a.product, a.qty, 'movil', a.at),
+        parked: parkedTarget
+          ? s.parked.map((p) => (p.id === parkedTarget.id ? { ...p, lines: addToTicket(p.lines, a.product, a.qty, 'movil', a.at) } : p))
+          : s.parked,
         sent: [
-          { id: a.sentId, product: a.product, qty: a.qty, at: a.at, status: 'en-caja' as SentStatus, deviceId: a.deviceId, accountId: s.account.id },
+          {
+            id: a.sentId,
+            product: a.product,
+            qty: a.qty,
+            at: a.at,
+            status: 'en-caja' as SentStatus,
+            deviceId: a.deviceId,
+            accountId: parkedTarget?.id ?? s.account.id,
+          },
           ...s.sent,
         ].slice(0, 200),
         lastScan: { name: a.product.name, deviceId: a.deviceId, at: a.at },
       };
+    }
     case 'REMOVE_SENT': {
       const item = s.sent.find((x) => x.id === a.sentId);
       if (!item) return s;
@@ -535,6 +556,9 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
 
   ticketTotal: number;
   ticketCount: number;
+  // Piezas que todavía se pueden agregar a una cuenta
+  availableFor: (productId: string) => number;
+  ticketShortages: Shortage[];
   ticketAdd: (p: Product, qty?: number) => void;
   ticketQty: (productId: string, delta: number) => void;
   ticketRemove: (productId: string) => void;
@@ -849,6 +873,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     .map(({ lines, ...a }) => ({ ...a, count: lines.reduce((n, l) => n + l.qty, 0), total: sumLines(lines) }));
   const ticketCount = data.ticket.reduce((s, l) => s + l.qty, 0);
 
+  // Disponible = existencia − apartado por pedidos − piezas que ya están en alguna cuenta abierta.
+  // La pantalla solo avisa con esto; quien decide al cobrar es el servidor.
+  const reserved = reservedStock(data.orders);
+  const inAccounts = piecesByProduct(
+    [data.ticket, ...data.parked.map((p) => p.lines)].flat().map((l) => ({ productId: l.product.id, qty: l.qty })),
+  );
+  const stockOf = (id: string) => view.products.find((p) => p.id === id)?.stock ?? 0;
+  const availableFor = (id: string) => availableStock(stockOf(id), reserved[id], inAccounts[id]);
+  // Líneas de la cuenta activa que ya no alcanzan (por ejemplo, un pedido apartó las piezas después)
+  const ticketShortages: Shortage[] = data.ticket.flatMap((l) => {
+    const room = availableStock(stockOf(l.product.id), reserved[l.product.id], (inAccounts[l.product.id] ?? 0) - l.qty);
+    return l.qty > room ? [{ product: l.product, qty: l.qty, available: room }] : [];
+  });
+
   const value: AppState = {
     ...data,
     products: view.products,
@@ -892,6 +930,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     ticketTotal,
     ticketCount,
+    availableFor,
+    ticketShortages,
     ticketAdd: (product, qty = 1) => dispatch({ type: 'TICKET_ADD', product, qty, at: Date.now() }),
     ticketQty: (productId, delta) => dispatch({ type: 'TICKET_QTY', productId, delta }),
     ticketRemove: (productId) => dispatch({ type: 'TICKET_REMOVE', productId }),
