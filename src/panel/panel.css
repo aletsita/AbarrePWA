@@ -240,6 +240,8 @@ ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto
 }
 .pmodal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 22px 22px; border-top: 1px solid var(--t-border); background: var(--t-surface-2); flex-wrap: wrap; }
 .pmodal-foot ion-button { margin: 0; }
+/* Borrar queda a la izquierda, lejos de Guardar */
+.pmodal-foot .pmodal-delete { margin-right: auto; }
 @media (max-width: 599px) { .pmodal-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); } .pmodal-foot ion-button { flex: 1 1 100%; } }
 
 /* El ticket simula papel: se queda claro también en modo oscuro */

@@ -41,9 +41,15 @@ const snapshot = () => onRelayMessage({ type: 'SNAPSHOT', data: { ...structuredC
 
 // Lo que la API publica en el canal. La caja de mentiras responde WHO con su SNAPSHOT y acepta los pedidos.
 const published = [];
+// Como la caja real: el borrado aprobado se guarda y viaja en su próximo SNAPSHOT
+const applyDelete = (msg) => {
+  const p = caja.products.find((x) => x.id === msg.id);
+  if (p) Object.assign(p, { deletedAt: new Date(msg.at).toISOString(), showInApp: false });
+};
 connectRelay((msg) => {
   published.push(msg);
   if (msg.type === 'WHO') setImmediate(snapshot);
+  if (msg.type === 'DELETE_PRODUCT') applyDelete(msg);
   if (msg.type === 'ORDER_RECEIVED') {
     const r = msg.request;
     caja.orders.unshift({ id: r.id, folio: `P-${String(caja.orders.length + 1).padStart(4, '0')}`, status: 'pendiente', items: r.items.map((i) => ({ ...i, name: i.productId, price: 0 })), total: 0, online: r.payment });
@@ -62,6 +68,7 @@ function relay(msg) {
       if (p) p.stock -= i.qty;
     }
   }
+  if (msg.type === 'DELETE_PRODUCT') applyDelete(msg);
   onRelayMessage(msg);
   return { status: 204 };
 }
@@ -361,5 +368,123 @@ describe('pago en línea', () => {
 
   test('evento de pago sin pedido conocido se ignora', () => {
     assert.equal(onPaymentEvent({ id: 'evt_x', type: 'checkout.session.completed', data: { object: { metadata: { orderId: 'nada' } } } }), true);
+  });
+});
+
+// ---------- borrado lógico y catálogo en vivo ----------
+
+// Personal de la tienda: su correo está entre los usuarios activos de la caja
+async function newStaff() {
+  n += 1;
+  const email = `p${n}@prueba.mx`;
+  caja.users = [...caja.users, { name: 'Cajera', email, role: 'Cajero', active: true }];
+  snapshot();
+  const r = await call('POST', '/auth/registro', { body: { name: 'Cajera', email, phone: '5512345678', password: 'secreta123' } });
+  assert.equal(r.status, 201);
+  return r.data.token;
+}
+
+// Abre el SSE de un cliente y junta los eventos `catalogo` que lleguen
+async function watchCatalog(token) {
+  const ctrl = new AbortController();
+  const res = await fetch(`${base}/pedidos/eventos?token=${token}`, { signal: ctrl.signal });
+  const events = [];
+  const reader = res.body.getReader();
+  let buf = '';
+  void (async () => {
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buf += new TextDecoder().decode(value);
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const block = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          if (block.startsWith('event: catalogo')) events.push(JSON.parse(block.split('\ndata: ')[1]));
+        }
+      }
+    } catch {
+      /* cerrado */
+    }
+  })();
+  return { events, close: () => ctrl.abort() };
+}
+const tick = () => new Promise((r) => setTimeout(r, 60));
+
+describe('borrar productos', () => {
+  test('un cliente recibe 403 y el producto sigue en el catálogo', async () => {
+    const token = await newClient();
+    const r = await call('DELETE', '/productos/pan', { token });
+    assert.equal(r.status, 403);
+    assert.ok((await call('GET', '/catalogo', { token })).data.some((p) => p.id === 'pan'));
+  });
+
+  test('el personal lo borra: sale del catálogo y se avisa a la caja por el canal', async () => {
+    // Producto nuevo: los pedidos de otras pruebas no lo apartan
+    caja.products.push({ id: 'sal', name: 'Sal', price: 15, stock: 4, category: 'Abarrotes' });
+    const staff = await newStaff();
+    const token = await newClient();
+    published.length = 0;
+    const r = await call('DELETE', '/productos/sal', { token: staff });
+    assert.equal(r.status, 204);
+    assert.ok(published.some((m) => m.type === 'DELETE_PRODUCT' && m.id === 'sal'));
+    assert.ok(!(await call('GET', '/catalogo', { token })).data.some((p) => p.id === 'sal'));
+    // Otra vez: ya no existe
+    assert.equal((await call('DELETE', '/productos/sal', { token: staff })).status, 404);
+  });
+
+  test('no se borra lo que está en una cuenta abierta ni lo apartado en un pedido', async () => {
+    const staff = await newStaff();
+    caja.ticket = [{ product: { id: 'leche' }, qty: 1 }];
+    caja.products.push({ id: 'miel', name: 'Miel', price: 60, stock: 3, category: 'Abarrotes' });
+    caja.orders = [{ id: 'o9', folio: 'P-0009', status: 'listo', items: [{ productId: 'miel', qty: 1 }], total: 60 }];
+    snapshot();
+    const a = await call('DELETE', '/productos/leche', { token: staff });
+    assert.equal(a.status, 409);
+    assert.equal(a.data.code, 'producto-en-uso');
+    const b = relay({ type: 'DELETE_PRODUCT', id: 'miel', at: Date.now() });
+    assert.equal(b.status, 409);
+    assert.match(b.body.message, /P-0009/);
+  });
+
+  test('desde la caja pasa por la revisión; un cambio atrasado no lo revive', async () => {
+    caja.products.push({ id: 'te', name: 'Té', price: 20, stock: 2, category: 'Abarrotes' });
+    snapshot();
+    const token = await newClient();
+    assert.equal(relay({ type: 'DELETE_PRODUCT', id: 'te', at: Date.now() }).status, 204);
+    relay({ type: 'UPSERT_PRODUCT', product: { id: 'te', name: 'Té', price: 21, stock: 2, category: 'Abarrotes' }, isNew: false, at: Date.now() });
+    assert.ok(!(await call('GET', '/catalogo', { token })).data.some((p) => p.id === 'te'));
+  });
+});
+
+describe('catálogo en vivo', () => {
+  test('cambio de precio, producto oculto y producto borrado llegan como evento catalogo', async () => {
+    const token = await newClient();
+    const live = await watchCatalog(token);
+    await tick();
+    relay({ type: 'UPSERT_PRODUCT', product: { ...caja.products[1], price: 12 }, isNew: false, at: Date.now() });
+    relay({ type: 'UPSERT_PRODUCT', product: { ...caja.products[0], showInApp: false }, isNew: false, at: Date.now() });
+    relay({ type: 'UPSERT_PRODUCT', product: { id: 'cafe', name: 'Café', price: 50, stock: 3, category: 'Abarrotes' }, isNew: true, at: Date.now() });
+    relay({ type: 'DELETE_PRODUCT', id: 'cafe', at: Date.now() });
+    await tick();
+    live.close();
+    // La existencia la ponen los pedidos de otras pruebas; aquí importa lo que cambió
+    const { stock: _stock, ...pan } = live.events[0].productos[0];
+    assert.deepEqual(pan, { id: 'pan', name: 'Pan', category: 'Panadería', price: 12 });
+    assert.equal(live.events[0].productos.length, 1);
+    assert.deepEqual(live.events[1], { productos: [], quitados: ['leche'] });
+    assert.equal(live.events[2].productos[0].id, 'cafe');
+    assert.deepEqual(live.events[3], { productos: [], quitados: ['cafe'] });
+  });
+
+  test('un cambio de existencia no manda catalogo (va en inventario)', async () => {
+    const token = await newClient();
+    const live = await watchCatalog(token);
+    await tick();
+    relay({ type: 'ADD_STOCK', entries: [{ productId: 'pan', qty: 5 }], at: Date.now(), note: '' });
+    await tick();
+    live.close();
+    assert.equal(live.events.length, 0);
   });
 });
