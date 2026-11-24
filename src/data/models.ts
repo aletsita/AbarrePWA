@@ -14,6 +14,8 @@ export interface Product {
   minStock: number;
   barcode: string;
   photo?: string;
+  // Borrado lógico (fecha ISO): no se vende ni se muestra, pero las ventas y cortes que lo nombran siguen igual
+  deletedAt?: string;
   // Texto que ven los clientes en el detalle del producto
   description?: string;
   // Pide y recoge: si aparece en el catálogo de la app de clientes (sin valor = sí)

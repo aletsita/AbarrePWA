@@ -1,4 +1,4 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar, useIonToast } from '@ionic/react';
+import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar, useIonAlert, useIonToast } from '@ionic/react';
 import {
   arrowDown,
   arrowForward,
@@ -9,6 +9,7 @@ import {
   informationCircleOutline,
   saveOutline,
   sparklesOutline,
+  trashOutline,
 } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
 import { AreaField, FormSection, MoneyField, SelectField, SwitchField, TextField } from '../../../components/Form';
@@ -44,8 +45,10 @@ interface Props {
 }
 
 export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Props) {
-  const { saveProduct, findByBarcode, movementsFor } = useApp();
+  const { saveProduct, deleteProduct, findByBarcode, movementsFor } = useApp();
   const [toast] = useIonToast();
+  const [alert] = useIonAlert();
+  const [deleting, setDeleting] = useState(false);
   const [step, setStep] = useState<Step>('codigo');
   const [draft, setDraft] = useState<Product>(blank());
   const [isNew, setIsNew] = useState(true);
@@ -128,6 +131,32 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
     onSaved?.(p, isNew);
     onClose();
   };
+
+  // Borrado lógico: deja de venderse y de verse, pero las ventas y cortes que lo nombran no cambian
+  const askDelete = () =>
+    void alert({
+      header: `¿Borrar ${draft.name}?`,
+      message: 'Deja de aparecer en el inventario, en la caja y en la app de clientes. Las ventas y cortes que ya lo incluyen no cambian.',
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        {
+          text: 'Borrar producto',
+          role: 'destructive',
+          handler: () => {
+            setDeleting(true);
+            void deleteProduct(draft.id).then((r) => {
+              setDeleting(false);
+              if (!r.ok) {
+                void toast({ message: r.message, duration: 4000, color: 'danger', position: 'top', cssClass: 'toast-app' });
+                return;
+              }
+              void toast({ message: `${draft.name} se borró del inventario`, duration: 2000, color: 'success', position: 'top', cssClass: 'toast-app' });
+              onClose();
+            });
+          },
+        },
+      ],
+    });
 
   const moves = !isNew ? movementsFor(draft.id) : [];
 
@@ -277,6 +306,12 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
           </div>
 
           <div className="pmodal-foot">
+            {!isNew && (
+              <IonButton fill="clear" color="danger" className="btn-lg pmodal-delete" disabled={deleting} onClick={askDelete}>
+                <IonIcon slot="start" icon={trashOutline} />
+                Borrar
+              </IonButton>
+            )}
             <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
             <IonButton className="btn-lg" disabled={!valid} onClick={() => save()}>
               <IonIcon slot="start" icon={saveOutline} />
