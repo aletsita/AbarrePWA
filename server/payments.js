@@ -1,5 +1,5 @@
-// Pago en línea con Stripe Checkout (solo modo de pruebas). Sin SDK: la API de Stripe es HTTP con formularios.
-// La tarjeta se captura en la página de Stripe: nunca pasa por la app ni por este servidor.
+// Pago en línea con Stripe Checkout embebido (solo modo de pruebas). Sin SDK: la API de Stripe es HTTP con formularios.
+// La tarjeta se captura en el recuadro de Stripe dentro de la app: nunca pasa por la app ni por este servidor.
 //
 // Variables de entorno (solo en el servidor, nunca en el repositorio):
 //   STRIPE_SECRET_KEY      sk_test_...   clave secreta de pruebas
@@ -44,14 +44,16 @@ function form(data, prefix = '', out = new URLSearchParams()) {
 
 class PaymentError extends Error {}
 
-// Crea la sesión de pago. El monto sale de `items` (precios del servidor), nunca de la app.
+// Crea la sesión de pago embebida: la app la monta con el `clientSecret` y el cliente nunca sale de ella.
+// El monto sale de `items` (precios del servidor), nunca de la app.
 // `idempotencyKey`: el mismo intento de pago devuelve la misma sesión aunque se reintente la petición.
-export async function createCheckout({ orderId, items, successUrl, cancelUrl, idempotencyKey, expiresAt }) {
+export async function createCheckout({ orderId, items, idempotencyKey, expiresAt }) {
   const body = form({
     mode: 'payment',
+    ui_mode: 'embedded_page',
+    // Al terminar no redirige: la app recibe onComplete y la confirmación llega por el webhook
+    redirect_on_completion: 'never',
     client_reference_id: orderId,
-    success_url: successUrl,
-    cancel_url: cancelUrl,
     expires_at: expiresAt,
     metadata: { orderId },
     payment_intent_data: { metadata: { orderId } },
@@ -80,7 +82,7 @@ export async function createCheckout({ orderId, items, successUrl, cancelUrl, id
     console.warn('[pagos] Stripe rechazó la sesión:', data?.error?.message ?? res.status);
     throw new PaymentError('El proveedor de pagos no aceptó la solicitud.');
   }
-  return { id: data.id, url: data.url, expiresAt: data.expires_at };
+  return { id: data.id, clientSecret: data.client_secret, expiresAt: data.expires_at };
 }
 
 // Estado actual de una sesión, preguntado directo a Stripe (respaldo por si un webhook no llegó)

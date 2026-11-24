@@ -149,7 +149,8 @@ function publicOrder({ userId: _u, tries: _t, codeTries: _c, codeLock: _l, check
   return {
     ...o,
     ...(paid && pickupCode ? { pickupCode } : {}),
-    ...(waiting && checkout?.url && checkout.expiresAt > now() ? { paymentUrl: checkout.url } : {}),
+    // Solo el dueño del pedido recibe el secreto de su sesión; con él la app monta el pago embebido
+    ...(waiting && checkout?.clientSecret && checkout.expiresAt > now() ? { paymentClientSecret: checkout.clientSecret } : {}),
   };
 }
 
@@ -747,24 +748,24 @@ async function route(method, path, token, body, headers) {
       if (o.status === 'cancelado' || !['pendiente_de_pago', 'fallido'].includes(o.payment.status)) {
         throw new HttpError(409, 'no-se-puede-pagar', 'Este pedido ya no se puede pagar.');
       }
-      if (o.payment.status === 'pendiente_de_pago' && o.checkout?.url && o.checkout.expiresAt > now() + 60) return [200, publicOrder(o)];
+      if (o.payment.status === 'pendiente_de_pago' && o.checkout?.clientSecret && o.checkout.expiresAt > now() + 60) return [200, publicOrder(o)];
       if (!paymentsReady()) throw new HttpError(503, 'pagos-no-configurados', 'El pago en línea no está disponible en este momento.');
       requireOpen();
       const short = shortagesOf(o.items, o.id);
       if (short.length) throw new HttpError(409, 'sin-stock', `Ya no alcanza: ${shortText(short)}.`, { faltantes: short });
-      await startCheckout(o, publicBase(headers));
+      await startCheckout(o);
       return [200, publicOrder(o)];
     }
 
     case 'POST /pedidos':
-      return [201, await createOrder(requireRole(token, 'cliente'), body, headers['idempotency-key'] ?? '', publicBase(headers))];
+      return [201, await createOrder(requireRole(token, 'cliente'), body, headers['idempotency-key'] ?? '')];
   }
   throw new HttpError(404, 'ruta', `No existe ${method} ${path}`);
 }
 
 // Pedido con pago en línea: se crea sin pagar (no aparta nada ni llega a la caja) junto con la sesión de pago.
 // Cuando el webhook firmado confirma el pago se revisa el inventario, se aparta y se manda a la caja.
-async function createOrder(c, body, key, base) {
+async function createOrder(c, body, key) {
   if (!key) throw new HttpError(400, 'sin-clave', 'Falta la clave de idempotencia.');
   // Misma clave = mismo pedido (el teléfono reintentó tras perder la respuesta)
   const prev = db.idem[`${c.sub}:${key}`];
@@ -807,33 +808,22 @@ async function createOrder(c, body, key, base) {
   db.orders.unshift(order);
   db.idem[`${c.sub}:${key}`] = order.id;
   save();
-  await startCheckout(order, base);
+  await startCheckout(order);
   return publicOrder(order);
-}
-
-// Dirección pública del servidor para que Stripe regrese al cliente al terminar de pagar
-function publicBase(headers) {
-  const env = process.env.PUBLIC_API_URL?.trim().replace(/\/+$/, '');
-  if (env) return env;
-  const proto = String(headers['x-forwarded-proto'] ?? 'http').split(',')[0].trim();
-  return `${proto}://${headers.host ?? 'localhost'}`;
 }
 
 // Abre una sesión de pago nueva. La llave de idempotencia es por intento: si la petición a Stripe se
 // repite, regresa la misma sesión y no se cobra dos veces.
-async function startCheckout(o, base) {
+async function startCheckout(o) {
   const attempt = (o.checkout?.attempt ?? 0) + 1;
-  const back = `${base}/api/pagos/regreso?pedido=${encodeURIComponent(o.id)}`;
   try {
     const s = await createCheckout({
       orderId: o.id,
       items: o.items,
-      successUrl: `${back}&estado=pagado`,
-      cancelUrl: `${back}&estado=cancelado`,
       idempotencyKey: `checkout-${o.id}-${attempt}`,
       expiresAt: now() + CHECKOUT_TTL_S,
     });
-    o.checkout = { id: s.id, url: s.url, expiresAt: s.expiresAt ?? now() + CHECKOUT_TTL_S, attempt };
+    o.checkout = { id: s.id, clientSecret: s.clientSecret, expiresAt: s.expiresAt ?? now() + CHECKOUT_TTL_S, attempt };
     o.payment.status = 'pendiente_de_pago';
   } catch (e) {
     if (!(e instanceof PaymentError)) throw e;

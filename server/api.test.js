@@ -54,7 +54,14 @@ connectRelay((msg) => {
 function relay(msg) {
   const denied = gate(msg);
   if (denied) return denied;
-  if (msg.sale?.id) approved.push(msg.sale.id);
+  if (msg.sale?.id) {
+    approved.push(msg.sale.id);
+    // Como la caja real: la venta aprobada descuenta su stock, así su próximo SNAPSHOT ya lo trae
+    for (const i of msg.sale.items ?? []) {
+      const p = caja.products.find((x) => x.id === i.productId);
+      if (p) p.stock -= i.qty;
+    }
+  }
   onRelayMessage(msg);
   return { status: 204 };
 }
@@ -104,7 +111,7 @@ setPaymentsFetch(async (url, init = {}) => {
   }
   const key = init.headers['Idempotency-Key'];
   stripeCalls.push({ url, key, body: new URLSearchParams(init.body) });
-  return new Response(JSON.stringify({ id: `cs_${key}`, url: `https://checkout.stripe.test/${key}`, expires_at: Math.floor(Date.now() / 1000) + 1800 }), { status: 200 });
+  return new Response(JSON.stringify({ id: `cs_${key}`, client_secret: `cs_${key}_secret_prueba`, expires_at: Math.floor(Date.now() / 1000) + 1800 }), { status: 200 });
 });
 
 function stripeEvent(type, order, extra = {}) {
@@ -224,7 +231,9 @@ describe('pago en línea', () => {
     published.length = 0;
     const o = await newPaidableOrder(token);
     assert.equal(o.payment.status, 'pendiente_de_pago');
-    assert.ok(o.paymentUrl.startsWith('https://checkout.stripe.test/'));
+    assert.match(o.paymentClientSecret, /_secret_/);
+    assert.equal(stripeCalls.at(-1).body.get('ui_mode'), 'embedded_page');
+    assert.equal(stripeCalls.at(-1).body.get('redirect_on_completion'), 'never');
     assert.equal(o.pickupCode, undefined);
     assert.equal(published.some((m) => m.type === 'ORDER_RECEIVED'), false);
     // El monto lo pone el servidor: 2 × $10 = 1000 centavos
@@ -272,13 +281,13 @@ describe('pago en línea', () => {
     const token = await newClient();
     const o = await newPaidableOrder(token);
     const same = await call('POST', `/pedidos/${o.id}/pagar`, { token });
-    assert.equal(same.data.paymentUrl, o.paymentUrl);
+    assert.equal(same.data.paymentClientSecret, o.paymentClientSecret);
     await postWebhook(stripeEvent('checkout.session.expired', o, { payment_status: 'unpaid' }));
     const failed = (await call('GET', `/pedidos/${o.id}`, { token })).data;
     assert.equal(failed.payment.status, 'fallido');
     const retry = await call('POST', `/pedidos/${o.id}/pagar`, { token });
     assert.equal(retry.status, 200);
-    assert.notEqual(retry.data.paymentUrl, o.paymentUrl);
+    assert.notEqual(retry.data.paymentClientSecret, o.paymentClientSecret);
     assert.equal(retry.data.payment.status, 'pendiente_de_pago');
   });
 
@@ -288,7 +297,7 @@ describe('pago en línea', () => {
     const a = await call('POST', '/pedidos', { token, body, headers: { 'Idempotency-Key': 'repetida' } });
     const b = await call('POST', '/pedidos', { token, body, headers: { 'Idempotency-Key': 'repetida' } });
     assert.equal(a.data.id, b.data.id);
-    assert.equal(a.data.paymentUrl, b.data.paymentUrl);
+    assert.equal(a.data.paymentClientSecret, b.data.paymentClientSecret);
   });
 
   test('pagado pero ya sin existencia: se cancela y queda por reembolsar', async () => {
