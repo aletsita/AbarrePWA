@@ -690,7 +690,8 @@ async function route(method, path, token, body, headers) {
       // El pedido de otra persona responde igual que uno que no existe
       const o = mine(c);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
-      await reconcilePayment(o);
+      // La app lo consulta seguido justo después de pagar: se pregunta a Stripe sin esperar al webhook
+      await reconcilePayment(o, 1500);
       return [200, publicOrder(o)];
     }
 

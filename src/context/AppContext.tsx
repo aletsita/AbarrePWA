@@ -52,6 +52,8 @@ export interface SentItem {
   status: SentStatus;
   deviceId: string;
   accountId?: string;
+  // Nombre de la cuenta en la que quedó (para el historial del celular)
+  accountName?: string;
 }
 
 // Cuentas abiertas a la vez: la activa vive en `ticket` + `account`, las demás esperan en `parked`
@@ -303,6 +305,7 @@ function reducer(s: Data, a: Action): Data {
             status: 'en-caja' as SentStatus,
             deviceId: a.deviceId,
             accountId: parkedTarget?.id ?? s.account.id,
+            accountName: parkedTarget?.name ?? s.account.name,
           },
           ...s.sent,
         ].slice(0, 200),
