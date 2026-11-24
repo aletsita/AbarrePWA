@@ -20,6 +20,12 @@ El servidor (`server/index.js` en tendero-web) reenvía los mensajes sin cambiar
 
 - El cuerpo es el `Envelope` en JSON, con `Content-Type: application/json`.
 - El servidor quita los saltos de línea del cuerpo, lo reenvía a todos los clientes conectados y responde `204` sin cuerpo.
+- **Mensajes que mueven existencias** (`CONFIRM_SALE` de mostrador, `ORDER_ADVANCE` desde `pendiente` y `ORDER_DELIVER`): el servidor los revisa **antes** de reenviarlos (`gate` en `server/api.js`). Revisar, reenviar y aplicar ocurre en el mismo paso síncrono, así que dos cobros de la última pieza no pueden pasar los dos. Si no pasa, **no se reenvía a nadie** y responde con JSON:
+  - `409 { code: 'sin-stock', message, faltantes: { productId, name, requested, available, missing }[] }`: no alcanza `disponible = stock − apartado por pedidos activos y pagados`.
+  - `409 { code: 'pago-pendiente' }`: el pedido es de pago en línea y el pago no está confirmado.
+  - `409 { code: 'metodo-pago' }`: se intentó cobrar un pedido ya pagado en línea (o marcar como `en_linea` uno que se paga en tienda).
+  - `422 { code: 'codigo-incorrecto', intentos }`, `423 { code: 'codigo-bloqueado', hasta }` (5 errores = 5 min bloqueado) y `409 { code: 'codigo-usado' }` al entregar.
+- Por eso la caja y el celular publican esos mensajes con `send` (espera la respuesta y solo entonces los aplica y los pasa a las otras pestañas) en lugar de `post`. Sin servidor, la caja sigue cobrando en mostrador solo con su revisión local (como antes); el celular no mueve pedidos y la entrega de un pedido pagado en línea no se puede hacer.
 - El cliente solo publica cuando el `EventSource` está abierto. Usa `keepalive` si el cuerpo mide menos de 60 000 caracteres.
 
 ### CORS
@@ -113,6 +119,7 @@ Cada cliente aplica estas acciones con el mismo reducer (`reducer` en `AppContex
 | `ORDER_CANCEL` | `id: string, reason: 'sin-existencia' \| 'otro' \| 'cliente', missing: string[], note?: string, at: number` | caja (`sin-existencia`, `otro`) y servidor (`cliente`: el cliente canceló desde su app) |
 | `ORDER_ISSUE` | `id: string, missing: string[], at: number` | caja: se agotó algún producto y el pedido espera a que el cliente decida |
 | `ORDER_EDIT` | `id: string, items: { productId, qty }[], at: number` | servidor: el cliente cambió los productos de un pedido con aviso |
+| `STOCK` | `items: { productId, stock, reserved }[], at: number` | servidor, después de cada cambio de existencia o de apartado. El celular pone `stock` en sus productos (inventario en vivo); la caja lo ignora porque es la dueña de su inventario |
 
 `OrderRequest`, `PickupOrder`, `OrderStatus` y los textos de los estados están en `src/data/pickup.ts` (único lugar donde se definen).
 
@@ -131,7 +138,8 @@ Los pedidos viven en `Data.orders`, igual que los productos. Los clientes los ha
 
 - `ORDER_RECEIVED` se ignora si el turno está cerrado (`closedCutId`). Además la caja ignora los precios que traiga la petición, toma los del catálogo y une las líneas repetidas. Si algún producto no existe, tiene `showInApp: false` o pide más que `stock − piezas apartadas` (pedidos `pendiente`, `preparando` o `listo`), el pedido no se acepta. Si se acepta, entra como `pendiente` con el siguiente folio `P-0001`. Un `id` repetido se ignora.
 - `ORDER_ADVANCE` y `ORDER_DELIVER` no aplican a un pedido con `issue`. `ORDER_ADVANCE` solo aplica si el pedido sigue en `from` y lo mueve una etapa (`pendiente → preparando → listo`). Para llegar a `entregado` se usa `ORDER_DELIVER`.
-- `pickupCode` son 6 dígitos que genera el teléfono del cliente al confirmar el pedido; sin él, el pedido no se acepta. La caja lo guarda pero nunca lo muestra. El teléfono lo enseña como QR (`abarre:recoger:<id>:<código>`) cuando el pedido está listo.
+- `pickupCode` son 6 caracteres que genera el **servidor** al confirmarse el pago, sin letras que se confundan (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, sin O/0 ni I/1), único entre los pedidos activos. Los pedidos anteriores traen 6 dígitos y siguen siendo válidos. Sin código el pedido no se acepta. La caja lo guarda pero nunca lo muestra; el servidor lo vuelve a revisar al entregar. El teléfono lo enseña como QR (`abarre:recoger:<id>:<código>`).
+- **Pago en línea**: `OrderRequest.payment` (`{ method: 'en_linea', status, amount?, paidAt? }`) llega solo con `status: 'pagado'` (si no, la caja lo ignora) y se guarda en `PickupOrder.online`. Un pedido así no se cobra: `ORDER_DELIVER` debe traer `sale.method: 'en_linea'` y `payment.method: 'en_linea'`; entra en Ventas y en el corte como «En línea» (`CashCut.onlineSales`), fuera del efectivo esperado. `ORDER_ADVANCE` no aplica a un pedido con `online` que no esté pagado.
 - `ORDER_CANCEL` solo aplica a un pedido `pendiente`, `preparando` o `listo`: lo deja `cancelado` con `cancel: { reason, missing, note?, at }` (`missing` son ids de productos del pedido que se agotaron). Sus piezas dejan de estar apartadas. Borra `issue`. Con `reason: 'cliente'` el pedido lo canceló el propio cliente.
 - `ORDER_ISSUE` aplica a un pedido `pendiente`, `preparando` o `listo` si `missing` trae algún producto del pedido: le pone `issue: { missing, at }` sin cancelarlo ni cambiar su estado; sus piezas siguen apartadas. El cliente decide en su app: elegir otro producto o quitar lo agotado (los dos llegan como `ORDER_EDIT`) o cancelar el pedido (`ORDER_CANCEL` con `reason: 'cliente'`).
 - `ORDER_EDIT` solo aplica a un pedido activo con `issue`. Revisa las líneas igual que `ORDER_RECEIVED` (sin contar lo que ya apartaba este mismo pedido) y, si todas alcanzan, cambia `items` y `total`, borra `issue` y pone `editedAt`. El folio y el `pickupCode` no cambian.

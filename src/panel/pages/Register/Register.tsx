@@ -13,6 +13,7 @@ import {
 } from '@ionic/react';
 import {
   add,
+  alertCircleOutline,
   barcodeOutline,
   cashOutline,
   closeCircleOutline,
@@ -31,6 +32,7 @@ import { BarcodeSearch, type BarcodeSearchHandle } from '../../../components/Bar
 import { ProductThumb } from '../../../components/ProductThumb';
 import { useApp, type ProductView } from '../../../context/AppContext';
 import { availableCredit, money, type Product } from '../../../data/models';
+import { availableLabel, clampToAvailable, piecesLabel } from '../../../domain/stock';
 import { ago, useNow } from '../../../hooks/useNow';
 import { PanelHeader } from '../../components/PanelHeader';
 import { PromptModal } from '../../components/PromptModal';
@@ -78,7 +80,7 @@ function LiveDevice() {
 
 // Los productos que más salen, para agregarlos con un toque (pan, tortillas, refrescos…)
 function QuickPicks({ onPick }: { onPick: (p: ProductView) => void }) {
-  const { products, sales, ticket } = useApp();
+  const { products, sales, ticket, availableFor } = useApp();
   const picks = useMemo(() => {
     const sold = new Map<string, number>();
     sales.forEach((s) => s.items.forEach((i) => sold.set(i.productId, (sold.get(i.productId) ?? 0) + i.qty)));
@@ -92,12 +94,20 @@ function QuickPicks({ onPick }: { onPick: (p: ProductView) => void }) {
       <div className="quick-row" role="list">
         {picks.map((p) => {
           const inTicket = ticket.find((l) => l.product.id === p.id)?.qty;
+          const out = availableFor(p.id) <= 0;
           return (
-            <button key={p.id} type="button" role="listitem" className="quick-item" onClick={() => onPick(p)} title={`Agregar ${p.name}`}>
+            <button
+              key={p.id}
+              type="button"
+              role="listitem"
+              className={`quick-item ${out ? 'is-out' : ''}`}
+              onClick={() => onPick(p)}
+              title={out ? `${p.name}: sin stock` : `Agregar ${p.name}`}
+            >
               <ProductThumb product={p} size={34} />
               <span className="quick-text">
                 <strong>{p.name}</strong>
-                <span className="money">{money(p.price)}</span>
+                {out ? <span className="stock-out">Sin stock</span> : <span className="money">{money(p.price)}</span>}
               </span>
               {inTicket && <span className="quick-count">{inTicket}</span>}
             </button>
@@ -138,7 +148,7 @@ function AccountTabs({ canAdd }: { canAdd: boolean }) {
 export default function Register() {
   const {
     ticket, ticketTotal, ticketCount, ticketAdd, ticketQty, ticketRemove, ticketClear, products,
-    account, customers, updateAccount, linkCustomer,
+    account, customers, updateAccount, linkCustomer, availableFor, ticketShortages,
   } = useApp();
   const [picking, setPicking] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -160,18 +170,34 @@ export default function Register() {
     active.current = false;
   });
 
+  const warn = (message: string, color: 'warning' | 'danger') =>
+    toast({ message, duration: color === 'danger' ? 3200 : 2600, color, position: 'top', cssClass: 'toast-app' });
+
+  // Nunca más de lo disponible: existencia − apartado por pedidos − lo que ya está en esta u otras cuentas
   const addProduct = (p: Product, qty: number) => {
-    ticketAdd(p, qty);
-    if (p.stock < qty) {
-      toast({
-        message: `${p.name}: el inventario marca ${p.stock} ${p.stock === 1 ? 'pieza' : 'piezas'}`,
-        duration: 2200,
-        color: 'warning',
-        position: 'top',
-        cssClass: 'toast-app',
-      });
+    const room = availableFor(p.id);
+    const r = clampToAvailable(qty, room);
+    if (r.qty === 0) {
+      warn(
+        p.stock <= 0
+          ? `Sin stock: ${p.name} no tiene piezas en inventario.`
+          : `Sin stock: las ${piecesLabel(p.stock)} de ${p.name} ya están apartadas por pedidos o en cuentas abiertas.`,
+        'danger',
+      );
+      return;
     }
+    ticketAdd(p, r.qty);
+    if (r.limited) warn(`Solo hay ${availableLabel(room)} de ${p.name}; se agregaron ${r.qty}.`, 'warning');
   };
+
+  const more = (p: Product) => {
+    if (availableFor(p.id) <= 0) {
+      warn(`Ya no hay más ${p.name} disponible. La cantidad se queda en el máximo.`, 'warning');
+      return;
+    }
+    ticketQty(p.id, 1);
+  };
+  const shortOf = (id: string) => ticketShortages.find((s) => s.product.id === id);
 
   const cancel = () =>
     alert({
@@ -196,6 +222,7 @@ export default function Register() {
               <BarcodeSearch
                 ref={search}
                 products={products}
+                availableFor={availableFor}
                 onPick={addProduct}
                 onMissing={setNewCode}
                 placeholder="Escanea o escribe el código de barras"
@@ -243,12 +270,17 @@ export default function Register() {
                   <span role="columnheader" className="sr-only">Quitar</span>
                 </div>
                 {ticket.map((l) => (
-                  <div key={`${l.product.id}-${l.flashAt}`} className={`reg-row is-${l.source}`} role="row">
+                  <div key={`${l.product.id}-${l.flashAt}`} className={`reg-row is-${l.source} ${shortOf(l.product.id) ? 'is-short' : ''}`} role="row">
                     <span className="cell-product" role="cell">
                       <ProductThumb product={l.product} size={40} />
                       <span>
                         <strong>{l.product.name}</strong>
                         <span className="unit">{money(l.product.price)} c/u · {l.product.barcode}</span>
+                        {shortOf(l.product.id) && (
+                          <span className="src-tag is-short" role="alert">
+                            <IonIcon icon={alertCircleOutline} /> Solo hay {availableLabel(shortOf(l.product.id)!.available)}
+                          </span>
+                        )}
                         {l.source === 'movil' ? (
                           <span className="src-tag is-movil"><IonIcon icon={phonePortraitOutline} /> Escaneado desde el celular</span>
                         ) : (
@@ -262,7 +294,7 @@ export default function Register() {
                           <IonIcon icon={remove} />
                         </button>
                         <span>{l.qty}</span>
-                        <button type="button" onClick={() => ticketQty(l.product.id, 1)} aria-label="Uno más">
+                        <button type="button" onClick={() => more(l.product)} aria-label="Uno más">
                           <IonIcon icon={add} />
                         </button>
                       </span>
@@ -340,7 +372,7 @@ export default function Register() {
         isOpen={!!newCode}
         barcode={newCode}
         onClose={() => setNewCode(undefined)}
-        onSaved={(p, isNew) => isNew && ticketAdd(p, 1)}
+        onSaved={(p, isNew) => isNew && addProduct(p, 1)}
       />
     </IonPage>
   );

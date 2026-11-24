@@ -16,6 +16,7 @@ import { PhotoPicker } from '../../../components/PhotoPicker';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp, type ProductView } from '../../../context/AppContext';
 import { CATEGORIES, money, shortDate, uid, type MovementType, type Product } from '../../../data/models';
+import { generateInternalEan13 } from '../../../domain/ean13';
 import './ProductModal.css';
 
 const MOVE_ICON: Record<MovementType, string> = { venta: arrowDown, entrada: arrowUp, ajuste: constructOutline, alta: sparklesOutline };
@@ -170,7 +171,7 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
               value={code}
               onChange={(v) => setCode(v.replace(/\s/g, ''))}
             />
-            <button type="button" className="pm-internal" onClick={() => lookup(`2${String(Date.now()).slice(-11)}`)}>
+            <button type="button" className="pm-internal" onClick={() => lookup(generateInternalEan13((c) => !!findByBarcode(c)))}>
               El producto no tiene código · generar uno interno
             </button>
           </form>

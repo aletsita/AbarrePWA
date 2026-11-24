@@ -125,3 +125,16 @@ src/
 ├─ panel/                 menú, barra superior y pantallas de la caja
 └─ theme/                 colores y estilos globales
 ```
+
+## Pago en línea (Stripe, solo modo de pruebas)
+
+El pago de los pedidos de la app se hace con Stripe Checkout: la tarjeta se escribe en la página de Stripe y nunca pasa por la app ni por el servidor. Las claves viven **solo** en variables de entorno del servidor (`.env` está en `.gitignore`); el servidor no acepta claves que no sean de prueba (`sk_test_…`).
+
+1. Copia `.env.example` como `.env` y pon tu clave de pruebas (`STRIPE_SECRET_KEY=sk_test_…`, de https://dashboard.stripe.com/test/apikeys).
+2. Instala la Stripe CLI (`winget install Stripe.StripeCli`), entra con `stripe login` y deja corriendo:
+   `stripe listen --events checkout.session.completed,checkout.session.expired,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed --forward-to localhost:8787/api/pagos/webhook`. Copia el `whsec_…` que imprime en `STRIPE_WEBHOOK_SECRET`.
+3. `npm run start:server` (lee el `.env` solo). Al arrancar dice «Pago en línea: Stripe en modo de pruebas» o qué falta.
+
+Tarjeta de prueba: `4242 4242 4242 4242`, cualquier fecha futura y cualquier CVC. Rechazada: `4000 0000 0000 0002`.
+
+Pruebas del servidor (inventario, carrera por la última pieza, webhook, código para recoger): `npm test`.

@@ -66,8 +66,18 @@ export function orderNoticeText(status: OrderStatus, folio: string) {
 // Estados en los que el pedido aparta existencia
 export const ACTIVE_STATUSES: OrderStatus[] = ['pendiente', 'preparando', 'listo'];
 
-// Formas de pago al recoger: no hay pago en línea ni crédito
+// Formas de pago al recoger un pedido que no se pagó en la app (no hay crédito)
 export const PICKUP_METHODS: CashMethod[] = ['efectivo', 'tarjeta', 'transferencia'];
+
+// Pago en línea del pedido, como lo confirma el servidor (webhook de Stripe)
+export interface OnlinePayment {
+  method: 'en_linea';
+  status: 'pendiente_de_pago' | 'pagado' | 'fallido' | 'por_reembolsar' | 'reembolsado';
+  amount?: number;
+  paidAt?: string;
+}
+
+export const isPaidOnline = (o: Pick<PickupOrder, 'online'>) => o.online?.status === 'pagado';
 
 export function nextStatus(status: OrderStatus): OrderStatus | null {
   const i = ORDER_STATUSES.indexOf(status);
@@ -88,13 +98,17 @@ export interface PickupOrder {
   createdAt: string;
   updatedAt: string;
   deliveredAt?: string;
+  // Lo que se cobró al entregar (en_linea: ya venía pagado)
   payment?: { method: CashMethod; received: number };
+  // Pagado en la app: la caja no cobra, solo pide el código
+  online?: OnlinePayment;
   saleId?: string;
   cancel?: OrderCancel;
   issue?: OrderIssue;
   // Cuándo el cliente cambió los productos del pedido (después de un aviso de producto agotado)
   editedAt?: string;
-  // Código para recoger: lo genera el teléfono del cliente. La caja NUNCA lo muestra, solo lo compara al entregar.
+  // Código para recoger: lo genera el servidor al confirmarse el pago (antes, el teléfono: 6 dígitos).
+  // La caja NUNCA lo muestra, solo lo compara al entregar; el servidor lo vuelve a revisar.
   pickupCode?: string;
 }
 
@@ -105,7 +119,8 @@ export interface OrderRequest {
   items: { productId: string; qty: number }[];
   note?: string;
   at: number;
-  pickupCode: string; // 6 dígitos generados en el teléfono
+  pickupCode: string; // 6 caracteres del servidor (o 6 dígitos de pedidos anteriores)
+  payment?: OnlinePayment;
 }
 
 // Piezas apartadas por pedidos que aún no se entregan, por producto
@@ -118,12 +133,17 @@ export function reservedStock(orders: PickupOrder[], exceptId?: string) {
   return map;
 }
 
-// Lo que la caja recibe al entregar: los 6 dígitos escritos o el QR del teléfono
+// Código para recoger: 6 caracteres sin letras que se confundan (sin O/0 ni I/1), o 6 dígitos de los
+// pedidos anteriores al pago en línea
+export const PICKUP_CODE = /^(?:[A-HJ-NP-Z2-9]{6}|\d{6})$/;
+export const cleanPickupCode = (raw: string) => raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+
+// Lo que la caja recibe al entregar: el código escrito o el QR del teléfono
 // (abarre:recoger:<id del pedido>:<código>), ya sea por cámara o por un lector USB que "teclea".
 export function parsePickupInput(raw: string): { code: string; orderId?: string } | null {
   const text = raw.trim();
-  const qr = /^abarre:recoger:([^:\s]+):(\d{6})$/i.exec(text);
-  if (qr) return { orderId: qr[1], code: qr[2] };
-  const digits = text.replace(/\s/g, '');
-  return /^\d{6}$/.test(digits) ? { code: digits } : null;
+  const qr = /^abarre:recoger:([^:\s]+):([a-z0-9]{6})$/i.exec(text);
+  if (qr) return { orderId: qr[1], code: qr[2].toUpperCase() };
+  const code = text.replace(/[\s-]/g, '').toUpperCase();
+  return PICKUP_CODE.test(code) ? { code } : null;
 }
