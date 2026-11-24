@@ -7,6 +7,7 @@ import {
   cashOutline,
   closeOutline,
   downloadOutline,
+  globeOutline,
   printOutline,
   receiptOutline,
   swapHorizontalOutline,
@@ -22,7 +23,7 @@ import { downloadSalesCsv, printSale } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import './Sales.css';
 
-const METHOD_ICON: Record<PaymentMethod, string> = { efectivo: cashOutline, tarjeta: cardOutline, transferencia: swapHorizontalOutline, credito: bookOutline };
+const METHOD_ICON: Record<PaymentMethod, string> = { efectivo: cashOutline, tarjeta: cardOutline, transferencia: swapHorizontalOutline, credito: bookOutline, en_linea: globeOutline };
 type Range = 'hoy' | 'ayer' | 'semana' | 'todo';
 const RANGE_LABEL: Record<Range, string> = { hoy: 'Hoy', ayer: 'Ayer', semana: 'Últimos 7 días', todo: 'Todo' };
 

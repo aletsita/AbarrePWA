@@ -8,10 +8,17 @@
 // La tienda está abierta mientras la caja está conectada (manda PING) y su turno no está cerrado.
 // Quien inicia sesión con el correo de un usuario activo de la caja (Dueño, Cajero, Inventario) entra
 // como personal de la tienda; cualquier otra cuenta entra como cliente.
+//
+// Inventario: el servidor es quien decide. disponible = existencia − apartado por pedidos activos y pagados.
+// Los mensajes que mueven existencias (cobro en caja, empezar a preparar, entregar) pasan antes por `gate`,
+// que revisa y aplica en el mismo paso síncrono: dos cobros de la última pieza no pueden pasar los dos.
+// Pago en línea (Stripe, solo pruebas): ver payments.js. El pedido solo llega a la caja cuando el webhook
+// firmado confirma el pago.
 import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createCheckout, PaymentError, paymentsReady, retrieveCheckout, verifySignature } from './payments.js';
 
 const FILE = process.env.API_DATA ?? join(dirname(fileURLToPath(import.meta.url)), 'data', 'api.json');
 const DAY = 86400;
@@ -23,11 +30,17 @@ const CAJA_WAIT_MS = 3000;
 const CATALOG_FRESH_MS = 10000;
 const MAX_TRIES = 3;
 const CAJA_ALIVE_MS = 12000;
+// Código para recoger: 6 caracteres sin letras que se confundan (sin O/0 ni I/1)
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const CODE_TRIES = 5;
+const CODE_LOCK_MS = 5 * 60 * 1000;
+const CHECKOUT_TTL_S = 30 * 60; // Stripe pide al menos 30 minutos
+const RECENT_SALE_MS = 5 * 60 * 1000;
 
 // ---------- datos ----------
 
 function fresh() {
-  return { secret: randomBytes(32).toString('hex'), users: [], revoked: [], orders: [], idem: {}, caja: null };
+  return { secret: randomBytes(32).toString('hex'), users: [], revoked: [], orders: [], idem: {}, caja: null, webhooks: [] };
 }
 
 function load() {
@@ -126,8 +139,179 @@ function staffOf(email) {
 }
 
 const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone });
-const publicOrder = ({ userId: _u, tries: _t, ...o }) => o;
 const ACTIVE = ['pendiente', 'preparando', 'listo'];
+
+// Sin datos internos. El código para recoger solo se muestra cuando el pedido ya está pagado,
+// y la liga de pago solo mientras falta pagar.
+function publicOrder({ userId: _u, tries: _t, codeTries: _c, codeLock: _l, checkout, pickupCode, ...o }) {
+  const paid = !o.payment || o.payment.status === 'pagado';
+  const waiting = o.payment && ['pendiente_de_pago', 'fallido'].includes(o.payment.status) && o.status !== 'cancelado';
+  return {
+    ...o,
+    ...(paid && pickupCode ? { pickupCode } : {}),
+    // Solo el dueño del pedido recibe el secreto de su sesión; con él la app monta el pago embebido
+    ...(waiting && checkout?.clientSecret && checkout.expiresAt > now() ? { paymentClientSecret: checkout.clientSecret } : {}),
+  };
+}
+
+// ---------- inventario disponible ----------
+
+// Piezas apartadas por pedido: los activos que ya tiene la caja y los pagados que todavía no le llegan.
+// Un pedido sin pagar no aparta nada.
+function reservedBy(exceptId) {
+  const map = {};
+  const seen = new Set();
+  const add = (o) => {
+    if (seen.has(o.id)) return;
+    seen.add(o.id);
+    if (o.id === exceptId) return;
+    for (const i of o.items ?? []) map[i.productId] = (map[i.productId] ?? 0) + (Number(i.qty) || 0);
+  };
+  for (const o of db.caja?.orders ?? []) if (ACTIVE.includes(o.status)) add(o);
+  for (const o of db.orders) if (ACTIVE.includes(o.status) && (!o.payment || o.payment.status === 'pagado')) add(o);
+  return map;
+}
+
+const availableOf = (p, reserved) => Math.max(0, (Number(p?.stock) || 0) - (reserved[p?.id] ?? 0));
+
+// Lo que falta para surtir `items` (sin contar lo que ya aparta el pedido `exceptId`)
+function shortagesOf(items, exceptId) {
+  if (!db.caja) return [];
+  const reserved = reservedBy(exceptId);
+  const want = {};
+  for (const i of items ?? []) want[i.productId] = (want[i.productId] ?? 0) + (Number(i.qty) || 0);
+  const out = [];
+  for (const [id, requested] of Object.entries(want)) {
+    const p = db.caja.products.find((x) => x.id === id);
+    const available = p ? availableOf(p, reserved) : 0;
+    if (requested > available) {
+      out.push({ productId: id, name: p?.name ?? items.find((i) => i.productId === id)?.name ?? 'Producto', requested, available, missing: requested - available });
+    }
+  }
+  return out;
+}
+
+const shortText = (list) => list.map((s) => `${s.name} (hay ${s.available}, faltan ${s.missing})`).join(', ');
+
+function stockError(list) {
+  return {
+    status: 409,
+    body: { code: 'sin-stock', message: `No alcanza el inventario: ${shortText(list)}.`, faltantes: list },
+  };
+}
+
+// Disponible de cada producto, para avisar solo de lo que cambió
+function availability() {
+  if (!db.caja) return new Map();
+  const reserved = reservedBy();
+  return new Map(db.caja.products.map((p) => [p.id, `${p.stock}:${reserved[p.id] ?? 0}`]));
+}
+
+// Avisa en vivo lo que cambió: a los equipos de la tienda (STOCK por el canal) y a los clientes
+// (evento `inventario` del mismo SSE de los pedidos)
+function announceStock(before) {
+  if (!db.caja) return;
+  const after = availability();
+  const changed = [...after.keys()].filter((id) => before.get(id) !== after.get(id));
+  if (!changed.length) return;
+  const reserved = reservedBy();
+  const items = changed.map((id) => {
+    const p = db.caja.products.find((x) => x.id === id);
+    return { productId: id, stock: p.stock, reserved: reserved[id] ?? 0 };
+  });
+  publish({ type: 'STOCK', items, at: Date.now() });
+  const visible = changed
+    .map((id) => db.caja.products.find((x) => x.id === id))
+    .filter((p) => p.showInApp !== false)
+    .map((p) => ({ id: p.id, stock: availableOf(p, reserved) }));
+  if (visible.length) streams.forEach((set) => set.forEach((res) => res.write(`event: inventario\ndata: ${JSON.stringify(visible)}\n\n`)));
+}
+
+// ---------- código para recoger ----------
+
+function newPickupCode() {
+  for (;;) {
+    const code = Array.from(randomBytes(6), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+    if (!db.orders.some((o) => o.pickupCode === code && ACTIVE.includes(o.status))) return code;
+  }
+}
+
+const cleanCode = (code) => String(code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+// Revisa el código al entregar. Después de CODE_TRIES errores se bloquea unos minutos. Un pedido ya
+// entregado no vuelve a pasar: su código solo sirve una vez.
+function checkPickupCode(o, code) {
+  const t = Date.now();
+  if (o.status === 'entregado') return { status: 409, body: { code: 'codigo-usado', message: 'Este pedido ya se entregó; su código ya no sirve.' } };
+  if (!o.pickupCode) return null;
+  if (o.codeLock && o.codeLock > t) {
+    const min = Math.ceil((o.codeLock - t) / 60000);
+    return { status: 423, body: { code: 'codigo-bloqueado', message: `Demasiados intentos. Espera ${min} min y vuelve a intentarlo.`, hasta: o.codeLock } };
+  }
+  if (cleanCode(code) === o.pickupCode) {
+    delete o.codeTries;
+    delete o.codeLock;
+    return null;
+  }
+  o.codeTries = (o.codeTries ?? 0) + 1;
+  if (o.codeTries >= CODE_TRIES) {
+    o.codeTries = 0;
+    o.codeLock = t + CODE_LOCK_MS;
+    save();
+    return { status: 423, body: { code: 'codigo-bloqueado', message: `Código incorrecto. Por seguridad se bloqueó ${CODE_LOCK_MS / 60000} minutos.`, hasta: o.codeLock } };
+  }
+  save();
+  const left = CODE_TRIES - o.codeTries;
+  return { status: 422, body: { code: 'codigo-incorrecto', message: `El código no coincide. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.`, intentos: left } };
+}
+
+// ---------- revisión de los mensajes que mueven existencias ----------
+
+// index.js la llama antes de reenviar un mensaje del canal. null = pasa; si no, { status, body } y el mensaje
+// no se reenvía ni se aplica. Es síncrona a propósito: revisar y aplicar no se puede intercalar con otra petición.
+export function gate(msg) {
+  if (!msg || typeof msg !== 'object' || !db.caja) return null;
+  switch (msg.type) {
+    case 'CONFIRM_SALE': {
+      const sale = msg.sale;
+      if (!sale?.id || sale.orderId || recentSales.has(sale.id)) return null;
+      const short = shortagesOf(sale.items);
+      return short.length ? stockError(short) : null;
+    }
+    case 'ORDER_ADVANCE': {
+      if (msg.from !== 'pendiente') return null;
+      const c = db.caja.orders.find((x) => x.id === msg.id);
+      if (!c || c.status !== 'pendiente') return null;
+      // `online`: lo que la caja sabe del pago en línea (su `payment` es lo cobrado al entregar)
+      const pay = db.orders.find((x) => x.id === msg.id)?.payment ?? c.online;
+      if (pay && pay.status !== 'pagado') {
+        return { status: 409, body: { code: 'pago-pendiente', message: 'El pago de este pedido todavía no se confirma. No se puede empezar a preparar.' } };
+      }
+      const short = shortagesOf(c.items, c.id);
+      return short.length ? stockError(short) : null;
+    }
+    case 'ORDER_DELIVER': {
+      const c = db.caja.orders.find((x) => x.id === msg.id);
+      const o = db.orders.find((x) => x.id === msg.id);
+      if (o) {
+        const wrong = checkPickupCode(o, msg.pickupCode);
+        if (wrong) return wrong;
+        const online = o.payment?.method === 'en_linea';
+        if (online && o.payment.status !== 'pagado') {
+          return { status: 409, body: { code: 'pago-pendiente', message: 'El pago en línea de este pedido no está confirmado.' } };
+        }
+        // Pagado en línea no se vuelve a cobrar; uno de pagar en tienda no puede marcarse como pagado en línea
+        if (online !== (msg.sale?.method === 'en_linea')) {
+          return { status: 409, body: { code: 'metodo-pago', message: online ? 'Este pedido ya está pagado en línea: no se cobra.' : 'Este pedido se paga en la tienda.' } };
+        }
+      }
+      if (!c) return null;
+      const short = shortagesOf(c.items, c.id);
+      return short.length ? stockError(short) : null;
+    }
+  }
+  return null;
+}
 
 // ---------- tienda abierta o cerrada ----------
 
@@ -192,8 +376,16 @@ function freshSnapshot(timeout = CAJA_WAIT_MS) {
 }
 
 // Cada mensaje que pasa por el canal (index.js lo llama al reenviarlo)
+const QUIET = ['PING', 'BYE', 'WHO', 'STOCK'];
+
 export function onRelayMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
+  const before = QUIET.includes(msg.type) ? null : availability();
+  handleRelay(msg);
+  if (before) announceStock(before);
+}
+
+function handleRelay(msg) {
   const o = typeof msg.id === 'string' ? db.orders.find((x) => x.id === msg.id) : null;
   const c = typeof msg.id === 'string' ? db.caja?.orders.find((x) => x.id === msg.id) : null;
   switch (msg.type) {
@@ -214,13 +406,16 @@ export function onRelayMessage(msg) {
       if (db.caja) db.caja.closed = false;
       break;
     case 'ORDER_ADVANCE':
-      if (c && c.status === msg.from) c.status = STEPS[STEPS.indexOf(msg.from) + 1];
+      if (c && c.status === msg.from && !c.issue) c.status = STEPS[STEPS.indexOf(msg.from) + 1];
       if (o && o.status === msg.from && !o.issue) setStatus(o, STEPS[STEPS.indexOf(msg.from) + 1], msg.at);
       break;
     case 'ORDER_DELIVER':
       if (c) c.status = 'entregado';
       applySale(msg.sale);
-      if (o) setStatus(o, 'entregado');
+      if (o) {
+        if (o.payment?.method === 'en_linea') o.payment.deliveredAt = new Date().toISOString();
+        setStatus(o, 'entregado');
+      }
       break;
     case 'ORDER_CANCEL':
       if (c) c.status = 'cancelado';
@@ -253,12 +448,17 @@ export function onRelayMessage(msg) {
   if (['PING', 'BYE', 'SNAPSHOT', 'CLOSE_CUT', 'OPEN_SHIFT'].includes(msg.type)) checkStore();
 }
 
-// Una venta descuenta su existencia una sola vez (puede llegar como CONFIRM_SALE o dentro de ORDER_DELIVER)
-const appliedSales = new Set();
+// Una venta descuenta su existencia una sola vez (puede llegar como CONFIRM_SALE o dentro de ORDER_DELIVER).
+// Se recuerdan unos minutos por si llega un SNAPSHOT de la caja armado antes de aplicarla.
+const recentSales = new Map(); // id → { items, at }
 function applySale(sale) {
-  if (!db.caja || !sale?.id || appliedSales.has(sale.id)) return;
-  appliedSales.add(sale.id);
-  for (const i of sale.items ?? []) {
+  if (!db.caja || !sale?.id || recentSales.has(sale.id)) return;
+  recentSales.set(sale.id, { items: sale.items ?? [], at: Date.now() });
+  discount(sale.items);
+}
+
+function discount(items) {
+  for (const i of items ?? []) {
     const p = db.caja.products.find((x) => x.id === i.productId);
     if (p) p.stock = Math.max(0, p.stock - i.qty);
   }
@@ -267,17 +467,23 @@ function applySale(sale) {
 function onSnapshot(data) {
   whoPending = false;
   cajaSeenAt = Date.now();
-  appliedSales.clear();
+  const before = availability();
   db.caja = {
     at: Date.now(),
     storeName: data.store?.name,
     closed: !!data.closedCutId,
-    products: Array.isArray(data.products) ? data.products : [],
+    products: Array.isArray(data.products) ? data.products.map((p) => ({ ...p })) : [],
     users: Array.isArray(data.users) ? data.users.map(({ name, email, role, active }) => ({ name, email, role, active })) : [],
     orders: Array.isArray(data.orders)
-      ? data.orders.map(({ id, folio, status, items, total, cancel, issue, editedAt }) => ({ id, folio, status, items, total, cancel, issue, editedAt }))
+      ? data.orders.map(({ id, folio, status, items, total, cancel, issue, editedAt, online }) => ({ id, folio, status, items, total, cancel, issue, editedAt, online }))
       : [],
   };
+  // Ventas que el servidor ya aprobó y que este SNAPSHOT todavía no trae: se vuelven a descontar
+  const known = new Set(Array.isArray(data.sales) ? data.sales.map((s) => s.id) : []);
+  for (const [id, s] of recentSales) {
+    if (Date.now() - s.at > RECENT_SALE_MS) recentSales.delete(id);
+    else if (!known.has(id)) discount(s.items);
+  }
   // Reconcilia los pedidos: folio, estado y productos de la caja; reenvía lo que no le llegó
   for (const o of db.orders) {
     const c = db.caja.orders.find((x) => x.id === o.id);
@@ -298,11 +504,17 @@ function onSnapshot(data) {
       } else if (c.status === 'cancelado') cancelOrder(o, c.cancel ?? { reason: 'otro', missing: [], at: new Date().toISOString() });
       else setStatus(o, c.status);
       if (before !== JSON.stringify([o.items, o.issue ?? null])) emit(o);
+    } else if (ACTIVE.includes(o.status) && o.payment?.status === 'pagado') {
+      // Pagado en línea y la caja aún no lo tiene: se le reenvía; si lo rechaza varias veces (turno cerrado,
+      // ya no hay existencia) se marca para reembolso
+      if ((o.tries ?? 0) < MAX_TRIES) sendToCaja(o);
+      else cancelOrder(o, { reason: 'otro', missing: [], note: 'La tienda no pudo recibir el pedido.', at: new Date().toISOString() });
     } else if (o.status !== 'entregado' && o.status !== 'cancelado' && o.folio && (o.tries ?? 0) < MAX_TRIES) {
       sendToCaja(o);
     }
   }
   save();
+  announceStock(before);
   [...snapshotWaiters].forEach((w) => w.resolve(db.caja));
 }
 
@@ -319,6 +531,7 @@ function sendToCaja(o) {
       note: o.note,
       at: Date.parse(o.createdAt),
       pickupCode: o.pickupCode,
+      ...(o.payment ? { payment: { method: o.payment.method, status: o.payment.status, amount: o.payment.amount, paidAt: o.payment.paidAt } } : {}),
     },
   });
 }
@@ -326,11 +539,7 @@ function sendToCaja(o) {
 // Catálogo para los clientes: lo visible en la app, con la existencia menos lo apartado por pedidos
 // (sin contar el pedido `exceptId`, para cuando el cliente cambia los productos de ese mismo pedido)
 function catalogOf(caja, exceptId) {
-  const reserved = {};
-  for (const o of caja.orders) {
-    if (o.id === exceptId || !ACTIVE.includes(o.status)) continue;
-    for (const i of o.items ?? []) reserved[i.productId] = (reserved[i.productId] ?? 0) + i.qty;
-  }
+  const reserved = reservedBy(exceptId);
   return caja.products
     .filter((p) => p.showInApp !== false)
     .map(({ id, name, category, price, stock, photo, description }) => ({
@@ -371,6 +580,8 @@ function setStatus(o, status, at = Date.now()) {
 // La caja canceló el pedido (por ejemplo, se agotó un producto). El cliente decide en su app qué hacer.
 function cancelOrder(o, cancel) {
   if (o.status === 'cancelado' || o.status === 'entregado') return;
+  // Ya se había cobrado en línea: queda para reembolso (el reembolso se hace a mano en Stripe)
+  if (o.payment?.status === 'pagado') o.payment.status = 'por_reembolsar';
   o.status = 'cancelado';
   delete o.issue;
   const reason = ['sin-existencia', 'cliente'].includes(cancel.reason) ? cancel.reason : 'otro';
@@ -412,7 +623,9 @@ function validateRegister(b) {
 }
 
 async function route(method, path, token, body, headers) {
-  const m = path.match(/^\/pedidos\/([^/]+)(\/resolver|\/cambiar|\/cancelar)?$/);
+  const m = path.match(/^\/pedidos\/([^/]+)(\/resolver|\/cambiar|\/cancelar|\/pagar)?$/);
+  // Los pedidos sin pagar también son del cliente (para reintentar el pago); la caja aún no les pone folio
+  const mine = (c) => db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && (x.folio || x.payment));
   const key = m && m[1] !== 'eventos' ? `${method} /pedidos/:id${m[2] ?? ''}` : `${method} ${path}`;
 
   switch (key) {
@@ -467,22 +680,25 @@ async function route(method, path, token, body, headers) {
 
     case 'GET /pedidos': {
       const c = requireRole(token, 'cliente');
-      return [200, db.orders.filter((o) => o.userId === c.sub && o.folio).map(publicOrder)];
+      const list = db.orders.filter((o) => o.userId === c.sub && (o.folio || o.payment));
+      await Promise.all(list.map(reconcilePayment));
+      return [200, list.map(publicOrder)];
     }
 
     case 'GET /pedidos/:id': {
       const c = requireRole(token, 'cliente');
-      const id = decodeURIComponent(m[1]);
       // El pedido de otra persona responde igual que uno que no existe
-      const o = db.orders.find((x) => x.id === id && x.userId === c.sub && x.folio);
+      const o = mine(c);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
+      // La app lo consulta seguido justo después de pagar: se pregunta a Stripe sin esperar al webhook
+      await reconcilePayment(o, 1500);
       return [200, publicOrder(o)];
     }
 
     case 'POST /pedidos/:id/resolver': {
       // Pedido cancelado: el cliente lo quita de sus pedidos activos o elige otros productos
       const c = requireRole(token, 'cliente');
-      const o = db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && x.folio);
+      const o = mine(c);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
       if (o.status !== 'cancelado') throw new HttpError(409, 'no-cancelado', 'Este pedido sigue en curso.');
       const action = body.accion === 'reemplazar' ? 'reemplazar' : 'quitar';
@@ -496,17 +712,21 @@ async function route(method, path, token, body, headers) {
       // Se agotó un producto: el cliente manda la lista nueva de productos (los que sigue queriendo y los que
       // eligió en lugar de los agotados). El pedido es el mismo: conserva su folio y su código.
       const c = requireRole(token, 'cliente');
-      const o = db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && x.folio);
+      const o = mine(c);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
       if (!ACTIVE.includes(o.status)) throw new HttpError(409, 'no-activo', 'Este pedido ya no se puede cambiar.');
       if (!o.issue) throw new HttpError(409, 'sin-aviso', 'La tienda no pidió cambios en este pedido.');
+      // Cambiar los productos cambiaría lo cobrado: el pedido pagado se cancela y se marca para reembolso
+      if (o.payment?.status === 'pagado') {
+        throw new HttpError(409, 'pedido-pagado', 'Tu pedido ya está pagado y no se puede cambiar. Puedes cancelarlo y te devolvemos tu dinero.');
+      }
       return [200, await editOrder(o, body)];
     }
 
     case 'POST /pedidos/:id/cancelar': {
       // El cliente cancela su pedido (por ejemplo, porque se agotó algo y ya no lo quiere)
       const c = requireRole(token, 'cliente');
-      const o = db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && x.folio);
+      const o = mine(c);
       if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
       if (!ACTIVE.includes(o.status)) throw new HttpError(409, 'no-activo', 'Este pedido ya no se puede cancelar.');
       const at = Date.now();
@@ -518,32 +738,55 @@ async function route(method, path, token, body, headers) {
       return [200, publicOrder(o)];
     }
 
+    case 'POST /pedidos/:id/pagar': {
+      // Reintentar el pago: si la sesión anterior sigue abierta se regresa la misma (no se cobra dos veces)
+      const c = requireRole(token, 'cliente');
+      const o = mine(c);
+      if (!o) throw new HttpError(404, 'no-encontrado', 'No encontramos ese pedido.');
+      if (o.payment?.method !== 'en_linea') throw new HttpError(409, 'sin-pago-en-linea', 'Este pedido se paga en la tienda.');
+      await reconcilePayment(o);
+      if (o.payment.status === 'pagado') return [200, publicOrder(o)];
+      if (o.status === 'cancelado' || !['pendiente_de_pago', 'fallido'].includes(o.payment.status)) {
+        throw new HttpError(409, 'no-se-puede-pagar', 'Este pedido ya no se puede pagar.');
+      }
+      if (o.payment.status === 'pendiente_de_pago' && o.checkout?.clientSecret && o.checkout.expiresAt > now() + 60) return [200, publicOrder(o)];
+      if (!paymentsReady()) throw new HttpError(503, 'pagos-no-configurados', 'El pago en línea no está disponible en este momento.');
+      requireOpen();
+      const short = shortagesOf(o.items, o.id);
+      if (short.length) throw new HttpError(409, 'sin-stock', `Ya no alcanza: ${shortText(short)}.`, { faltantes: short });
+      await startCheckout(o);
+      return [200, publicOrder(o)];
+    }
+
     case 'POST /pedidos':
       return [201, await createOrder(requireRole(token, 'cliente'), body, headers['idempotency-key'] ?? '')];
   }
   throw new HttpError(404, 'ruta', `No existe ${method} ${path}`);
 }
 
+// Pedido con pago en línea: se crea sin pagar (no aparta nada ni llega a la caja) junto con la sesión de pago.
+// Cuando el webhook firmado confirma el pago se revisa el inventario, se aparta y se manda a la caja.
 async function createOrder(c, body, key) {
   if (!key) throw new HttpError(400, 'sin-clave', 'Falta la clave de idempotencia.');
   // Misma clave = mismo pedido (el teléfono reintentó tras perder la respuesta)
   const prev = db.idem[`${c.sub}:${key}`];
-  const existing = prev && db.orders.find((o) => o.id === prev && o.folio);
+  const existing = prev && db.orders.find((o) => o.id === prev && o.userId === c.sub);
   if (existing) return publicOrder(existing);
 
   const items = Array.isArray(body.items) ? body.items : [];
   if (!items.length || items.some((i) => !Number.isInteger(i.qty) || i.qty < 1)) {
     throw new HttpError(422, 'datos-invalidos', 'El pedido no tiene productos válidos.');
   }
-  if (!/^\d{6}$/.test(String(body.pickupCode ?? ''))) {
-    throw new HttpError(422, 'datos-invalidos', 'Falta el código para recoger.', { fields: { pickupCode: 'Debe tener 6 dígitos.' } });
-  }
+  if (!paymentsReady()) throw new HttpError(503, 'pagos-no-configurados', 'El pago en línea no está disponible en este momento. Intenta más tarde.');
 
   requireOpen();
   // Precios y existencia al momento, directo de la caja
   const caja = await freshSnapshot();
   if (!caja) throw new HttpError(503, 'tienda-desconectada', 'La tienda no está conectada en este momento. Intenta en un rato.');
-  const products = catalogOf(caja);
+  // Otra petición del mismo cliente con la misma clave pudo terminar mientras se esperaba a la caja
+  const raced = db.idem[`${c.sub}:${key}`] && db.orders.find((o) => o.id === db.idem[`${c.sub}:${key}`]);
+  if (raced) return publicOrder(raced);
+  const products = catalogOf(db.caja);
   const conflict = conflictOf(items, products, body.expectedTotal);
   if (conflict) throw new HttpError(409, conflict.code, conflict.message, conflict);
 
@@ -560,25 +803,160 @@ async function createOrder(c, body, key) {
     note: String(body.note ?? '').trim().slice(0, 200),
     createdAt: at,
     history: [{ status: 'pendiente', at }],
-    pickupCode: body.pickupCode,
+    payment: { method: 'en_linea', status: 'pendiente_de_pago', provider: 'stripe' },
     userId: c.sub,
   };
   db.orders.unshift(order);
-  sendToCaja(order);
-  // La caja lo acepta o lo rechaza al recibirlo; su siguiente SNAPSHOT lo dice. Se espera uno más por si
-  // el primero salió de la caja antes de que le llegara el pedido.
-  let after = await freshSnapshot();
-  if (!order.folio && after) after = (await freshSnapshot()) ?? after;
-  if (!order.folio) {
-    db.orders = db.orders.filter((o) => o !== order);
-    save();
-    if (!after) throw new HttpError(503, 'tienda-desconectada', 'La tienda no respondió. Intenta de nuevo.');
-    const again = conflictOf(items, catalogOf(after), body.expectedTotal);
-    throw new HttpError(409, 'pedido-cambio', 'La tienda no pudo aceptar tu pedido. Revisa los productos.', again ?? { code: 'pedido-cambio', message: '', changes: [], products: [] });
-  }
   db.idem[`${c.sub}:${key}`] = order.id;
   save();
+  await startCheckout(order);
   return publicOrder(order);
+}
+
+// Abre una sesión de pago nueva. La llave de idempotencia es por intento: si la petición a Stripe se
+// repite, regresa la misma sesión y no se cobra dos veces.
+async function startCheckout(o) {
+  const attempt = (o.checkout?.attempt ?? 0) + 1;
+  try {
+    const s = await createCheckout({
+      orderId: o.id,
+      items: o.items,
+      idempotencyKey: `checkout-${o.id}-${attempt}`,
+      expiresAt: now() + CHECKOUT_TTL_S,
+    });
+    o.checkout = { id: s.id, clientSecret: s.clientSecret, expiresAt: s.expiresAt ?? now() + CHECKOUT_TTL_S, attempt };
+    o.payment.status = 'pendiente_de_pago';
+  } catch (e) {
+    if (!(e instanceof PaymentError)) throw e;
+    o.checkout = { attempt };
+    o.payment.status = 'fallido';
+  }
+  save();
+  emit(o);
+}
+
+// ---------- respaldo: preguntar a Stripe ----------
+
+// Si un webhook no llegó (por ejemplo, `stripe listen` estaba cerrado), el servidor le pregunta a Stripe por la
+// sesión del pedido. La confirmación sigue siendo del servidor con datos de Stripe, nunca de la app.
+const RECONCILE_MS = 20000;
+const lastAsked = new Map(); // id del pedido → cuándo se preguntó
+
+async function reconcilePayment(o, minGap = 5000) {
+  if (o.payment?.method !== 'en_linea' || o.payment.status !== 'pendiente_de_pago' || !o.checkout?.id || !paymentsReady()) return;
+  if (Date.now() - (lastAsked.get(o.id) ?? 0) < minGap) return;
+  lastAsked.set(o.id, Date.now());
+  const s = await retrieveCheckout(o.checkout.id);
+  if (!s || o.payment.status !== 'pendiente_de_pago') return;
+  if (s.payment_status === 'paid') confirmPaid(o, s);
+  else if (s.status === 'expired') {
+    o.payment.status = 'fallido';
+    emit(o);
+  } else return;
+  save();
+}
+
+setInterval(() => {
+  for (const o of db.orders) if (o.payment?.status === 'pendiente_de_pago') void reconcilePayment(o, RECONCILE_MS - 1000);
+}, RECONCILE_MS).unref();
+
+// ---------- webhook de Stripe ----------
+
+// Lo que manda Stripe (ya con la firma revisada). Repetir el mismo evento no cambia nada.
+export function onPaymentEvent(event) {
+  if (!event?.id || db.webhooks.includes(event.id)) return false;
+  db.webhooks = [event.id, ...db.webhooks].slice(0, 1000);
+  const s = event.data?.object ?? {};
+  const id = s.metadata?.orderId ?? s.client_reference_id;
+  const o = db.orders.find((x) => x.id === id && x.payment?.method === 'en_linea');
+  if (o) {
+    switch (event.type) {
+      case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded':
+        if (s.payment_status === 'paid') confirmPaid(o, s);
+        break;
+      case 'checkout.session.expired':
+      case 'checkout.session.async_payment_failed':
+        if (o.payment.status === 'pendiente_de_pago' && (!o.checkout?.id || o.checkout.id === s.id)) {
+          o.payment.status = 'fallido';
+          emit(o);
+        }
+        break;
+    }
+  }
+  save();
+  return true;
+}
+
+// El pago se confirmó: se revisa el inventario y se aparta en el mismo paso. Si ya no alcanza, el dinero
+// ya se cobró: el pedido se cancela y queda por reembolsar.
+function confirmPaid(o, s) {
+  const ref = s.payment_intent ?? s.id;
+  if (o.payment.status !== 'pendiente_de_pago' && o.payment.status !== 'fallido') {
+    // Un segundo cobro del mismo pedido (otra sesión): se anota para devolverlo a mano
+    if (o.payment.ref && o.payment.ref !== ref) o.payment.duplicates = [...new Set([...(o.payment.duplicates ?? []), ref])];
+    return;
+  }
+  const before = availability();
+  const at = new Date().toISOString();
+  o.payment = { ...o.payment, ref, sessionId: s.id, paidAt: at, amount: round((Number(s.amount_total) || 0) / 100) };
+  const short = o.status === 'cancelado' ? [] : shortagesOf(o.items, o.id);
+  if (o.status === 'cancelado' || short.length) {
+    o.payment.status = 'por_reembolsar';
+    if (o.status !== 'cancelado') {
+      o.status = 'cancelado';
+      o.cancel = { reason: 'sin-existencia', missing: short.map((x) => x.productId), note: 'Se agotó mientras pagabas. Te devolveremos tu dinero.', at };
+      o.history.push({ status: 'cancelado', at });
+    }
+    emit(o);
+    return;
+  }
+  o.payment.status = 'pagado';
+  o.pickupCode = newPickupCode();
+  o.tries = 0;
+  emit(o);
+  sendToCaja(o);
+  announceStock(before);
+  // La caja le pone folio al recibirlo; su SNAPSHOT lo trae
+  setTimeout(() => void freshSnapshot(), 300).unref?.();
+}
+
+function readRaw(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > MAX_BODY) reject(new HttpError(413, 'muy-grande', 'La petición es demasiado grande.'));
+    });
+    req.on('end', () => resolve(body));
+  });
+}
+
+async function webhook(req, res) {
+  const raw = await readRaw(req);
+  // Sin la firma de Stripe no se cree nada de lo que diga el cuerpo
+  if (!verifySignature(raw, req.headers['stripe-signature'])) throw new HttpError(400, 'firma-invalida', 'Firma inválida.');
+  let event;
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, 'json', 'El cuerpo no es JSON válido.');
+  }
+  const fresh = onPaymentEvent(event);
+  send(res, 200, { recibido: true, ...(fresh ? {} : { repetido: true }) });
+}
+
+// Página a la que Stripe regresa al terminar o cancelar: la confirmación real llega por el webhook
+function paymentReturn(res, estado) {
+  const ok = estado === 'pagado';
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${ok ? 'Pago recibido' : 'Pago cancelado'}</title>
+<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;padding:24px;background:#f6f7f9;color:#1d2433;text-align:center}main{max-width:420px}h1{font-size:1.5rem}</style>
+</head><body><main><h1>${ok ? 'Recibimos tu pago' : 'No se hizo el cobro'}</h1>
+<p>${ok ? 'Regresa a la app de la tienda: en «Mis pedidos» verás tu pedido pagado y tu código para recoger en cuanto se confirme.' : 'Regresa a la app de la tienda para intentarlo otra vez.'}</p></main></body></html>`;
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(html);
 }
 
 // Cambio de productos de un pedido con aviso de producto agotado. La caja lo aplica (ORDER_EDIT) y su
@@ -676,6 +1054,9 @@ export async function api(req, res) {
   try {
     // EventSource no deja mandar encabezados: el token llega en la URL
     if (req.method === 'GET' && path === '/pedidos/eventos') return openStream(req, res, token);
+    // Stripe firma el cuerpo tal cual llega: se lee sin convertir a JSON
+    if (req.method === 'POST' && path === '/pagos/webhook') return await webhook(req, res);
+    if (req.method === 'GET' && path === '/pagos/regreso') return paymentReturn(res, url.searchParams.get('estado'));
     const body = req.method === 'GET' ? {} : await readBody(req);
     const [status, data] = await route(req.method, path, token, body, req.headers);
     send(res, status, data);

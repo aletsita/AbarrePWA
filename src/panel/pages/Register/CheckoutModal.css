@@ -97,3 +97,9 @@
 .co-pick small { color: var(--t-muted); font-size: 0.82rem; }
 .co-after { display: flex; align-items: center; gap: 6px; margin: -4px 2px 0; font-size: 0.86rem; color: var(--t-muted); }
 .co-after.is-bad { color: var(--ion-color-danger-shade); }
+
+/* Inventario insuficiente al cobrar */
+.co-short { display: flex; gap: 10px; margin-bottom: 16px; padding: 12px 14px; border-radius: var(--t-radius-sm); background: var(--t-danger-bg); color: var(--ion-color-danger-shade); font-size: 0.9rem; line-height: 1.45; }
+.co-short > ion-icon { flex: none; margin-top: 2px; font-size: 20px; }
+.co-short ul { margin: 6px 0; padding-left: 18px; }
+.co-short p { margin: 0; }

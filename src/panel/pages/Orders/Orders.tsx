@@ -1,4 +1,4 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonToast } from '@ionic/react';
+import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonRouter, useIonToast } from '@ionic/react';
 import {
   alertCircleOutline,
   bagCheckOutline,
@@ -6,6 +6,7 @@ import {
   closeCircleOutline,
   closeOutline,
   createOutline,
+  globeOutline,
   flameOutline,
   hourglassOutline,
   printOutline,
@@ -17,7 +18,8 @@ import { useEffect, useState } from 'react';
 import { EmptyState } from '../../../components/EmptyState';
 import { useApp } from '../../../context/AppContext';
 import { isToday, money, PAYMENT_LABEL, time } from '../../../data/models';
-import { ACTIVE_STATUSES, CANCEL_REASON_LABEL, ORDER_NEXT_ACTION, ORDER_STATUS_LABEL, reservedStock, type OrderStatus, type PickupOrder } from '../../../data/pickup';
+import { ACTIVE_STATUSES, CANCEL_REASON_LABEL, isPaidOnline, ORDER_NEXT_ACTION, ORDER_STATUS_LABEL, reservedStock, type OrderStatus, type PickupOrder } from '../../../data/pickup';
+import { shortfallText } from '../../../domain/stock';
 import { printSale } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import { CheckoutModal } from '../Register/CheckoutModal';
@@ -57,7 +59,11 @@ export default function Orders() {
   const [charging, setCharging] = useState<{ order: PickupOrder; code: string }>();
   const [problem, setProblem] = useState<PickupOrder>();
   const [now, setNow] = useState(Date.now());
+  const [busy, setBusy] = useState<string>();
   const [toast] = useIonToast();
+  const router = useIonRouter();
+
+  const warn = (message: string) => toast({ message, duration: 6000, color: 'danger', position: 'top', cssClass: 'toast-app' });
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 30000);
@@ -89,8 +95,16 @@ export default function Orders() {
     setProblem(o);
   };
 
-  const act = (o: PickupOrder) => {
-    if (o.status !== 'listo') return advanceOrder(o.id);
+  const act = async (o: PickupOrder) => {
+    if (o.status !== 'listo') {
+      if (busy) return;
+      setBusy(o.id);
+      const r = await advanceOrder(o.id);
+      setBusy(undefined);
+      // Sin inventario suficiente el pedido se queda en pendiente y se dice qué falta
+      if (!r.ok) void warn(r.shortages?.length ? `No se puede empezar ${o.folio}. ${shortfallText(r.shortages)}` : r.message);
+      return;
+    }
     setOpenId(undefined);
     // Pedidos guardados antes del código para recoger pasan directo al cobro
     if (!o.pickupCode) setCharging({ order: o, code: '' });
@@ -136,12 +150,15 @@ export default function Orders() {
           {o.editedAt && !o.issue && (
             <span className="ob-flag is-edited"><IonIcon icon={createOutline} />El cliente cambió productos</span>
           )}
+          {isPaidOnline(o) && (
+            <span className="ob-flag is-paid"><IonIcon icon={globeOutline} />Pagado en línea</span>
+          )}
         </button>
         <div className="ob-card-actions">
           {o.issue ? (
             <IonButton fill="outline" color="medium" className="ob-act" disabled>Esperando respuesta</IonButton>
           ) : (
-            <IonButton fill={o.status === 'listo' ? 'solid' : 'outline'} color={o.status === 'listo' ? 'success' : undefined} className="ob-act" onClick={() => act(o)}>
+            <IonButton fill={o.status === 'listo' ? 'solid' : 'outline'} color={o.status === 'listo' ? 'success' : undefined} className="ob-act" disabled={busy === o.id} onClick={() => void act(o)}>
               {o.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[o.status as keyof typeof ORDER_NEXT_ACTION]}
             </IonButton>
           )}
@@ -260,6 +277,7 @@ export default function Orders() {
                 )}
                 <div><dt>Pidió</dt><dd>{time(open.createdAt)}</dd></div>
                 {open.payment && <div><dt>Pagó</dt><dd>{PAYMENT_LABEL[open.payment.method]}{sale ? ` · venta #${sale.folio}` : ''}</dd></div>}
+                {!open.payment && <div><dt>Pago</dt><dd>{isPaidOnline(open) ? 'Pagado en línea · solo pide el código' : 'Se paga al recoger'}</dd></div>}
               </dl>
 
               {open.note && <p className="ord-note">“{open.note}”</p>}
@@ -323,7 +341,7 @@ export default function Orders() {
                     Producto agotado o cancelar
                   </IonButton>
                   {!open.issue && (
-                    <IonButton className="btn-lg" color={open.status === 'listo' ? 'success' : undefined} onClick={() => act(open)}>
+                    <IonButton className="btn-lg" color={open.status === 'listo' ? 'success' : undefined} disabled={busy === open.id} onClick={() => void act(open)}>
                       {open.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[open.status]}
                     </IonButton>
                   )}
@@ -357,9 +375,19 @@ export default function Orders() {
         order={verifying?.order}
         orders={orders}
         onClose={() => setVerifying(null)}
-        onVerified={(order, code) => {
+        onVerified={async (order, code) => {
+          if (!isPaidOnline(order)) {
+            setVerifying(null);
+            setCharging({ order, code });
+            return null;
+          }
+          // Ya pagado en la app: no se cobra. El servidor valida el código (intentos limitados, un solo uso)
+          const r = await deliverOrder(order.id, 'en_linea', order.total, code);
+          if (!r.ok) return r.message;
           setVerifying(null);
-          setCharging({ order, code });
+          setView('entregado');
+          router.push('/panel/venta-completada', 'forward');
+          return null;
         }}
       />
 
@@ -371,9 +399,10 @@ export default function Orders() {
             folio: charging.order.folio,
             total: charging.order.total,
             count: pieces(charging.order),
-            onConfirm: (method, paid) => {
-              const s = deliverOrder(charging.order.id, method, paid, charging.code);
-              if (!s) return;
+            onConfirm: async (method, paid) => {
+              const r = await deliverOrder(charging.order.id, method, paid, charging.code);
+              if (!r.ok) return r.shortages?.length ? `${r.message}` : r.message;
+              const s = r.value;
               setView('entregado');
               toast({
                 message: `${charging.order.folio} entregado · venta #${s.folio}`,
@@ -383,6 +412,7 @@ export default function Orders() {
                 cssClass: 'toast-app',
                 buttons: [{ text: 'Imprimir ticket', handler: () => printSale(s, store, ticketConfig) }],
               });
+              return null;
             },
           }
         }

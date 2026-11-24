@@ -47,6 +47,7 @@
 .pc-body { display: flex; flex-direction: column; }
 .pc-lead { margin: 0 0 18px; color: var(--t-muted); }
 .pc-lead strong { color: var(--t-ink); }
+.pc-paid { margin: -8px 0 16px; padding: 8px 12px; border-radius: 10px; background: var(--t-success-bg, var(--t-primary-bg)); color: var(--ion-color-success-shade); font-weight: 600; }
 .pc-label { font-weight: 600; margin-bottom: 8px; }
 .pc-input {
   width: 100%;
@@ -159,6 +160,7 @@
 .ob-flag.is-waiting { background: var(--t-surface); color: var(--t-warning-text); }
 .ob-flag.is-warn { background: var(--t-danger-bg); color: var(--ion-color-danger); }
 .ob-flag.is-edited { background: var(--t-primary-bg); color: var(--ion-color-primary); }
+.ob-flag.is-paid { background: var(--t-success-bg, var(--t-primary-bg)); color: var(--ion-color-success-shade); }
 .ob-card-actions { display: flex; align-items: center; gap: 4px; padding: 0 8px 10px 14px; }
 .ob-act { flex: 1; margin: 0; --border-radius: 10px; font-weight: 650; min-height: 40px; }
 .ob-problem { margin: 0; --padding-start: 8px; --padding-end: 8px; }

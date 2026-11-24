@@ -97,6 +97,7 @@ export default function CashCut() {
       cashSales,
       cardSales: sum('tarjeta'),
       transferSales: sum('transferencia'),
+      onlineSales: sum('en_linea'),
       storeSales: originSum('tienda'),
       pickupSales: originSum('pedido'),
       creditSales: sum('credito'),
@@ -112,7 +113,8 @@ export default function CashCut() {
     toast({ message: `Corte #${folio} cerrado`, duration: 1800, color: 'success', position: 'top', cssClass: 'toast-app' });
   };
 
-  const methods: PaymentMethod[] = ['efectivo', 'tarjeta', 'transferencia', 'credito'];
+  // En línea: pedidos pagados en la app; cuentan como venta pero no entran al efectivo de la caja
+  const methods: PaymentMethod[] = ['efectivo', 'tarjeta', 'transferencia', 'credito', 'en_linea'];
   const maxMethod = Math.max(...methods.map(sum), 1);
 
   return (

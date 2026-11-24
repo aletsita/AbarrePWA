@@ -31,7 +31,12 @@ export default function SaleComplete() {
                 <path className="done-tick" d="M38 62l15 15 30-32" />
               </svg>
             </div>
-            <h1>Venta #{sale?.folio} registrada</h1>
+            <h1>{sale?.method === 'en_linea' ? `Venta exitosa · #${sale.folio}` : `Venta #${sale?.folio} registrada`}</h1>
+            {sale?.method === 'en_linea' && (
+              <p className="done-change">
+                Pedido <strong>{sale.orderFolio}</strong> pagado en línea · no se cobró en caja
+              </p>
+            )}
             <p className="done-total money">{money(sale?.total ?? 0)}</p>
             {sale?.method === 'efectivo' && (
               <p className="done-change">
@@ -94,6 +99,8 @@ export default function SaleComplete() {
                   <div className="ticket-row"><span>A crédito</span><span>{money(sale.total - (sale.paid ?? 0))}</span></div>
                   {customer && <div className="ticket-row"><span>Saldo pendiente</span><span>{money(customer.balance)}</span></div>}
                 </>
+              ) : sale.method === 'en_linea' ? (
+                <div className="ticket-row"><span>Pagado en línea</span><span>{money(sale.total)}</span></div>
               ) : (
                 <div className="ticket-row"><span>{PAYMENT_LABEL[sale.method]}</span><span>{money(sale.paid ?? sale.total)}</span></div>
               )}

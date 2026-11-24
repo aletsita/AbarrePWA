@@ -42,6 +42,9 @@ export function printSale(sale: Sale, store: Store, config: TicketConfig, custom
     sale.method === 'credito'
       ? `${sale.paid ? row('Abono en efectivo', sale.paid) : ''}${row('A crédito', sale.total - (sale.paid ?? 0))}
          <div class="sep"></div><div>Cliente: ${esc(sale.customerName ?? '')}</div>${customer ? row('Saldo pendiente', customer.balance) : ''}`
+      : sale.method === 'en_linea'
+        ? `<div class="row b"><span>PAGADO EN LÍNEA</span><span>${money(sale.total)}</span></div>
+         ${sale.customerName ? `<div>Cliente: ${esc(sale.customerName)}</div>` : ''}`
       : `${row(PAYMENT_LABEL[sale.method], sale.paid ?? sale.total)}${sale.method === 'efectivo' ? row('Cambio', change) : ''}
          ${sale.customerName ? `<div>Cliente: ${esc(sale.customerName)}</div>` : ''}`;
   printHtml(
@@ -70,6 +73,7 @@ function cutRows(cut: CashCut): [string, number][] {
     ['Efectivo', cut.cashSales],
     ['Tarjeta', cut.cardSales],
     ['Transferencia', cut.transferSales],
+    ...(cut.onlineSales ? [['En línea (pedidos pagados en la app)', cut.onlineSales] as [string, number]] : []),
     ['A crédito', cut.creditSales ?? 0],
     ['Abonos de clientes', cut.creditPaid ?? 0],
     ['Fondo inicial', cut.openingFund],
