@@ -1,7 +1,7 @@
 import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
 import { closeOutline, mailOutline, personAddOutline, personOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
-import { SelectField, TextField } from '../../../components/Form';
+import { FormSection, SelectField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import { ROLES, type Role } from '../../../data/models';
 
@@ -52,8 +52,7 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
         </IonToolbar>
       </IonHeader>
       <form className="pmodal-body" onSubmit={save}>
-        <p className="form-intro">Podrá entrar al panel con este correo.</p>
-        <div className="form-grid">
+        <FormSection title="Datos del usuario" icon={personOutline} text="Podrá entrar al panel con este correo.">
           <TextField className="is-wide" label="Nombre completo" icon={personOutline} autoCapitalize="words" value={name} onChange={setName}
             error={tried && nameError} autoFocus />
           <TextField className="is-wide" label="Correo" icon={mailOutline} type="email" inputMode="email" placeholder="nombre@correo.mx" value={email}
@@ -61,7 +60,7 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
           <SelectField className="is-wide" label="Rol" hint={ROLE_HINT[role]} value={role} onChange={(v) => setRole(v as Role)}>
             {ROLES.map((r) => <option key={r}>{r}</option>)}
           </SelectField>
-        </div>
+        </FormSection>
       </form>
       <div className="pmodal-foot">
         <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>

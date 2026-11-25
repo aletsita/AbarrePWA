@@ -1,3 +1,5 @@
+import type { SaleType } from '../domain/weight';
+
 // en_linea: pedido pagado en la app (Stripe); al entregarlo no se cobra
 export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'en_linea';
 
@@ -13,6 +15,8 @@ export interface Product {
   stock: number;
   minStock: number;
   barcode: string;
+  // Por pieza (sin valor) o por peso: precio por kg y existencia en kg con 3 decimales
+  saleType?: SaleType;
   photo?: string;
   // Borrado lógico (fecha ISO): no se vende ni se muestra, pero las ventas y cortes que lo nombran siguen igual
   deletedAt?: string;
@@ -25,8 +29,10 @@ export interface Product {
 export interface SaleItem {
   productId: string;
   name: string;
+  // Piezas, o kilos con 3 decimales si `saleType` es peso (entonces `price` es por kg)
   qty: number;
   price: number;
+  saleType?: SaleType;
 }
 
 export interface Sale {

@@ -1,3 +1,4 @@
+import { itemCount, lineTotal, qtyText, roundQty, type SaleType } from '../../../domain/weight';
 import {
   IonButton,
   IonButtons,
@@ -50,7 +51,7 @@ export default function CashCut() {
 
   const today = sales.filter((s) => s.date >= shift.openedAt);
   const total = today.reduce((n, s) => n + s.total, 0);
-  const pieces = today.reduce((n, s) => n + s.items.reduce((m, i) => m + i.qty, 0), 0);
+  const pieces = today.reduce((n, s) => n + itemCount(s.items), 0);
   const byMethod = (m: PaymentMethod) => today.filter((s) => s.method === m);
   const sum = (m: PaymentMethod) => byMethod(m).reduce((n, s) => n + s.total, 0);
   const cashSales = sum('efectivo');
@@ -66,11 +67,11 @@ export default function CashCut() {
   const counted = countedText === '' ? null : Number(countedText);
 
   const top = useMemo(() => {
-    const map = new Map<string, { name: string; qty: number; amount: number }>();
+    const map = new Map<string, { name: string; qty: number; amount: number; saleType?: SaleType }>();
     today.forEach((s) =>
       s.items.forEach((i) => {
-        const cur = map.get(i.productId) ?? { name: i.name, qty: 0, amount: 0 };
-        map.set(i.productId, { ...cur, qty: cur.qty + i.qty, amount: cur.amount + i.qty * i.price });
+        const cur = map.get(i.productId) ?? { name: i.name, qty: 0, amount: 0, saleType: i.saleType };
+        map.set(i.productId, { ...cur, qty: roundQty(cur.qty + i.qty), amount: cur.amount + lineTotal(i.qty, i.price, i.saleType) });
       }),
     );
     return [...map.values()].sort((a, b) => b.qty - a.qty || b.amount - a.amount).slice(0, 5);
@@ -224,7 +225,7 @@ export default function CashCut() {
                         <li key={t.name}>
                           <span className="top-rank">{i + 1}</span>
                           <span className="top-name">{t.name}</span>
-                          <span className="top-qty">{t.qty} pzas</span>
+                          <span className="top-qty">{t.saleType === 'peso' ? qtyText(t.qty, 'peso') : `${t.qty} pzas`}</span>
                           <span className="money top-amt">{money(t.amount)}</span>
                         </li>
                       ))}

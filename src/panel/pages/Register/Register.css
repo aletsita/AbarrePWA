@@ -103,6 +103,10 @@
 }
 @media (prefers-reduced-motion: reduce) { .reg-row { animation: none !important; } }
 
+/* Línea por peso: el peso se toca para volver a pesar */
+.qty-weight { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px; border: 1px solid var(--t-border-strong); border-radius: 8px; background: var(--t-surface-2); color: var(--t-ink); font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; }
+.qty-weight:hover { border-color: var(--ion-color-primary); }
+.qty-weight ion-icon { color: var(--t-muted); font-size: 18px; }
 .qty-mini { display: flex; align-items: center; padding: 2px; border: 1px solid var(--t-border-strong); border-radius: 8px; background: var(--t-surface-2); }
 .qty-mini button {
   display: grid;
@@ -183,17 +187,32 @@
 @media (min-width: 992px) { .reg-footer { display: none; } }
 @media (max-width: 991px) { .reg-summary ion-button[color='secondary'] { display: none; } }
 
-@media (max-width: 699px) {
+/* La tabla de la cuenta se acomoda al ancho de su tarjeta (no al de la ventana):
+   así funciona igual con el menú abierto, en tableta, en ventana a media pantalla o en celular */
+.reg-ticket { container-type: inline-size; container-name: ticket; }
+.reg-row .cell-product strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.unit { overflow-wrap: anywhere; }
+@container ticket (max-width: 760px) {
+  .reg-row { grid-template-columns: minmax(0, 1fr) 120px 96px 40px; gap: 6px; }
+}
+@container ticket (max-width: 600px) {
   .reg-th { display: none; }
-  .reg-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'prod del' 'qty sub'; row-gap: 10px; }
+  .reg-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'prod del' 'qty sub'; row-gap: 10px; padding: 12px 10px; }
   .reg-row .cell-product { grid-area: prod; }
   .c-del { grid-area: del; }
   .c-qty { grid-area: qty; justify-content: flex-start; }
   .c-sub { grid-area: sub; font-size: 1.1rem; }
+  .reg-table { padding: 0 4px 6px; }
+}
+@container ticket (max-width: 360px) {
+  .reg-row .cell-product .pthumb { display: none; }
+  .src-tag { display: none; }
+  .src-tag.is-short { display: inline-flex; }
+}
+
+@media (max-width: 699px) {
   .reg-hint { display: none; }
   .reg-search { padding: 14px; }
-  .reg-table { padding: 0 4px 6px; }
-  .reg-row { padding: 12px 10px; }
   .quick { margin-top: 12px; }
   .quick-row { margin: 0 -14px; padding: 2px 14px 6px; scroll-padding-inline: 14px; }
   .quick-item { max-width: 180px; }
