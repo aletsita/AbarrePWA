@@ -165,7 +165,7 @@ function reservedBy(exceptId) {
     if (seen.has(o.id)) return;
     seen.add(o.id);
     if (o.id === exceptId) return;
-    for (const i of o.items ?? []) map[i.productId] = (map[i.productId] ?? 0) + (Number(i.qty) || 0);
+    for (const i of o.items ?? []) map[i.productId] = roundQty((map[i.productId] ?? 0) + (Number(i.qty) || 0));
   };
   for (const o of db.caja?.orders ?? []) if (ACTIVE.includes(o.status)) add(o);
   for (const o of db.orders) if (ACTIVE.includes(o.status) && (!o.payment || o.payment.status === 'pagado')) add(o);
@@ -179,13 +179,13 @@ function shortagesOf(items, exceptId) {
   if (!db.caja) return [];
   const reserved = reservedBy(exceptId);
   const want = {};
-  for (const i of items ?? []) want[i.productId] = (want[i.productId] ?? 0) + (Number(i.qty) || 0);
+  for (const i of items ?? []) want[i.productId] = roundQty((want[i.productId] ?? 0) + (Number(i.qty) || 0));
   const out = [];
   for (const [id, requested] of Object.entries(want)) {
     const p = db.caja.products.find((x) => x.id === id);
     const available = p ? availableOf(p, reserved) : 0;
     if (requested > available) {
-      out.push({ productId: id, name: p?.name ?? items.find((i) => i.productId === id)?.name ?? 'Producto', requested, available, missing: requested - available });
+      out.push({ productId: id, name: p?.name ?? items.find((i) => i.productId === id)?.name ?? 'Producto', requested, available, missing: roundQty(requested - available) });
     }
   }
   return out;
@@ -222,9 +222,31 @@ function announceStock(before) {
   publish({ type: 'STOCK', items, at: Date.now() });
   const visible = changed
     .map((id) => db.caja.products.find((x) => x.id === id))
-    .filter((p) => p.showInApp !== false)
+    .filter((p) => p.showInApp !== false && !p.deletedAt && p.saleType !== 'peso')
     .map((p) => ({ id: p.id, stock: availableOf(p, reserved) }));
-  if (visible.length) streams.forEach((set) => set.forEach((res) => res.write(`event: inventario\ndata: ${JSON.stringify(visible)}\n\n`)));
+  if (visible.length) broadcast('inventario', visible);
+}
+
+// A todos los clientes conectados al SSE de pedidos
+function broadcast(event, data) {
+  const line = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  streams.forEach((set) => set.forEach((res) => res.write(line)));
+}
+
+// Lo que ve el cliente de cada producto, sin la existencia (esa va en el evento `inventario`)
+function catalogFace() {
+  if (!db.caja) return new Map();
+  return new Map(catalogOf(db.caja).map(({ stock: _stock, ...p }) => [p.id, JSON.stringify(p)]));
+}
+
+// Avisa en vivo los productos que cambiaron (nombre, precio, foto, categoría), los que aparecieron y los que
+// se dejaron de mostrar o se borraron: { productos: CatalogProduct[], quitados: id[] }
+function announceCatalog(before) {
+  const after = catalogFace();
+  const changed = new Set([...after.keys()].filter((id) => before.get(id) !== after.get(id)));
+  const removed = [...before.keys()].filter((id) => !after.has(id));
+  if (!changed.size && !removed.length) return;
+  broadcast('catalogo', { productos: catalogOf(db.caja).filter((p) => changed.has(p.id)), quitados: removed });
 }
 
 // ---------- código para recoger ----------
@@ -265,6 +287,56 @@ function checkPickupCode(o, code) {
   return { status: 422, body: { code: 'codigo-incorrecto', message: `El código no coincide. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.`, intentos: left } };
 }
 
+// ---------- venta por pieza o por peso (igual que src/domain/weight.ts) ----------
+
+// Cuentas en enteros: gramos y centavos
+const toGrams = (kg) => Math.round(kg * 1000);
+const toCents = (pesos) => Math.round(pesos * 100);
+const roundQty = (qty) => toGrams(qty) / 1000;
+const lineCents = (qty, price, saleType) => (saleType === 'peso' ? Math.round((toCents(price) * toGrams(qty)) / 1000) : toCents(price) * Math.round(qty));
+const MAX_GRAMS = 999_999;
+
+// Revisa que cada línea tenga una cantidad válida para su tipo y que el total sea la suma exacta de las líneas.
+// El precio lo pone la caja (es la dueña del catálogo); aquí se evita un total mal sumado o una cantidad imposible.
+function saleProblem(sale) {
+  if (!Array.isArray(sale.items) || !sale.items.length) return 'La venta no tiene productos.';
+  let cents = 0;
+  for (const i of sale.items) {
+    const qty = Number(i.qty);
+    const price = Number(i.price);
+    if (!Number.isFinite(price) || price < 0) return `Precio inválido en ${i.name ?? 'un producto'}.`;
+    const p = db.caja?.products.find((x) => x.id === i.productId);
+    // La línea dice cómo se vendió; si el producto existe, tiene que coincidir con su tipo
+    const weighed = i.saleType === 'peso';
+    if (p && (p.saleType === 'peso') !== weighed) return `${p.name} se vende por ${p.saleType === 'peso' ? 'peso' : 'pieza'}.`;
+    if (weighed) {
+      const g = toGrams(qty);
+      if (!(g >= 1 && g <= MAX_GRAMS) || Math.abs(qty * 1000 - g) > 1e-6) return `Peso inválido en ${i.name ?? 'un producto'}: usa kilos con hasta 3 decimales.`;
+    } else if (!Number.isInteger(qty) || qty < 1) return `Cantidad inválida en ${i.name ?? 'un producto'}: se vende por pieza.`;
+    cents += lineCents(qty, price, i.saleType);
+  }
+  if (toCents(Number(sale.total)) !== cents) return `El total no cuadra: la suma de los productos da $${(cents / 100).toFixed(2)}.`;
+  return null;
+}
+
+// ---------- borrado lógico de productos ----------
+
+// Por qué no se puede borrar (null = se puede): en una cuenta abierta de la caja o apartado en un pedido sin entregar
+function deleteDenied(id) {
+  const p = db.caja?.products.find((x) => x.id === id);
+  if (!p || p.deletedAt) return { status: 404, body: { code: 'no-existe', message: 'Ese producto ya no existe.' } };
+  if (db.caja.held?.includes(id)) {
+    return { status: 409, body: { code: 'producto-en-uso', message: 'Está en una cuenta abierta de la caja. Quítalo de la cuenta antes de borrarlo.' } };
+  }
+  const order =
+    db.caja.orders.find((o) => ACTIVE.includes(o.status) && o.items?.some((i) => i.productId === id)) ??
+    db.orders.find((o) => ACTIVE.includes(o.status) && o.payment?.status === 'pagado' && o.items.some((i) => i.productId === id));
+  if (order) {
+    return { status: 409, body: { code: 'producto-en-uso', message: `Está apartado en el pedido ${order.folio ?? 'de un cliente'}. Entrégalo o cancélalo antes de borrarlo.` } };
+  }
+  return null;
+}
+
 // ---------- revisión de los mensajes que mueven existencias ----------
 
 // index.js la llama antes de reenviar un mensaje del canal. null = pasa; si no, { status, body } y el mensaje
@@ -275,6 +347,8 @@ export function gate(msg) {
     case 'CONFIRM_SALE': {
       const sale = msg.sale;
       if (!sale?.id || sale.orderId || recentSales.has(sale.id)) return null;
+      const wrong = saleProblem(sale);
+      if (wrong) return { status: 422, body: { code: 'venta-invalida', message: wrong } };
       const short = shortagesOf(sale.items);
       return short.length ? stockError(short) : null;
     }
@@ -290,6 +364,8 @@ export function gate(msg) {
       const short = shortagesOf(c.items, c.id);
       return short.length ? stockError(short) : null;
     }
+    case 'DELETE_PRODUCT':
+      return deleteDenied(msg.id);
     case 'ORDER_DELIVER': {
       const c = db.caja.orders.find((x) => x.id === msg.id);
       const o = db.orders.find((x) => x.id === msg.id);
@@ -380,9 +456,12 @@ const QUIET = ['PING', 'BYE', 'WHO', 'STOCK'];
 
 export function onRelayMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
-  const before = QUIET.includes(msg.type) ? null : availability();
+  const quiet = QUIET.includes(msg.type);
+  const before = quiet ? null : availability();
+  const face = quiet ? null : catalogFace();
   handleRelay(msg);
   if (before) announceStock(before);
+  if (face) announceCatalog(face);
 }
 
 function handleRelay(msg) {
@@ -436,16 +515,32 @@ function handleRelay(msg) {
       applySale(msg.sale);
       break;
     case 'UPSERT_PRODUCT':
-      if (db.caja && msg.product?.id) db.caja.products = [msg.product, ...db.caja.products.filter((p) => p.id !== msg.product.id)];
+      // Un cambio atrasado no revive un producto borrado
+      if (db.caja && msg.product?.id && !db.caja.products.some((p) => p.id === msg.product.id && p.deletedAt)) {
+        db.caja.products = [msg.product, ...db.caja.products.filter((p) => p.id !== msg.product.id)];
+      }
+      break;
+    case 'DELETE_PRODUCT':
+      if (typeof msg.id === 'string') {
+        recentDeletes.set(msg.id, msg.at ?? Date.now());
+        markDeleted(msg.id, msg.at ?? Date.now());
+      }
       break;
     case 'ADD_STOCK':
       for (const e of msg.entries ?? []) {
         const p = db.caja?.products.find((x) => x.id === e.productId);
-        if (p) p.stock += Number(e.qty) || 0;
+        if (p) p.stock = roundQty(p.stock + (Number(e.qty) || 0));
       }
       break;
   }
   if (['PING', 'BYE', 'SNAPSHOT', 'CLOSE_CUT', 'OPEN_SHIFT'].includes(msg.type)) checkStore();
+}
+
+// Borrados que la caja quizá todavía no trae en su SNAPSHOT (armado antes de recibirlos)
+const recentDeletes = new Map(); // id → at
+function markDeleted(id, at) {
+  const p = db.caja?.products.find((x) => x.id === id);
+  if (p && !p.deletedAt) Object.assign(p, { deletedAt: new Date(at).toISOString(), showInApp: false });
 }
 
 // Una venta descuenta su existencia una sola vez (puede llegar como CONFIRM_SALE o dentro de ORDER_DELIVER).
@@ -460,7 +555,7 @@ function applySale(sale) {
 function discount(items) {
   for (const i of items ?? []) {
     const p = db.caja.products.find((x) => x.id === i.productId);
-    if (p) p.stock = Math.max(0, p.stock - i.qty);
+    if (p) p.stock = Math.max(0, roundQty(p.stock - i.qty));
   }
 }
 
@@ -474,6 +569,14 @@ function onSnapshot(data) {
     closed: !!data.closedCutId,
     products: Array.isArray(data.products) ? data.products.map((p) => ({ ...p })) : [],
     users: Array.isArray(data.users) ? data.users.map(({ name, email, role, active }) => ({ name, email, role, active })) : [],
+    // Productos en la cuenta en pantalla y en las cuentas abiertas
+    held: [
+      ...new Set(
+        [...(Array.isArray(data.ticket) ? data.ticket : []), ...(Array.isArray(data.parked) ? data.parked.flatMap((a) => a.lines ?? []) : [])]
+          .map((l) => l?.product?.id)
+          .filter(Boolean),
+      ),
+    ],
     orders: Array.isArray(data.orders)
       ? data.orders.map(({ id, folio, status, items, total, cancel, issue, editedAt, online }) => ({ id, folio, status, items, total, cancel, issue, editedAt, online }))
       : [],
@@ -483,6 +586,10 @@ function onSnapshot(data) {
   for (const [id, s] of recentSales) {
     if (Date.now() - s.at > RECENT_SALE_MS) recentSales.delete(id);
     else if (!known.has(id)) discount(s.items);
+  }
+  for (const [id, at] of recentDeletes) {
+    if (Date.now() - at > RECENT_SALE_MS) recentDeletes.delete(id);
+    else markDeleted(id, at);
   }
   // Reconcilia los pedidos: folio, estado y productos de la caja; reenvía lo que no le llegó
   for (const o of db.orders) {
@@ -541,7 +648,7 @@ function sendToCaja(o) {
 function catalogOf(caja, exceptId) {
   const reserved = reservedBy(exceptId);
   return caja.products
-    .filter((p) => p.showInApp !== false)
+    .filter((p) => p.showInApp !== false && !p.deletedAt && p.saleType !== 'peso')
     .map(({ id, name, category, price, stock, photo, description }) => ({
       id,
       name,
@@ -626,7 +733,7 @@ async function route(method, path, token, body, headers) {
   const m = path.match(/^\/pedidos\/([^/]+)(\/resolver|\/cambiar|\/cancelar|\/pagar)?$/);
   // Los pedidos sin pagar también son del cliente (para reintentar el pago); la caja aún no les pone folio
   const mine = (c) => db.orders.find((x) => x.id === decodeURIComponent(m[1]) && x.userId === c.sub && (x.folio || x.payment));
-  const key = m && m[1] !== 'eventos' ? `${method} /pedidos/:id${m[2] ?? ''}` : `${method} ${path}`;
+  const key = m && m[1] !== 'eventos' ? `${method} /pedidos/:id${m[2] ?? ''}` : /^\/productos\/[^/]+$/.test(path) ? `${method} /productos/:id` : `${method} ${path}`;
 
   switch (key) {
     case 'POST /auth/registro': {
@@ -671,6 +778,21 @@ async function route(method, path, token, body, headers) {
       return [200, storeStatus()];
     }
 
+    // Borrado lógico desde la app del personal: lo revisa igual que el canal de la caja y le avisa a todos
+    case 'DELETE /productos/:id': {
+      const c = requireRole(token, 'personal');
+      const user = db.users.find((u) => u.id === c.sub);
+      if (!user || !staffOf(user.email)) throw new HttpError(403, 'prohibido', 'No tienes permiso para esta acción.');
+      if (!db.caja) throw new HttpError(503, 'sin-caja', 'La caja no está conectada. Inténtalo en un momento.');
+      const id = decodeURIComponent(path.slice('/productos/'.length));
+      const denied = deleteDenied(id);
+      if (denied) throw new HttpError(denied.status, denied.body.code, denied.body.message);
+      const msg = { type: 'DELETE_PRODUCT', id, at: Date.now() };
+      onRelayMessage(msg);
+      publish(msg);
+      save();
+      return [204, null];
+    }
     case 'GET /catalogo': {
       verify(token);
       const caja = await currentCaja();

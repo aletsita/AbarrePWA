@@ -5,7 +5,6 @@ import {
   IonIcon,
   IonPage,
   IonToolbar,
-  useIonAlert,
   useIonRouter,
   useIonToast,
   useIonViewDidEnter,
@@ -24,15 +23,19 @@ import {
   personOutline,
   phonePortraitOutline,
   remove,
+  scaleOutline,
   trashOutline,
   trendingUpOutline,
 } from 'ionicons/icons';
 import { useMemo, useRef, useState } from 'react';
+import { useAppAlert } from '../../../components/AppAlert';
 import { BarcodeSearch, type BarcodeSearchHandle } from '../../../components/BarcodeSearch';
 import { ProductThumb } from '../../../components/ProductThumb';
 import { useApp, type ProductView } from '../../../context/AppContext';
 import { availableCredit, money, type Product } from '../../../data/models';
 import { availableLabel, clampToAvailable, piecesLabel } from '../../../domain/stock';
+import { isWeighed, lineTotal, qtyText, roundQty } from '../../../domain/weight';
+import { WeightModal } from '../../../components/WeightModal';
 import { ago, useNow } from '../../../hooks/useNow';
 import { PanelHeader } from '../../components/PanelHeader';
 import { PromptModal } from '../../components/PromptModal';
@@ -109,7 +112,7 @@ function QuickPicks({ onPick }: { onPick: (p: ProductView) => void }) {
                 <strong>{p.name}</strong>
                 {out ? <span className="stock-out">Sin stock</span> : <span className="money">{money(p.price)}</span>}
               </span>
-              {inTicket && <span className="quick-count">{inTicket}</span>}
+              {inTicket && <span className="quick-count">{isWeighed(p) ? qtyText(inTicket, 'peso') : inTicket}</span>}
             </button>
           );
         })}
@@ -147,17 +150,19 @@ function AccountTabs({ canAdd }: { canAdd: boolean }) {
 
 export default function Register() {
   const {
-    ticket, ticketTotal, ticketCount, ticketAdd, ticketQty, ticketRemove, ticketClear, products,
+    ticket, ticketTotal, ticketCount, ticketAdd, ticketQty, ticketSetQty, ticketRemove, ticketClear, products,
     account, customers, updateAccount, linkCustomer, availableFor, ticketShortages,
   } = useApp();
   const [picking, setPicking] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const customer = customers.find((c) => c.id === account.customerId);
   const canAddAccount = ticket.length > 0 || !!account.customerId;
-  const [alert] = useIonAlert();
+  const showAlert = useAppAlert();
   const [toast] = useIonToast();
   const [payOpen, setPayOpen] = useState(false);
   const [newCode, setNewCode] = useState<string>();
+  // Producto por peso esperando que se escriba lo que marca la báscula (`kg`: la línea que se está corrigiendo)
+  const [weighing, setWeighing] = useState<{ product: Product; kg?: number } | null>(null);
   const search = useRef<BarcodeSearchHandle>(null);
 
   const active = useRef(false);
@@ -170,18 +175,25 @@ export default function Register() {
     active.current = false;
   });
 
+  // Sin stock: alerta como en la móvil (hay que leerla); un tope alcanzado es un aviso breve
   const warn = (message: string, color: 'warning' | 'danger') =>
-    toast({ message, duration: color === 'danger' ? 3200 : 2600, color, position: 'top', cssClass: 'toast-app' });
+    color === 'danger'
+      ? void showAlert({ tone: 'error', title: 'Sin stock', message: message.replace(/^Sin stock: /, ''), primary: 'Entendido' }).then(() => search.current?.focus())
+      : void toast({ message, duration: 2600, color, position: 'top', cssClass: 'toast-app' });
 
   // Nunca más de lo disponible: existencia − apartado por pedidos − lo que ya está en esta u otras cuentas
   const addProduct = (p: Product, qty: number) => {
     const room = availableFor(p.id);
+    if (isWeighed(p) && room > 0) {
+      setWeighing({ product: p });
+      return;
+    }
     const r = clampToAvailable(qty, room);
     if (r.qty === 0) {
       warn(
         p.stock <= 0
-          ? `Sin stock: ${p.name} no tiene piezas en inventario.`
-          : `Sin stock: las ${piecesLabel(p.stock)} de ${p.name} ya están apartadas por pedidos o en cuentas abiertas.`,
+          ? `Sin stock: ${p.name} no tiene existencia en inventario.`
+          : `Sin stock: ${isWeighed(p) ? 'los' : 'las'} ${piecesLabel(p.stock, p.saleType)} de ${p.name} ya están apartad${isWeighed(p) ? 'os' : 'as'} por pedidos o en cuentas abiertas.`,
         'danger',
       );
       return;
@@ -199,15 +211,25 @@ export default function Register() {
   };
   const shortOf = (id: string) => ticketShortages.find((s) => s.product.id === id);
 
+  // Peso escrito: se agrega como línea nueva o corrige el de la línea que ya estaba
+  const onWeight = (kg: number) => {
+    if (!weighing) return;
+    if (weighing.kg) ticketSetQty(weighing.product.id, kg);
+    else ticketAdd(weighing.product, kg);
+    setWeighing(null);
+    search.current?.focus();
+  };
+  // Tope de la pesada: lo disponible, más lo que ya tiene la línea si se está corrigiendo
+  const weighMax = weighing ? roundQty(availableFor(weighing.product.id) + (weighing.kg ?? 0)) : null;
+
   const cancel = () =>
-    alert({
-      header: '¿Cancelar la venta?',
+    void showAlert({
+      tone: 'warning',
+      title: '¿Cancelar la venta?',
       message: 'Se quitarán todos los productos de la cuenta.',
-      buttons: [
-        { text: 'No', role: 'cancel' },
-        { text: 'Cancelar venta', role: 'destructive', handler: ticketClear },
-      ],
-    });
+      primary: { text: 'Cancelar venta', danger: true },
+      secondary: 'No, seguir',
+    }).then((yes) => yes && ticketClear());
 
   const iva = ticketTotal - ticketTotal / 1.16;
 
@@ -275,10 +297,10 @@ export default function Register() {
                       <ProductThumb product={l.product} size={40} />
                       <span>
                         <strong>{l.product.name}</strong>
-                        <span className="unit">{money(l.product.price)} c/u · {l.product.barcode}</span>
+                        <span className="unit">{money(l.product.price)} {isWeighed(l.product) ? 'por kg' : 'c/u'} · {l.product.barcode}</span>
                         {shortOf(l.product.id) && (
                           <span className="src-tag is-short" role="alert">
-                            <IonIcon icon={alertCircleOutline} /> Solo hay {availableLabel(shortOf(l.product.id)!.available)}
+                            <IonIcon icon={alertCircleOutline} /> Solo hay {availableLabel(shortOf(l.product.id)!.available, l.product.saleType)}
                           </span>
                         )}
                         {l.source === 'movil' ? (
@@ -289,6 +311,17 @@ export default function Register() {
                       </span>
                     </span>
                     <span className="c-qty" role="cell">
+                      {isWeighed(l.product) ? (
+                        <button
+                          type="button"
+                          className="qty-weight"
+                          onClick={() => setWeighing({ product: l.product, kg: l.qty })}
+                          aria-label={`Cambiar el peso de ${l.product.name}`}
+                        >
+                          <IonIcon icon={scaleOutline} />
+                          {qtyText(l.qty, 'peso')}
+                        </button>
+                      ) : (
                       <span className="qty-mini">
                         <button type="button" onClick={() => ticketQty(l.product.id, -1)} aria-label="Uno menos">
                           <IonIcon icon={remove} />
@@ -298,8 +331,9 @@ export default function Register() {
                           <IonIcon icon={add} />
                         </button>
                       </span>
+                      )}
                     </span>
-                    <span className="num c-sub money" role="cell">{money(l.qty * l.product.price)}</span>
+                    <span className="num c-sub money" role="cell">{money(lineTotal(l.qty, l.product.price, l.product.saleType))}</span>
                     <span className="c-del" role="cell">
                       <button type="button" onClick={() => ticketRemove(l.product.id)} aria-label={`Quitar ${l.product.name}`}>
                         <IonIcon icon={trashOutline} />
@@ -334,6 +368,7 @@ export default function Register() {
             <LiveDevice />
           </aside>
         </div>
+        <WeightModal product={weighing?.product ?? null} initialKg={weighing?.kg} max={weighMax} onConfirm={onWeight} onClose={() => setWeighing(null)} />
       </IonContent>
 
       <IonFooter className="action-footer reg-footer ion-no-border">

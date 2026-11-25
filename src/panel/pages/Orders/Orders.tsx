@@ -1,4 +1,5 @@
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonRouter, useIonToast } from '@ionic/react';
+import { useAppAlert } from '../../../components/AppAlert';
 import {
   alertCircleOutline,
   bagCheckOutline,
@@ -63,7 +64,8 @@ export default function Orders() {
   const [toast] = useIonToast();
   const router = useIonRouter();
 
-  const warn = (message: string) => toast({ message, duration: 6000, color: 'danger', position: 'top', cssClass: 'toast-app' });
+  const showAlert = useAppAlert();
+  const warn = (message: string) => showAlert({ tone: 'error', title: 'No se pudo mover el pedido', message, primary: 'Entendido' });
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 30000);
