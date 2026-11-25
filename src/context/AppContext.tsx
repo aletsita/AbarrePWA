@@ -29,6 +29,7 @@ import {
   type TicketConfig,
   type User,
 } from '../data/models';
+import { productInUse } from '../data/productUse';
 import { ACTIVE_STATUSES, isPaidOnline, nextStatus, orderFolio, PICKUP_CODE, reservedStock, type CancelReason, type OrderRequest, type PickupOrder } from '../data/pickup';
 import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, ORDERS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
 import { openSync, type SendResult, type SyncLink } from '../lib/sync';
@@ -130,6 +131,8 @@ type Action =
   | { type: 'CONFIRM_SALE'; sale: Sale }
   | { type: 'MARK_SALE_SYNCED'; saleId: string }
   | { type: 'UPSERT_PRODUCT'; product: Product; isNew: boolean; at: number }
+  // Borrado lógico: el producto se queda (las ventas y cortes lo nombran) pero ya no se vende ni se muestra
+  | { type: 'DELETE_PRODUCT'; id: string; at: number }
   | { type: 'ADD_STOCK'; entries: StockEntry[]; at: number; note: string }
   | { type: 'ADD_DEVICE'; device: Device }
   | { type: 'REMOVE_DEVICE'; id: string }
@@ -285,9 +288,12 @@ function resetAccount(s: Data, at: number): AccountInfo {
 
 const inActive = (s: Data, x: SentItem) => !x.accountId || x.accountId === s.account.id;
 
+const isDeleted = (s: Data, id: string) => !!s.products.find((p) => p.id === id)?.deletedAt;
+
 function reducer(s: Data, a: Action): Data {
   switch (a.type) {
     case 'SCAN_TO_REGISTER': {
+      if (isDeleted(s, a.product.id)) return s;
       // El celular elige la cuenta; sin accountId, o si esa cuenta ya no está abierta, va a la activa
       const parkedTarget = a.accountId && a.accountId !== s.account.id ? s.parked.find((p) => p.id === a.accountId) : undefined;
       return {
@@ -326,6 +332,7 @@ function reducer(s: Data, a: Action): Data {
       };
     }
     case 'TICKET_ADD':
+      if (isDeleted(s, a.product.id)) return s;
       return { ...s, ticket: addToTicket(s.ticket, a.product, a.qty, 'manual', a.at) };
     case 'TICKET_QTY':
       return {
@@ -389,6 +396,8 @@ function reducer(s: Data, a: Action): Data {
       return { ...s, sales: s.sales.map((x) => (x.id === a.saleId ? { ...x, pending: false } : x)) };
     case 'UPSERT_PRODUCT': {
       const prev = s.products.find((p) => p.id === a.product.id);
+      // Un cambio que llega tarde (de un celular sin conexión) no revive un producto borrado
+      if (prev?.deletedAt) return s;
       const diff = a.product.stock - (prev?.stock ?? 0);
       const move: Movement | null = !prev
         ? { id: uid(), productId: a.product.id, type: 'alta', qty: a.product.stock, date: iso(a.at), note: 'Alta del producto' }
@@ -403,6 +412,9 @@ function reducer(s: Data, a: Action): Data {
         parked: s.parked.map((p) => ({ ...p, lines: p.lines.map((l) => (l.product.id === a.product.id ? { ...l, product: a.product } : l)) })),
       };
     }
+    case 'DELETE_PRODUCT':
+      if (!s.products.some((p) => p.id === a.id && !p.deletedAt)) return s;
+      return { ...s, products: s.products.map((p) => (p.id === a.id ? { ...p, deletedAt: iso(a.at), showInApp: false } : p)) };
     case 'ADD_STOCK':
       return {
         ...s,
@@ -436,7 +448,7 @@ function reducer(s: Data, a: Action): Data {
       const items: SaleItem[] = [];
       for (const [id, n] of Object.entries(qty)) {
         const p = s.products.find((x) => x.id === id);
-        if (!p || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
+        if (!p || p.deletedAt || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
         items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
       }
       if (!items.length) return s;
@@ -505,7 +517,7 @@ function reducer(s: Data, a: Action): Data {
       const items: SaleItem[] = [];
       for (const [id, n] of Object.entries(qty)) {
         const p = s.products.find((x) => x.id === id);
-        if (!p || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
+        if (!p || p.deletedAt || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
         items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
       }
       if (!items.length) return s;
@@ -598,6 +610,8 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
 
   receiveOrder: (request: OrderRequest) => void;
   advanceOrder: (id: string) => Promise<Outcome<null>>;
+  // Borrado lógico; lo revisa el servidor (no se borra lo que está en una cuenta o apartado en un pedido)
+  deleteProduct: (id: string) => Promise<Outcome<null>>;
   cancelOrder: (id: string, reason: CancelReason, missing: string[], note?: string) => void;
   reportShortage: (id: string, missing: string[]) => void;
   // method en_linea: pedido pagado en la app, no se cobra (el servidor valida el código)
@@ -806,7 +820,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const createdSet = new Set(created);
-    const products = [...created.map((id) => byId.get(id)!), ...[...byId.values()].filter((p) => !createdSet.has(p.id))];
+    const products = [...created.map((id) => byId.get(id)!), ...[...byId.values()].filter((p) => !createdSet.has(p.id))].filter((p) => !p.deletedAt);
     return { products, pending: pending.reverse() };
   }, [data.products, data.sales, queue, uploading]);
 
@@ -865,6 +879,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ok: true, value: sale, offline: r.offline };
     },
     [send, employee, addCreditPayment],
+  );
+
+  // Sin servidor no se borra: él revisa los pedidos de los clientes y avisa a todos los equipos
+  const deleteProduct = useCallback(
+    async (id: string): Promise<Outcome<null>> => {
+      const s = dataRef.current;
+      if (!s.products.some((p) => p.id === id && !p.deletedAt)) return { ok: false, code: 'no-existe', message: 'Ese producto ya no existe.' };
+      const busy = productInUse(id, s);
+      if (busy) return { ok: false, code: 'producto-en-uso', message: busy };
+      if (!channel.current || !syncUp.current) return { ok: false, code: 'sin-conexion', message: 'Sin conexión con el servidor no se puede borrar un producto.' };
+      const r = await send({ type: 'DELETE_PRODUCT', id, at: Date.now() });
+      return r.ok ? { ok: true, value: null } : refused(r, 'No se pudo borrar el producto.');
+    },
+    [send],
   );
 
   // Empezar a preparar exige que alcance el inventario (lo revisa el servidor; si no, se queda en pendiente)
@@ -997,6 +1025,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     confirmSale,
     receiveOrder: (request) => dispatch({ type: 'ORDER_RECEIVED', request }),
     advanceOrder,
+    deleteProduct,
     cancelOrder: (id, reason, missing, note) => dispatch({ type: 'ORDER_CANCEL', id, reason, missing, note: note?.trim() || undefined, at: Date.now() }),
     reportShortage: (id, missing) => dispatch({ type: 'ORDER_ISSUE', id, missing, at: Date.now() }),
     deliverOrder,
