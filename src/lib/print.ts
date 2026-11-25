@@ -1,3 +1,4 @@
+import { itemCount, lineTotal, qtyText } from '../domain/weight';
 import { money, ORIGIN_LABEL, PAYMENT_LABEL, saleOrigin, time, type CashCut, type Customer, type Sale, type Store, type TicketConfig } from '../data/models';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -34,7 +35,11 @@ function printHtml(title: string, body: string) {
 export function printSale(sale: Sale, store: Store, config: TicketConfig, customer?: Customer) {
   const [first, ...rest] = config.header.split('\n');
   const rows = sale.items
-    .map((i) => `<tr><td>${i.qty} ${esc(i.name)}</td><td class="n">${money(i.qty * i.price)}</td></tr>`)
+    .map((i) =>
+      i.saleType === 'peso'
+        ? `<tr><td>${esc(i.name)}<br>${qtyText(i.qty, 'peso')} × ${money(i.price)}/kg</td><td class="n">${money(lineTotal(i.qty, i.price, i.saleType))}</td></tr>`
+        : `<tr><td>${i.qty} ${esc(i.name)}</td><td class="n">${money(lineTotal(i.qty, i.price))}</td></tr>`,
+    )
     .join('');
   const change = sale.method === 'efectivo' && sale.paid ? sale.paid - sale.total : 0;
   const row = (k: string, v: number) => `<div class="row"><span>${k}</span><span>${money(v)}</span></div>`;
@@ -138,7 +143,7 @@ export function downloadSalesCsv(sales: Sale[], store: Store, period: string) {
       s.orderFolio ?? '',
       s.employee,
       s.customerName ?? '',
-      s.items.reduce((n, i) => n + i.qty, 0),
+      itemCount(s.items),
       PAYMENT_LABEL[s.method],
       s.total.toFixed(2),
       (s.paid ?? (s.method === 'credito' ? 0 : s.total)).toFixed(2),

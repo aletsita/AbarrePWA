@@ -1,0 +1,22 @@
+/* Captura de peso: tarjeta compacta centrada, el número grande para leerlo de lejos */
+ion-modal.weight-modal {
+  --width: min(400px, calc(100vw - 32px));
+  --height: auto;
+  --border-radius: var(--t-radius);
+  --box-shadow: var(--t-shadow-pop);
+}
+.weight { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 22px 18px; background: var(--t-surface); text-align: center; }
+.weight-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--t-primary-bg); color: var(--ion-color-primary); font-size: 28px; }
+.weight h2 { margin: 4px 0 0; font-size: 1.2rem; font-weight: 800; }
+.weight-price { margin: 0; color: var(--t-muted); }
+.weight-field { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 8px; text-align: left; font-weight: 650; }
+.weight-input { display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1.5px solid var(--t-border-strong); border-radius: var(--t-radius-sm); background: var(--t-surface); }
+.weight-input:focus-within { border-color: var(--ion-color-primary); box-shadow: 0 0 0 3px var(--t-primary-bg); }
+.weight-input.is-error { border-color: var(--ion-color-danger); }
+.weight-input input { flex: 1; min-width: 0; height: 56px; border: 0; outline: 0; background: transparent; color: var(--t-ink); font-size: 1.8rem; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.weight-input b { font-size: 1.1rem; color: var(--t-muted); }
+.weight-msg { min-height: 1.4em; margin: 0; color: var(--t-muted); font-size: 0.95rem; }
+.weight-msg strong { color: var(--t-ink); font-size: 1.05rem; }
+.weight-msg.is-error { color: var(--ion-color-danger); font-weight: 600; }
+.weight-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-top: 8px; }
+.weight-actions ion-button { margin: 0; }

@@ -1,0 +1,8 @@
+.sale-type { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sale-type button { cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 72px; padding: 12px 14px; border: 1.5px solid var(--t-border-strong); border-radius: var(--t-radius-sm); background: var(--t-surface); color: var(--t-ink); font: inherit; text-align: left; }
+.sale-type button ion-icon { font-size: 22px; color: var(--t-muted); margin-bottom: 4px; }
+.sale-type button strong { font-size: 1rem; }
+.sale-type button span { font-size: 0.85rem; color: var(--t-muted); }
+.sale-type button.is-active { border-color: var(--ion-color-primary); background: var(--t-primary-bg); }
+.sale-type button.is-active ion-icon { color: var(--ion-color-primary); }
+.sale-type button:focus-visible { outline: 3px solid var(--ion-color-primary); outline-offset: 2px; }

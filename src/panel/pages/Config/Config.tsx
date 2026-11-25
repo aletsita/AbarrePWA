@@ -1,5 +1,6 @@
 import { IonButton, IonContent, IonIcon, IonPage, IonToggle, useIonToast } from '@ionic/react';
-import { callOutline, locationOutline, mailOutline, personAddOutline, personOutline, saveOutline, storefrontOutline } from 'ionicons/icons';
+import { useAppAlert } from '../../../components/AppAlert';
+import { callOutline, documentTextOutline, eyeOutline, locationOutline, mailOutline, personAddOutline, personOutline, receiptOutline, saveOutline, storefrontOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { AreaField, FormSection, SwitchField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
@@ -17,9 +18,10 @@ const TABS: { id: Tab; label: string }[] = [
 
 type StoreField = { key: keyof Store; label: string; icon?: string; wide?: boolean; hint?: string; inputMode?: 'tel' | 'email' };
 
-const STORE_SECTIONS: { title: string; text?: string; fields: StoreField[] }[] = [
+const STORE_SECTIONS: { title: string; text?: string; icon: string; fields: StoreField[] }[] = [
   {
     title: 'Negocio',
+    icon: storefrontOutline,
     fields: [
       { key: 'name', label: 'Nombre de la tienda', icon: storefrontOutline, hint: 'Aparece en el ticket y en el menú' },
       { key: 'owner', label: 'Dueño', icon: personOutline },
@@ -28,6 +30,7 @@ const STORE_SECTIONS: { title: string; text?: string; fields: StoreField[] }[] =
   },
   {
     title: 'Contacto',
+    icon: callOutline,
     fields: [
       { key: 'phone', label: 'Teléfono', icon: callOutline, inputMode: 'tel' },
       { key: 'email', label: 'Correo', icon: mailOutline, inputMode: 'email' },
@@ -35,6 +38,7 @@ const STORE_SECTIONS: { title: string; text?: string; fields: StoreField[] }[] =
   },
   {
     title: 'Facturación y caja',
+    icon: receiptOutline,
     fields: [
       { key: 'rfc', label: 'RFC', hint: 'Se imprime en cada ticket' },
       { key: 'register', label: 'Nombre de la caja', hint: 'Para distinguirla si tienes varias' },
@@ -46,6 +50,7 @@ const STORE_FIELDS = STORE_SECTIONS.flatMap((g) => g.fields);
 export default function Config() {
   const { store, ticketConfig, users, user, updateStore, updateTicketConfig, saveUser } = useApp();
   const [toast] = useIonToast();
+  const showAlert = useAppAlert();
   const [addingUser, setAddingUser] = useState(false);
   const [tab, setTab] = useState<Tab>('tienda');
   const [form, setForm] = useState<Store>(store);
@@ -63,7 +68,7 @@ export default function Config() {
 
   const saveStore = () => {
     if (!form.name.trim() || !form.register.trim()) {
-      toast({ message: 'El nombre de la tienda y de la caja no pueden quedar vacíos', duration: 2200, color: 'danger', position: 'top', cssClass: 'toast-app' });
+      void showAlert({ tone: 'warning', title: 'Faltan datos', message: 'El nombre de la tienda y el de la caja no pueden quedar vacíos.', primary: 'Entendido' });
       return;
     }
     updateStore({ ...form, name: form.name.trim(), register: form.register.trim() });
@@ -88,7 +93,7 @@ export default function Config() {
           {tab === 'tienda' && (
             <section className="pcard cfg-card">
               {STORE_SECTIONS.map((g) => (
-                <FormSection key={g.title} title={g.title} text={g.text}>
+                <FormSection key={g.title} title={g.title} text={g.text} icon={g.icon}>
                   {g.fields.map((f) => (
                     <TextField
                       key={f.key}
@@ -179,11 +184,11 @@ export default function Config() {
           {tab === 'ticket' && (
             <div className="cfg-ticket">
               <section className="pcard cfg-card">
-                <FormSection title="Texto" text="Cada renglón del encabezado se imprime en una línea; el primero va en negritas.">
+                <FormSection title="Texto" icon={documentTextOutline} text="Cada renglón del encabezado se imprime en una línea; el primero va en negritas.">
                   <AreaField className="is-wide" label="Encabezado" rows={3} value={ticket.header} onChange={(v) => setTicket((t) => ({ ...t, header: v }))} />
                   <AreaField className="is-wide" label="Mensaje al pie" rows={2} value={ticket.footer} onChange={(v) => setTicket((t) => ({ ...t, footer: v }))} />
                 </FormSection>
-                <FormSection title="Qué mostrar">
+                <FormSection title="Qué mostrar" icon={eyeOutline}>
                   <SwitchField label="Logo" hint="Arriba del nombre de la tienda" checked={ticket.showLogo} onChange={(v) => setTicket((t) => ({ ...t, showLogo: v }))} />
                   <SwitchField label="Quién atendió" hint="Nombre del cajero al pie del ticket" checked={ticket.showEmployee}
                     onChange={(v) => setTicket((t) => ({ ...t, showEmployee: v }))} />

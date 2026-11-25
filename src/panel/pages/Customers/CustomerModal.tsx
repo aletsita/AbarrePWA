@@ -1,5 +1,5 @@
 import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { callOutline, closeOutline, personOutline, saveOutline } from 'ionicons/icons';
+import { callOutline, closeOutline, personOutline, saveOutline, walletOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { AreaField, FormSection, MoneyField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
@@ -50,14 +50,14 @@ export function CustomerModal({ isOpen, customer, onClose, onSaved }: Props) {
         </IonToolbar>
       </IonHeader>
       <form className="pmodal-body" onSubmit={save}>
-        <FormSection title="Datos del cliente">
+        <FormSection title="Datos del cliente" icon={personOutline}>
           <TextField className="is-wide" label="Nombre" icon={personOutline} placeholder="Ej. Guadalupe Torres" value={name} onChange={setName}
             autoCapitalize="words" autoFocus />
           <TextField className="is-wide" label="Teléfono" optional icon={callOutline} inputMode="tel" placeholder="55 1234 5678" value={phone} onChange={setPhone} />
           <AreaField className="is-wide" label="Notas" optional rows={2} placeholder="Ej. Paga los viernes" value={note} onChange={setNote} />
         </FormSection>
 
-        <FormSection title="Crédito" text="Lo máximo que puede deber. Cada compra a crédito descuenta de aquí y cada abono lo libera.">
+        <FormSection title="Crédito" icon={walletOutline} text="Lo máximo que puede deber. Cada compra a crédito descuenta de aquí y cada abono lo libera.">
           <MoneyField label="Límite de crédito" value={limit} onChange={setLimit} error={below && 'Es menor que lo que ya debe'} />
           {customer ? (
             <div className="fld">

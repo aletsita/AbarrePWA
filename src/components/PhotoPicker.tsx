@@ -1,24 +1,25 @@
-import { IonIcon, useIonToast } from '@ionic/react';
+import { IonIcon } from '@ionic/react';
+import { useAppAlert } from './AppAlert';
 import { cameraOutline, closeCircle } from 'ionicons/icons';
 import { useRef } from 'react';
 import { readPhoto } from '../lib/photo';
 
 export function PhotoPicker({ value, onChange }: { value?: string; onChange: (photo?: string) => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const [toast] = useIonToast();
+  const showAlert = useAppAlert();
 
   const onFile = async (file?: File) => {
     if (!file) return;
     try {
       onChange(await readPhoto(file));
     } catch {
-      toast({ message: 'No se pudo leer la foto', duration: 2000, color: 'danger', position: 'top', cssClass: 'toast-app' });
+      void showAlert({ tone: 'error', title: 'No se pudo leer la foto', message: 'Prueba con otra imagen (JPG o PNG).', primary: 'Entendido' });
     }
   };
 
   return (
     <div className={`photo-pick ${value ? 'has-photo' : ''}`}>
-      <button type="button" className="photo-pick-btn" onClick={() => input.current?.click()} aria-label={value ? 'Cambiar foto' : 'Tomar foto'}>
+      <button type="button" className="photo-pick-btn" onClick={() => input.current?.click()} aria-label={value ? 'Cambiar foto' : 'Agregar foto'}>
         {value ? (
           <img src={value} alt="Foto del producto" />
         ) : (
@@ -37,7 +38,6 @@ export function PhotoPicker({ value, onChange }: { value?: string; onChange: (ph
         ref={input}
         type="file"
         accept="image/*"
-        capture="environment"
         hidden
         onChange={(e) => {
           onFile(e.target.files?.[0]);

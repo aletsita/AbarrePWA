@@ -1,6 +1,8 @@
 import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { alertCircleOutline, closeOutline, qrCodeOutline } from 'ionicons/icons';
+import { cameraOutline, checkmarkDone, closeOutline, globeOutline, cashOutline, keypadOutline, qrCodeOutline } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
+import { Notice } from '../../../components/Notice';
+import { money } from '../../../data/models';
 import { cleanPickupCode, isPaidOnline, ORDER_STATUS_LABEL, parsePickupInput, PICKUP_CODE, type PickupOrder } from '../../../data/pickup';
 import { useQrCamera } from '../../../lib/qrCamera';
 
@@ -145,12 +147,41 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
           void check(text);
         }}
       >
-        <p className="pc-lead">
-          {order ? <><strong>{order.customer.name}</strong> debe mostrarte el código de su app.</> : 'Pide al cliente el código de su app.'}
-        </p>
-        {paid && <p className="pc-paid">Pagado en línea: no se cobra, solo se valida el código.</p>}
+        {order ? (
+          <section className="pc-order">
+            <span className="pc-order-icon">
+              <IonIcon icon={qrCodeOutline} aria-hidden="true" />
+            </span>
+            <span className="pc-order-text">
+              <strong>{order.customer.name}</strong>
+              <small>
+                Pedido {order.folio} · {order.items.length} {order.items.length === 1 ? 'producto' : 'productos'}
+              </small>
+            </span>
+            <span className="pc-order-total">
+              <strong className="money">{money(order.total)}</strong>
+              <span className={`pc-chip ${paid ? 'is-paid' : 'is-cash'}`}>
+                <IonIcon icon={paid ? globeOutline : cashOutline} aria-hidden="true" />
+                {paid ? 'Pagado' : 'Cobrar al entregar'}
+              </span>
+            </span>
+          </section>
+        ) : (
+          <section className="pc-order is-generic">
+            <span className="pc-order-icon">
+              <IonIcon icon={qrCodeOutline} aria-hidden="true" />
+            </span>
+            <span className="pc-order-text">
+              <strong>Pide el código al cliente</strong>
+              <small>Está en su app, en el pedido listo para recoger.</small>
+            </span>
+          </section>
+        )}
 
-        <label className="pc-label" htmlFor="pc-code">Código para recoger</label>
+        <label className="pc-label" htmlFor="pc-code">
+          <IonIcon icon={keypadOutline} aria-hidden="true" />
+          Código para recoger
+        </label>
         <input
           id="pc-code"
           ref={inputRef}
@@ -193,31 +224,43 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
             if (PICKUP_CODE.test(next) && !/^abarre/i.test(reader.current)) void check(next);
           }}
         />
-        <p id="pc-help" className={`pc-help ${error ? 'is-error' : ''}`} role={error ? 'alert' : undefined}>
-          {error ? <><IonIcon icon={alertCircleOutline} />{error}</> : 'Escríbelo o escanéalo con el lector o la cámara.'}
-        </p>
+        {error ? (
+          <div id="pc-help" role="alert">
+            <Notice tone="error" title={locked ? 'Bloqueado un minuto' : 'El código no sirve'}>
+              {error}
+            </Notice>
+          </div>
+        ) : (
+          <p id="pc-help" className="pc-help">
+            Escríbelo, o escanéalo con el lector o la cámara. Al completar los 6 caracteres se revisa solo.
+          </p>
+        )}
+
+        {/* La acción principal va junto al código, no hasta el pie del modal */}
+        <IonButton type="submit" expand="block" color="success" className="btn-lg pc-verify" disabled={locked || checking || !text.trim()}>
+          <IonIcon slot="start" icon={checkmarkDone} />
+          {checking ? 'Revisando…' : paid ? 'Verificar y entregar' : 'Verificar y cobrar'}
+        </IonButton>
+
+        <div className="pc-or">
+          <span>o</span>
+        </div>
 
         {camera ? (
           <div className="pc-camera">
             <video ref={videoRef} muted playsInline />
             <span className="pc-camera-text">{CAMERA_TEXT[status]}</span>
+            <button type="button" className="pc-camera-close" onClick={() => setCamera(false)} aria-label="Apagar cámara">
+              <IonIcon icon={closeOutline} />
+            </button>
           </div>
         ) : (
           <button type="button" className="pc-camera-btn" disabled={locked} onClick={() => setCamera(true)}>
-            <IonIcon icon={qrCodeOutline} />
-            Escanear QR con la cámara
+            <IonIcon icon={cameraOutline} />
+            Escanear el QR con la cámara
           </button>
         )}
-
-        <button type="submit" hidden />
       </form>
-
-      <div className="pmodal-foot">
-        <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
-        <IonButton color="success" className="btn-lg" disabled={locked || checking || !text.trim()} onClick={() => void check(text)}>
-          {paid ? 'Verificar y entregar' : 'Verificar y cobrar'}
-        </IonButton>
-      </div>
     </IonModal>
   );
 }

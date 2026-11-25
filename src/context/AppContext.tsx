@@ -29,6 +29,7 @@ import {
   type TicketConfig,
   type User,
 } from '../data/models';
+import { fromCents, isWeighed, roundQty, sumCents } from '../domain/weight';
 import { productInUse } from '../data/productUse';
 import { ACTIVE_STATUSES, isPaidOnline, nextStatus, orderFolio, PICKUP_CODE, reservedStock, type CancelReason, type OrderRequest, type PickupOrder } from '../data/pickup';
 import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, ORDERS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
@@ -126,6 +127,8 @@ type Action =
   | { type: 'REMOVE_SENT'; sentId: string }
   | { type: 'TICKET_ADD'; product: Product; qty: number; at: number }
   | { type: 'TICKET_QTY'; productId: string; delta: number }
+  // Peso exacto de una línea por peso (se vuelve a pesar)
+  | { type: 'TICKET_SET_QTY'; productId: string; qty: number }
   | { type: 'TICKET_REMOVE'; productId: string }
   | { type: 'TICKET_CLEAR' }
   | { type: 'CONFIRM_SALE'; sale: Sale }
@@ -260,14 +263,15 @@ function loadData(): Data {
 
 function addToTicket(ticket: TicketLine[], product: Product, qty: number, source: TicketLine['source'], at: number) {
   if (ticket.some((l) => l.product.id === product.id)) {
-    return ticket.map((l) => (l.product.id === product.id ? { ...l, product, qty: l.qty + qty, source, flashAt: at } : l));
+    return ticket.map((l) => (l.product.id === product.id ? { ...l, product, qty: roundQty(l.qty + qty), source, flashAt: at } : l));
   }
   return [{ product, qty, source, flashAt: at }, ...ticket];
 }
 
 const iso = (at: number) => new Date(at).toISOString();
 
-const sumLines = (lines: TicketLine[]) => lines.reduce((n, l) => n + l.qty * l.product.price, 0);
+// En centavos: el total de una cuenta nunca arrastra decimales de punto flotante
+const sumLines = (lines: TicketLine[]) => fromCents(sumCents(lines.map((l) => ({ qty: l.qty, price: l.product.price, saleType: l.product.saleType }))));
 
 // Siguiente "Cuenta N" libre; se calcula en el reducer para que todos los equipos lleguen al mismo nombre
 function nextAccountName(accounts: { name: string }[]) {
@@ -275,9 +279,10 @@ function nextAccountName(accounts: { name: string }[]) {
   return `Cuenta ${Math.max(0, ...used) + 1}`;
 }
 
-// La cuenta activa pasa a espera; si está vacía y sin cliente simplemente se descarta
+// La cuenta activa pasa a espera; si está vacía se cierra sola, aunque tenga cliente asignado
+// (lo que un celular le mande después llega a la cuenta activa)
 function parkActive(s: Data): OpenAccount[] {
-  if (!s.ticket.length && !s.account.customerId) return s.parked;
+  if (!s.ticket.length) return s.parked;
   return [...s.parked, { ...s.account, lines: s.ticket }];
 }
 
@@ -335,10 +340,16 @@ function reducer(s: Data, a: Action): Data {
       if (isDeleted(s, a.product.id)) return s;
       return { ...s, ticket: addToTicket(s.ticket, a.product, a.qty, 'manual', a.at) };
     case 'TICKET_QTY':
+      // +1 / −1 solo para piezas; lo pesado se corrige con TICKET_SET_QTY
       return {
         ...s,
-        ticket: s.ticket.map((l) => (l.product.id === a.productId ? { ...l, qty: l.qty + a.delta } : l)).filter((l) => l.qty > 0),
+        ticket: s.ticket
+          .map((l) => (l.product.id === a.productId && !isWeighed(l.product) ? { ...l, qty: l.qty + a.delta } : l))
+          .filter((l) => l.qty > 0),
       };
+    case 'TICKET_SET_QTY':
+      if (!(a.qty > 0)) return s;
+      return { ...s, ticket: s.ticket.map((l) => (l.product.id === a.productId && isWeighed(l.product) ? { ...l, qty: roundQty(a.qty) } : l)) };
     case 'TICKET_REMOVE':
       return { ...s, ticket: s.ticket.filter((l) => l.product.id !== a.productId) };
     case 'TICKET_CLEAR':
@@ -379,7 +390,7 @@ function reducer(s: Data, a: Action): Data {
         creditMovements: charge ? [charge, ...s.creditMovements] : s.creditMovements,
         products: s.products.map((p) => {
           const it = a.sale.items.find((i) => i.productId === p.id);
-          return it ? { ...p, stock: Math.max(0, p.stock - it.qty) } : p;
+          return it ? { ...p, stock: Math.max(0, roundQty(p.stock - it.qty)) } : p;
         }),
         // La venta de un pedido no sale de la cuenta abierta: esa se queda como está
         ...(a.sale.orderId
@@ -398,7 +409,7 @@ function reducer(s: Data, a: Action): Data {
       const prev = s.products.find((p) => p.id === a.product.id);
       // Un cambio que llega tarde (de un celular sin conexión) no revive un producto borrado
       if (prev?.deletedAt) return s;
-      const diff = a.product.stock - (prev?.stock ?? 0);
+      const diff = roundQty(a.product.stock - (prev?.stock ?? 0));
       const move: Movement | null = !prev
         ? { id: uid(), productId: a.product.id, type: 'alta', qty: a.product.stock, date: iso(a.at), note: 'Alta del producto' }
         : diff !== 0
@@ -420,7 +431,7 @@ function reducer(s: Data, a: Action): Data {
         ...s,
         products: s.products.map((p) => {
           const qty = a.entries.filter((e) => e.productId === p.id).reduce((n, e) => n + e.qty, 0);
-          return qty ? { ...p, stock: p.stock + qty } : p;
+          return qty ? { ...p, stock: roundQty(p.stock + qty) } : p;
         }),
         movements: [
           ...a.entries.map((e) => ({ id: uid(), productId: e.productId, type: 'entrada' as const, qty: e.qty, date: iso(a.at), note: a.note })),
@@ -448,7 +459,7 @@ function reducer(s: Data, a: Action): Data {
       const items: SaleItem[] = [];
       for (const [id, n] of Object.entries(qty)) {
         const p = s.products.find((x) => x.id === id);
-        if (!p || p.deletedAt || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
+        if (!p || p.deletedAt || isWeighed(p) || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
         items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
       }
       if (!items.length) return s;
@@ -517,7 +528,7 @@ function reducer(s: Data, a: Action): Data {
       const items: SaleItem[] = [];
       for (const [id, n] of Object.entries(qty)) {
         const p = s.products.find((x) => x.id === id);
-        if (!p || p.deletedAt || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
+        if (!p || p.deletedAt || isWeighed(p) || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
         items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
       }
       if (!items.length) return s;
@@ -603,6 +614,7 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
   ticketShortages: Shortage[];
   ticketAdd: (p: Product, qty?: number) => void;
   ticketQty: (productId: string, delta: number) => void;
+  ticketSetQty: (productId: string, qty: number) => void;
   ticketRemove: (productId: string) => void;
   ticketClear: () => void;
   // El servidor revisa el inventario antes; si no alcanza, no se cobra y dice qué falta
@@ -861,7 +873,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: `v${folio}-${uid().slice(0, 4)}`,
         folio,
         date: new Date().toISOString(),
-        items: s.ticket.map((l) => ({ productId: l.product.id, name: l.product.name, qty: l.qty, price: l.product.price })),
+        items: s.ticket.map((l) => ({
+          productId: l.product.id,
+          name: l.product.name,
+          qty: l.qty,
+          price: l.product.price,
+          ...(isWeighed(l.product) ? { saleType: 'peso' as const } : {}),
+        })),
         total,
         method,
         employee,
@@ -1020,6 +1038,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ticketShortages,
     ticketAdd: (product, qty = 1) => dispatch({ type: 'TICKET_ADD', product, qty, at: Date.now() }),
     ticketQty: (productId, delta) => dispatch({ type: 'TICKET_QTY', productId, delta }),
+    ticketSetQty: (productId, qty) => dispatch({ type: 'TICKET_SET_QTY', productId, qty }),
     ticketRemove: (productId) => dispatch({ type: 'TICKET_REMOVE', productId }),
     ticketClear: () => dispatch({ type: 'TICKET_CLEAR' }),
     confirmSale,
