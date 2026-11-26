@@ -1,10 +1,10 @@
 import { IonButton, IonContent, IonIcon, IonPage, IonToggle, useIonToast } from '@ionic/react';
 import { useAppAlert } from '../../../components/AppAlert';
-import { callOutline, documentTextOutline, eyeOutline, locationOutline, mailOutline, personAddOutline, personOutline, receiptOutline, saveOutline, storefrontOutline } from 'ionicons/icons';
+import { bagHandleOutline, callOutline, documentTextOutline, eyeOutline, locationOutline, mailOutline, personAddOutline, personOutline, receiptOutline, saveOutline, storefrontOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { AreaField, FormSection, SwitchField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
-import { initials, money, ROLES, type Role, type Store, type TicketConfig } from '../../../data/models';
+import { initials, money, ROLES, type Role, type Store, type TicketConfig, type User } from '../../../data/models';
 import { PanelHeader } from '../../components/PanelHeader';
 import { UserModal } from './UserModal';
 import './Config.css';
@@ -16,7 +16,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'ticket', label: 'Ticket' },
 ];
 
-type StoreField = { key: keyof Store; label: string; icon?: string; wide?: boolean; hint?: string; inputMode?: 'tel' | 'email' };
+type StoreField = { key: Exclude<keyof Store, 'acceptsOrders'>; label: string; icon?: string; wide?: boolean; hint?: string; inputMode?: 'tel' | 'email'; readOnly?: boolean };
 
 const STORE_SECTIONS: { title: string; text?: string; icon: string; fields: StoreField[] }[] = [
   {
@@ -41,7 +41,7 @@ const STORE_SECTIONS: { title: string; text?: string; icon: string; fields: Stor
     icon: receiptOutline,
     fields: [
       { key: 'rfc', label: 'RFC', hint: 'Se imprime en cada ticket' },
-      { key: 'register', label: 'Nombre de la caja', hint: 'Para distinguirla si tienes varias' },
+      { key: 'register', label: 'Caja de este equipo', hint: 'La caja con la que cobra esta computadora', readOnly: true },
     ],
   },
 ];
@@ -60,19 +60,28 @@ export default function Config() {
   useEffect(() => setTicket(ticketConfig), [ticketConfig]);
 
   const isOwner = user?.role === 'Dueño';
-  const storeDirty = STORE_FIELDS.some((f) => form[f.key] !== store[f.key]);
+  const storeDirty = STORE_FIELDS.some((f) => form[f.key] !== store[f.key]) || form.acceptsOrders !== store.acceptsOrders;
   const ticketDirty = (Object.keys(ticket) as (keyof TicketConfig)[]).some((k) => ticket[k] !== ticketConfig[k]);
 
   const saved = (message = 'Cambios guardados') =>
     toast({ message, duration: 1500, color: 'success', position: 'top', cssClass: 'toast-app' });
+  const failed = (message: string) => toast({ message, duration: 3000, color: 'danger', position: 'top', cssClass: 'toast-app' });
 
-  const saveStore = () => {
-    if (!form.name.trim() || !form.register.trim()) {
-      void showAlert({ tone: 'warning', title: 'Faltan datos', message: 'El nombre de la tienda y el de la caja no pueden quedar vacíos.', primary: 'Entendido' });
+  // Los cambios se guardan en el servidor: si no se puede, se avisa y se regresa a como estaba
+  const saveStore = async () => {
+    if (!form.name.trim()) {
+      void showAlert({ tone: 'warning', title: 'Faltan datos', message: 'El nombre de la tienda no puede quedar vacío.', primary: 'Entendido' });
       return;
     }
-    updateStore({ ...form, name: form.name.trim(), register: form.register.trim() });
-    saved();
+    const r = await updateStore({ ...form, name: form.name.trim() });
+    if (r.ok) saved();
+    else failed(r.message);
+  };
+
+  const changeUser = async (u: User, message?: string) => {
+    const r = await saveUser(u);
+    if (!r.ok) failed(r.message);
+    else if (message) saved(message);
   };
 
   return (
@@ -103,13 +112,17 @@ export default function Config() {
                       icon={f.icon}
                       inputMode={f.inputMode}
                       value={form[f.key]}
-                      disabled={!isOwner}
-                      error={(f.key === 'name' || f.key === 'register') && !form[f.key].trim() && 'No puede quedar vacío'}
+                      disabled={!isOwner || f.readOnly}
+                      error={f.key === 'name' && !form[f.key].trim() && 'No puede quedar vacío'}
                       onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
                     />
                   ))}
                 </FormSection>
               ))}
+              <FormSection title="Pide y recoge" icon={bagHandleOutline} text="Los clientes hacen pedidos desde la app mientras haya un turno abierto.">
+                <SwitchField label="Recibir pedidos de la app" hint="Apágalo para pausar los pedidos nuevos" checked={form.acceptsOrders !== false}
+                  disabled={!isOwner} onChange={(v) => setForm((s) => ({ ...s, acceptsOrders: v }))} />
+              </FormSection>
               <div className="cfg-actions">
                 {!isOwner && <span className="muted">Solo el dueño puede cambiar estos datos.</span>}
                 <IonButton className="btn-lg" disabled={!isOwner || !storeDirty} onClick={saveStore}>
@@ -152,10 +165,7 @@ export default function Config() {
                             value={u.role}
                             disabled={locked}
                             aria-label={`Rol de ${u.name}`}
-                            onChange={(e) => {
-                              saveUser({ ...u, role: e.target.value as Role });
-                              saved(`${u.name} ahora es ${e.target.value}`);
-                            }}
+                            onChange={(e) => void changeUser({ ...u, role: e.target.value as Role }, `${u.name} ahora es ${e.target.value}`)}
                           >
                             {ROLES.map((r) => <option key={r}>{r}</option>)}
                           </select>
@@ -165,7 +175,7 @@ export default function Config() {
                             checked={u.active}
                             disabled={locked}
                             aria-label={`${u.name} activo`}
-                            onIonChange={(e) => saveUser({ ...u, active: e.detail.checked })}
+                            onIonChange={(e) => void changeUser({ ...u, active: e.detail.checked })}
                           />
                         </td>
                       </tr>
@@ -197,9 +207,10 @@ export default function Config() {
                   <IonButton
                     className="btn-lg"
                     disabled={!ticketDirty}
-                    onClick={() => {
-                      updateTicketConfig(ticket);
-                      saved('Ticket guardado');
+                    onClick={async () => {
+                      const r = await updateTicketConfig(ticket);
+                      if (r.ok) saved('Ticket guardado');
+                      else failed(r.message);
                     }}
                   >
                     <IonIcon slot="start" icon={saveOutline} />
