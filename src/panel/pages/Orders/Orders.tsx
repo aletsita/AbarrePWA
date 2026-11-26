@@ -1,4 +1,5 @@
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonRouter, useIonToast } from '@ionic/react';
+import { useAppAlert } from '../../../components/AppAlert';
 import {
   alertCircleOutline,
   bagCheckOutline,
@@ -63,7 +64,8 @@ export default function Orders() {
   const [toast] = useIonToast();
   const router = useIonRouter();
 
-  const warn = (message: string) => toast({ message, duration: 6000, color: 'danger', position: 'top', cssClass: 'toast-app' });
+  const showAlert = useAppAlert();
+  const warn = (message: string) => showAlert({ tone: 'error', title: 'No se pudo mover el pedido', message, primary: 'Entendido' });
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 30000);
@@ -106,9 +108,8 @@ export default function Orders() {
       return;
     }
     setOpenId(undefined);
-    // Pedidos guardados antes del código para recoger pasan directo al cobro
-    if (!o.pickupCode) setCharging({ order: o, code: '' });
-    else setVerifying({ order: o });
+    // Siempre se pide el código del cliente: el servidor lo compara (la caja nunca lo recibe)
+    setVerifying({ order: o });
   };
 
   const sale = open?.saleId ? sales.find((s) => s.id === open.saleId) : undefined;
@@ -356,16 +357,18 @@ export default function Orders() {
         order={problem}
         shortages={problem ? shortages(problem).map((i) => i.productId) : []}
         onClose={() => setProblem(undefined)}
-        onShortage={(missing) => {
+        onShortage={async (missing) => {
           const o = problem!;
-          reportShortage(o.id, missing);
           setProblem(undefined);
+          const r = await reportShortage(o.id, missing);
+          if (!r.ok) return void toast({ message: r.message, duration: 3500, color: 'danger', position: 'top', cssClass: 'toast-app' });
           toast({ message: `Le avisamos a ${o.customer.name} que se agotó un producto de ${o.folio}.`, duration: 3500, color: 'warning', position: 'top', cssClass: 'toast-app' });
         }}
-        onCancel={(note) => {
+        onCancel={async (note) => {
           const o = problem!;
-          cancelOrder(o.id, 'otro', [], note);
           setProblem(undefined);
+          const r = await cancelOrder(o.id, 'otro', [], note);
+          if (!r.ok) return void toast({ message: r.message, duration: 3500, color: 'danger', position: 'top', cssClass: 'toast-app' });
           toast({ message: `${o.folio} cancelado. Le avisamos a ${o.customer.name}.`, duration: 3500, color: 'medium', position: 'top', cssClass: 'toast-app' });
         }}
       />

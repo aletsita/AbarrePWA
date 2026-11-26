@@ -20,20 +20,62 @@ import {
   type Customer,
   type Device,
   type Movement,
+  type MovementType,
   type PaymentMethod,
   type Product,
+  type Role,
   type Sale,
-  type SaleItem,
   type Shift,
   type Store,
   type TicketConfig,
   type User,
 } from '../data/models';
+import { reservedStock, type CancelReason, type PickupOrder } from '../data/pickup';
 import { productInUse } from '../data/productUse';
-import { ACTIVE_STATUSES, isPaidOnline, nextStatus, orderFolio, PICKUP_CODE, reservedStock, type CancelReason, type OrderRequest, type PickupOrder } from '../data/pickup';
-import { CASH_MOVEMENTS, CREDIT_MOVEMENTS, CUSTOMERS, CUTS, DEVICES, MOVEMENTS, ORDERS, PRODUCTS, SALES, SHIFT, STORE, TICKET, USERS } from '../data/seed';
-import { openSync, type SendResult, type SyncLink } from '../lib/sync';
+import { fromCents, isWeighed, roundQty, sumCents } from '../domain/weight';
+import {
+  ApiError,
+  decodeToken,
+  isNetworkError,
+  onSessionExpired,
+  openHub,
+  request,
+  setApiToken,
+  toCashMovement,
+  toCreditMovement,
+  toCustomer,
+  toCut,
+  toDevice,
+  toOrder,
+  toProduct,
+  toSale,
+  toStore,
+  toUser,
+  type AuthRespuesta,
+  type CajaDto,
+  type CambiosDto,
+  type CodigoVinculacionDto,
+  type CorteDto,
+  type DispositivoDto,
+  type EnvioDto,
+  type Hub,
+  type MovimientoCreditoDto,
+  type MovimientoEfectivoDto,
+  type MovimientoInventarioDto,
+  type PedidoGestionDto,
+  type PersonalDto,
+  type ResultadoOperacion,
+  type TiendaDto,
+  type VentaDto,
+} from '../lib/api';
 import { availableStock, piecesByProduct, type Shortfall } from '../domain/stock';
+
+// La caja trabaja contra AbarreAPI (ver AbarreAPI/README.md):
+// - Al entrar descarga todo con GET /sync/cambios y lo guarda en este equipo (sigue cobrando sin internet).
+// - Lo que hace sin conexión (ventas, abonos, turnos, productos…) va a una cola que sube con POST /sync/subir.
+// - Con conexión, el cobro va directo a POST /ventas para que el servidor revise la existencia antes.
+// - En vivo (SignalR): pedidos, envíos del celular, cambios del catálogo y celulares conectados.
+// Las cuentas abiertas (ticket, cuentas en espera) viven solo aquí; la caja las publica para el celular.
 
 export interface TicketLine {
   product: Product;
@@ -91,10 +133,25 @@ export interface LastScan {
 interface Pairing {
   code: string;
   expiresAt: number;
+  // Contenido del QR que armó el servidor (con su dirección pública, si la tiene)
+  qr?: string;
+}
+
+// La caja de este equipo, como la conoce el servidor
+interface Register {
+  id: string;
+  name: string;
+  serie: string;
+  lastSaleFolio: number;
+  lastCutFolio: number;
 }
 
 interface Data {
   version: number;
+  tiendaId: string | null;
+  // Hasta dónde se descargaron los cambios del servidor (GET /sync/cambios?desde=)
+  cursor: number;
+  caja: Register | null;
   store: Store;
   ticketConfig: TicketConfig;
   users: User[];
@@ -115,28 +172,39 @@ interface Data {
   pairing: Pairing | null;
   closedCutId: string | null;
   lastSaleId: string | null;
-  // Pide y recoge
+  // Pide y recoge (solo los pagados: el servidor no manda los que esperan el pago)
   orders: PickupOrder[];
 }
 
-type StockEntry = { productId: string; qty: number };
+// Lo que se recarga del servidor además del catálogo
+interface Snapshot {
+  caja: CajaDto;
+  sales: Sale[];
+  cuts: CashCut[];
+  cashMovements: CashMovement[];
+  orders: PickupOrder[];
+  devices: Device[];
+  movements: Movement[];
+  creditMovements?: CreditMovement[];
+}
 
 type Action =
   | { type: 'SCAN_TO_REGISTER'; product: Product; qty: number; sentId: string; at: number; deviceId: string; accountId?: string }
   | { type: 'REMOVE_SENT'; sentId: string }
   | { type: 'TICKET_ADD'; product: Product; qty: number; at: number }
   | { type: 'TICKET_QTY'; productId: string; delta: number }
+  // Peso exacto de una línea por peso (se vuelve a pesar)
+  | { type: 'TICKET_SET_QTY'; productId: string; qty: number }
   | { type: 'TICKET_REMOVE'; productId: string }
   | { type: 'TICKET_CLEAR' }
-  | { type: 'CONFIRM_SALE'; sale: Sale }
-  | { type: 'MARK_SALE_SYNCED'; saleId: string }
+  // applyStock: venta hecha sin servidor (se descuenta aquí); con servidor la existencia llega de él
+  | { type: 'CONFIRM_SALE'; sale: Sale; applyStock: boolean }
+  | { type: 'MARK_SALES_SYNCED'; ids: string[] }
   | { type: 'UPSERT_PRODUCT'; product: Product; isNew: boolean; at: number }
-  // Borrado lógico: el producto se queda (las ventas y cortes lo nombran) pero ya no se vende ni se muestra
-  | { type: 'DELETE_PRODUCT'; id: string; at: number }
-  | { type: 'ADD_STOCK'; entries: StockEntry[]; at: number; note: string }
-  | { type: 'ADD_DEVICE'; device: Device }
-  | { type: 'REMOVE_DEVICE'; id: string }
+  // La API ya lo borró (borrado lógico): sale de la lista; las ventas y cortes que lo nombran siguen igual
+  | { type: 'DELETE_PRODUCT'; id: string }
   | { type: 'DEVICE_SEEN'; id: string; at: number }
+  | { type: 'REMOVE_DEVICE'; id: string }
   | { type: 'SET_PAIRING'; pairing: Pairing | null }
   | { type: 'CLOSE_CUT'; cut: CashCut }
   | { type: 'OPEN_SHIFT'; shift: Shift }
@@ -149,80 +217,105 @@ type Action =
   | { type: 'ACCOUNT_UPDATE'; id: string; name: string; customerId: string | null }
   | { type: 'UPSERT_CUSTOMER'; customer: Customer }
   | { type: 'CREDIT_PAYMENT'; movement: CreditMovement }
-  | { type: 'REPLACE_DATA'; data: Data }
-  // Pide y recoge: el pedido llega por el canal de sincronización, igual que un producto escaneado
-  | { type: 'ORDER_RECEIVED'; request: OrderRequest }
-  | { type: 'ORDER_ADVANCE'; id: string; from: PickupOrder['status']; at: number }
-  | { type: 'ORDER_DELIVER'; id: string; sale: Sale; payment: { method: CashMethod; received: number }; pickupCode: string }
-  | { type: 'ORDER_CANCEL'; id: string; reason: CancelReason; missing: string[]; note?: string; at: number }
-  // Se agotó algo: el pedido sigue en pie y espera a que el cliente lo cambie (ORDER_EDIT) o lo cancele
-  | { type: 'ORDER_ISSUE'; id: string; missing: string[]; at: number }
-  // Lo manda el servidor cuando el cliente cambia los productos de su pedido
-  | { type: 'ORDER_EDIT'; id: string; items: { productId: string; qty: number }[]; at: number }
-  // Existencia y apartado según el servidor (lo manda él después de cada cambio). La caja es la dueña de su
-  // inventario: solo lo usa la app del celular.
-  | { type: 'STOCK'; items: { productId: string; stock: number; reserved: number }[]; at: number };
+  | { type: 'CREDIT_MOVEMENTS'; customerId: string; movements: CreditMovement[] }
+  | { type: 'ORDER_UPSERT'; order: PickupOrder }
+  | { type: 'STOCK'; items: { productId: string; stock: number; reserved: number }[] }
+  | { type: 'MOVEMENTS_FOR'; productId: string; movements: Movement[] }
+  | { type: 'SERVER_CHANGES'; changes: CambiosDto; cajaId: string | null }
+  | { type: 'SERVER_SNAPSHOT'; snapshot: Snapshot }
+  | { type: 'RESET'; tiendaId: string | null };
 
 // Resultado de lo que el servidor revisa antes de aplicarlo (cobrar, preparar, entregar)
 export type Outcome<T> =
   | { ok: true; value: T; offline?: boolean }
   | { ok: false; code?: string; message: string; shortages?: Shortfall[] };
 
-const refused = (r: Exclude<SendResult, { ok: true }>, fallback: string): Outcome<never> => ({
-  ok: false,
-  code: r.body.code,
-  message: r.body.message || fallback,
-  shortages: r.body.faltantes,
-});
+const refused = (e: unknown, fallback: string): Outcome<never> =>
+  e instanceof ApiError
+    ? { ok: false, code: e.code, message: e.message || fallback, shortages: e.body.faltantes }
+    : { ok: false, message: fallback };
 
-type Message = Action | { type: 'PING'; key: string } | { type: 'BYE'; key: string } | { type: 'WHO' } | { type: 'SNAPSHOT'; data: Data };
+// Operación de la cola (mismo formato que POST /api/sync/subir). title/detail: para la lista de pendientes.
+type OpTipo = 'venta' | 'abono' | 'movimiento_efectivo' | 'turno_abrir' | 'turno_cerrar' | 'producto' | 'ajuste_inventario' | 'cliente_credito';
 
-type Op =
-  | { id: string; kind: 'producto'; product: Product; isNew: boolean; at: number }
-  | { id: string; kind: 'venta'; saleId: string; at: number };
+interface Op {
+  id: string;
+  tipo: OpTipo;
+  ocurridaEn: string;
+  datos: Record<string, unknown>;
+  title: string;
+  detail: string;
+  at: number;
+  // Lo que se ve en la caja mientras no sube (producto) y a quién toca (venta, cliente)
+  product?: Product;
+  saleId?: string;
+  customerId?: string;
+}
 
 export interface PendingItem {
   id: string;
-  kind: Op['kind'];
+  kind: OpTipo;
   title: string;
   detail: string;
   at: number;
   status: SyncState;
 }
 
-const VERSION = 5;
-const DATA_KEY = 'tendero.datos';
-const SESSION_KEY = 'tendero.sesion';
-const QUEUE_KEY = 'tendero.pendientes.panel';
-const CHANNEL = 'tendero';
-const PRESENCE_KEY = 'panel';
-const PING_MS = 4000;
-const STALE_MS = 10000;
+export interface UploadReport {
+  count: number;
+  at: number;
+  // Lo que el servidor no aceptó (no se reintenta) y lo que aceptó con aviso (existencia negativa, crédito excedido)
+  rejected: { title: string; message: string }[];
+  warnings: { title: string; message: string }[];
+}
 
-function seedData(): Data {
+interface CajaSession {
+  token: string;
+  email: string;
+  userId: string;
+  name: string;
+  role: Role;
+  tiendaId: string;
+  exp: number;
+}
+
+const VERSION = 6;
+const DATA_KEY = 'abarre.caja.datos';
+const SESSION_KEY = 'abarre.caja.sesion';
+const QUEUE_KEY = 'abarre.caja.cola';
+const CAJA_KEY = 'abarre.caja.id';
+const HISTORY_DAYS = 30;
+const RETRY_MS = 30000;
+
+const EMPTY_SHIFT: Shift = { name: '', register: '', openedAt: new Date(0).toISOString(), openedBy: '', openingFund: 0 };
+
+function emptyData(tiendaId: string | null = null): Data {
   return {
     version: VERSION,
-    store: STORE,
-    ticketConfig: TICKET,
-    users: USERS,
-    products: PRODUCTS,
-    movements: MOVEMENTS,
+    tiendaId,
+    cursor: 0,
+    caja: null,
+    store: { name: '', owner: '', email: '', phone: '', address: '', rfc: '', register: '' },
+    ticketConfig: { header: '', footer: '¡Gracias por su compra!', showLogo: true, showEmployee: true },
+    users: [],
+    products: [],
+    movements: [],
     ticket: [],
-    account: { id: 'a1', name: 'Cuenta 1', customerId: null, openedAt: 0 },
+    account: { id: uid(), name: 'Cuenta 1', customerId: null, openedAt: 0 },
     parked: [],
-    customers: CUSTOMERS,
-    creditMovements: CREDIT_MOVEMENTS,
-    sales: SALES,
+    customers: [],
+    creditMovements: [],
+    sales: [],
     sent: [],
     lastScan: null,
-    cuts: CUTS,
-    cashMovements: CASH_MOVEMENTS,
-    shift: SHIFT,
-    devices: DEVICES,
+    cuts: [],
+    cashMovements: [],
+    shift: EMPTY_SHIFT,
+    devices: [],
     pairing: null,
     closedCutId: null,
     lastSaleId: null,
-    orders: ORDERS,
+    orders: [],
   };
 }
 
@@ -246,54 +339,81 @@ function write(key: string, value: unknown) {
 
 function loadData(): Data {
   const saved = read<Data | null>(DATA_KEY, null);
-  if (!saved || saved.version !== VERSION) return seedData();
-  // Datos guardados antes de Pide y recoge: reciben los pedidos de ejemplo que aún no se entregan
-  if (!saved.orders) return { ...saved, orders: ORDERS.filter((o) => o.status !== 'entregado') };
-  return {
-    ...saved,
-    // Pedidos de ejemplo guardados antes de que existiera el código para recoger
-    orders: saved.orders.map((o) => (o.pickupCode ? o : { ...o, pickupCode: ORDERS.find((x) => x.id === o.id)?.pickupCode })),
-    // Productos de ejemplo guardados antes de que existiera la descripción
-    products: saved.products.map((p) => (p.description !== undefined ? p : { ...p, description: PRODUCTS.find((x) => x.id === p.id)?.description })),
-  };
+  return saved && saved.version === VERSION ? saved : emptyData();
+}
+
+function loadSession(): CajaSession | null {
+  const s = read<CajaSession | null>(SESSION_KEY, null);
+  if (!s?.token || s.exp * 1000 <= Date.now()) return null;
+  setApiToken(s.token);
+  return s;
 }
 
 function addToTicket(ticket: TicketLine[], product: Product, qty: number, source: TicketLine['source'], at: number) {
   if (ticket.some((l) => l.product.id === product.id)) {
-    return ticket.map((l) => (l.product.id === product.id ? { ...l, product, qty: l.qty + qty, source, flashAt: at } : l));
+    return ticket.map((l) => (l.product.id === product.id ? { ...l, product, qty: roundQty(l.qty + qty), source, flashAt: at } : l));
   }
   return [{ product, qty, source, flashAt: at }, ...ticket];
 }
 
 const iso = (at: number) => new Date(at).toISOString();
+const enc = encodeURIComponent;
 
-const sumLines = (lines: TicketLine[]) => lines.reduce((n, l) => n + l.qty * l.product.price, 0);
+// En centavos (igual que la API): el total de una cuenta nunca arrastra decimales de punto flotante
+const sumLines = (lines: TicketLine[]) => fromCents(sumCents(lines.map((l) => ({ qty: l.qty, price: l.product.price, saleType: l.product.saleType }))));
 
-// Siguiente "Cuenta N" libre; se calcula en el reducer para que todos los equipos lleguen al mismo nombre
+// Siguiente "Cuenta N" libre
 function nextAccountName(accounts: { name: string }[]) {
   const used = accounts.map((a) => Number(/^Cuenta (\d+)$/.exec(a.name)?.[1] ?? 0));
   return `Cuenta ${Math.max(0, ...used) + 1}`;
 }
 
-// La cuenta activa pasa a espera; si está vacía y sin cliente simplemente se descarta
+// La cuenta activa pasa a espera; si está vacía se cierra sola, aunque tenga cliente asignado
+// (lo que un celular le mande después llega a la cuenta activa)
 function parkActive(s: Data): OpenAccount[] {
-  if (!s.ticket.length && !s.account.customerId) return s.parked;
+  if (!s.ticket.length) return s.parked;
   return [...s.parked, { ...s.account, lines: s.ticket }];
 }
 
 // Al cobrar o cancelar, la cuenta activa se cierra y su lugar lo toma una vacía
 function resetAccount(s: Data, at: number): AccountInfo {
-  return { id: s.account.id, name: nextAccountName(s.parked), customerId: null, openedAt: at };
+  return { id: uid(), name: nextAccountName(s.parked), customerId: null, openedAt: at };
 }
 
 const inActive = (s: Data, x: SentItem) => !x.accountId || x.accountId === s.account.id;
 
-const isDeleted = (s: Data, id: string) => !!s.products.find((p) => p.id === id)?.deletedAt;
+const MOVEMENT_TYPES: MovementType[] = ['venta', 'entrada', 'ajuste', 'alta'];
+const toMovement = (m: MovimientoInventarioDto): Movement => ({
+  id: m.id,
+  productId: m.productId,
+  // cancelacion (devolución de un pedido) se muestra como ajuste
+  type: MOVEMENT_TYPES.includes(m.type as MovementType) ? (m.type as MovementType) : 'ajuste',
+  qty: m.qty,
+  date: m.date,
+  note: m.note,
+});
+
+const toRegister = (c: CajaDto): Register => ({ id: c.id, name: c.name, serie: c.serie, lastSaleFolio: c.lastSaleFolio, lastCutFolio: c.lastCutFolio });
+
+const toShift = (c: CajaDto): Shift =>
+  c.openShift
+    ? { id: c.openShift.id, name: c.openShift.name, register: c.name, openedAt: c.openShift.openedAt, openedBy: c.openShift.openedBy, openingFund: c.openShift.openingFund }
+    : { ...EMPTY_SHIFT, register: c.name };
+
+// Cambia el producto en las cuentas abiertas (precio o nombre nuevos)
+function refreshLines(s: Data, product: Product): Pick<Data, 'ticket' | 'parked'> {
+  const swap = (lines: TicketLine[]) => lines.map((l) => (l.product.id === product.id ? { ...l, product } : l));
+  return { ticket: swap(s.ticket), parked: s.parked.map((p) => ({ ...p, lines: swap(p.lines) })) };
+}
+
+const known = (s: Data, id: string) => s.products.some((p) => p.id === id);
 
 function reducer(s: Data, a: Action): Data {
   switch (a.type) {
     case 'SCAN_TO_REGISTER': {
-      if (isDeleted(s, a.product.id)) return s;
+      if (s.sent.some((x) => x.id === a.sentId)) return s;
+      // Un producto que ya se borró no entra a ninguna cuenta
+      if (s.products.length && !known(s, a.product.id)) return s;
       // El celular elige la cuenta; sin accountId, o si esa cuenta ya no está abierta, va a la activa
       const parkedTarget = a.accountId && a.accountId !== s.account.id ? s.parked.find((p) => p.id === a.accountId) : undefined;
       return {
@@ -322,7 +442,7 @@ function reducer(s: Data, a: Action): Data {
       const item = s.sent.find((x) => x.id === a.sentId);
       if (!item) return s;
       const take = (lines: TicketLine[]) =>
-        lines.map((l) => (l.product.id === item.product.id ? { ...l, qty: l.qty - item.qty } : l)).filter((l) => l.qty > 0);
+        lines.map((l) => (l.product.id === item.product.id ? { ...l, qty: roundQty(l.qty - item.qty) } : l)).filter((l) => l.qty > 0);
       const waiting = item.status === 'en-caja';
       return {
         ...s,
@@ -332,13 +452,19 @@ function reducer(s: Data, a: Action): Data {
       };
     }
     case 'TICKET_ADD':
-      if (isDeleted(s, a.product.id)) return s;
+      if (!known(s, a.product.id)) return s;
       return { ...s, ticket: addToTicket(s.ticket, a.product, a.qty, 'manual', a.at) };
     case 'TICKET_QTY':
+      // +1 / −1 solo para piezas; lo pesado se corrige con TICKET_SET_QTY
       return {
         ...s,
-        ticket: s.ticket.map((l) => (l.product.id === a.productId ? { ...l, qty: l.qty + a.delta } : l)).filter((l) => l.qty > 0),
+        ticket: s.ticket
+          .map((l) => (l.product.id === a.productId && !isWeighed(l.product) ? { ...l, qty: l.qty + a.delta } : l))
+          .filter((l) => l.qty > 0),
       };
+    case 'TICKET_SET_QTY':
+      if (!(a.qty > 0)) return s;
+      return { ...s, ticket: s.ticket.map((l) => (l.product.id === a.productId && isWeighed(l.product) ? { ...l, qty: roundQty(a.qty) } : l)) };
     case 'TICKET_REMOVE':
       return { ...s, ticket: s.ticket.filter((l) => l.product.id !== a.productId) };
     case 'TICKET_CLEAR':
@@ -349,56 +475,50 @@ function reducer(s: Data, a: Action): Data {
         sent: s.sent.map((x) => (x.status === 'en-caja' && inActive(s, x) ? { ...x, status: 'cancelado' } : x)),
       };
     case 'CONFIRM_SALE': {
-      if (a.sale.orderId && s.sales.some((x) => x.id === a.sale.id || x.orderId === a.sale.orderId)) return s;
-      const moves: Movement[] = a.sale.items.map((i) => ({
-        id: `${a.sale.id}-${i.productId}`,
-        productId: i.productId,
-        type: 'venta',
-        qty: -i.qty,
-        date: a.sale.date,
-        note: `Venta #${a.sale.folio}`,
-      }));
+      if (s.sales.some((x) => x.id === a.sale.id || (a.sale.orderId && x.orderId === a.sale.orderId))) return s;
+      const sale = a.sale;
+      const moves: Movement[] = a.applyStock
+        ? sale.items.map((i) => ({ id: `${sale.id}-${i.productId}`, productId: i.productId, type: 'venta', qty: -i.qty, date: sale.date, note: `Venta #${sale.folio}` }))
+        : [];
+      // Sin servidor el saldo del cliente se mueve aquí; con servidor se vuelve a leer de él
       const charge: CreditMovement | null =
-        a.sale.method === 'credito' && a.sale.customerId
-          ? {
-              id: `cr-${a.sale.id}`,
-              customerId: a.sale.customerId,
-              type: 'cargo',
-              amount: a.sale.total,
-              date: a.sale.date,
-              employee: a.sale.employee,
-              note: `Venta #${a.sale.folio}`,
-              saleId: a.sale.id,
-            }
+        a.applyStock && sale.method === 'credito' && sale.customerId
+          ? { id: `cr-${sale.id}`, customerId: sale.customerId, type: 'cargo', amount: sale.total, date: sale.date, employee: sale.employee, note: `Venta #${sale.folio}`, saleId: sale.id }
           : null;
+      const ownFolio = s.caja && sale.serie === s.caja.serie && sale.origin !== 'pedido';
       return {
         ...s,
-        sales: [a.sale, ...s.sales],
+        caja: ownFolio && s.caja ? { ...s.caja, lastSaleFolio: Math.max(s.caja.lastSaleFolio, sale.folio) } : s.caja,
+        sales: [sale, ...s.sales],
         movements: [...moves, ...s.movements],
         customers: charge ? s.customers.map((c) => (c.id === charge.customerId ? { ...c, balance: c.balance + charge.amount } : c)) : s.customers,
         creditMovements: charge ? [charge, ...s.creditMovements] : s.creditMovements,
-        products: s.products.map((p) => {
-          const it = a.sale.items.find((i) => i.productId === p.id);
-          return it ? { ...p, stock: Math.max(0, p.stock - it.qty) } : p;
-        }),
+        products: a.applyStock
+          ? s.products.map((p) => {
+              const qty = sale.items.filter((i) => i.productId === p.id).reduce((n, i) => roundQty(n + i.qty), 0);
+              return qty ? { ...p, stock: roundQty(p.stock - qty) } : p;
+            })
+          : s.products,
         // La venta de un pedido no sale de la cuenta abierta: esa se queda como está
-        ...(a.sale.orderId
-          ? {}
+        ...(sale.orderId
+          ? { lastSaleId: sale.method === 'en_linea' ? sale.id : s.lastSaleId }
           : {
               ticket: [],
-              account: resetAccount(s, Date.parse(a.sale.date)),
+              account: resetAccount(s, Date.parse(sale.date)),
               sent: s.sent.map((x) => (x.status === 'en-caja' && inActive(s, x) ? { ...x, status: 'cobrado' as const } : x)),
-              lastSaleId: a.sale.id,
+              lastSaleId: sale.id,
             }),
       };
     }
-    case 'MARK_SALE_SYNCED':
-      return { ...s, sales: s.sales.map((x) => (x.id === a.saleId ? { ...x, pending: false } : x)) };
+    case 'DELETE_PRODUCT':
+      return { ...s, products: s.products.filter((p) => p.id !== a.id) };
+    case 'MARK_SALES_SYNCED': {
+      const ids = new Set(a.ids);
+      return { ...s, sales: s.sales.map((x) => (ids.has(x.id) ? { ...x, pending: false } : x)) };
+    }
     case 'UPSERT_PRODUCT': {
       const prev = s.products.find((p) => p.id === a.product.id);
-      // Un cambio que llega tarde (de un celular sin conexión) no revive un producto borrado
-      if (prev?.deletedAt) return s;
-      const diff = a.product.stock - (prev?.stock ?? 0);
+      const diff = roundQty(a.product.stock - (prev?.stock ?? 0));
       const move: Movement | null = !prev
         ? { id: uid(), productId: a.product.id, type: 'alta', qty: a.product.stock, date: iso(a.at), note: 'Alta del producto' }
         : diff !== 0
@@ -408,127 +528,17 @@ function reducer(s: Data, a: Action): Data {
         ...s,
         products: prev ? s.products.map((p) => (p.id === a.product.id ? a.product : p)) : [a.product, ...s.products],
         movements: move ? [move, ...s.movements] : s.movements,
-        ticket: s.ticket.map((l) => (l.product.id === a.product.id ? { ...l, product: a.product } : l)),
-        parked: s.parked.map((p) => ({ ...p, lines: p.lines.map((l) => (l.product.id === a.product.id ? { ...l, product: a.product } : l)) })),
+        ...refreshLines(s, a.product),
       };
     }
-    case 'DELETE_PRODUCT':
-      if (!s.products.some((p) => p.id === a.id && !p.deletedAt)) return s;
-      return { ...s, products: s.products.map((p) => (p.id === a.id ? { ...p, deletedAt: iso(a.at), showInApp: false } : p)) };
-    case 'ADD_STOCK':
-      return {
-        ...s,
-        products: s.products.map((p) => {
-          const qty = a.entries.filter((e) => e.productId === p.id).reduce((n, e) => n + e.qty, 0);
-          return qty ? { ...p, stock: p.stock + qty } : p;
-        }),
-        movements: [
-          ...a.entries.map((e) => ({ id: uid(), productId: e.productId, type: 'entrada' as const, qty: e.qty, date: iso(a.at), note: a.note })),
-          ...s.movements,
-        ],
-      };
-    case 'ADD_DEVICE':
-      return { ...s, devices: [...s.devices.filter((d) => d.id !== a.device.id), a.device] };
     case 'REMOVE_DEVICE':
       return { ...s, devices: s.devices.filter((d) => d.id !== a.id) };
     case 'DEVICE_SEEN':
       return { ...s, devices: s.devices.map((d) => (d.id === a.id ? { ...d, lastSeen: iso(a.at) } : d)) };
-    case 'REPLACE_DATA':
-      return a.data;
-    case 'ORDER_RECEIVED': {
-      // Los precios y la existencia los pone la caja; si algo no alcanza, el pedido no se acepta
-      const r = a.request;
-      // Con el turno cerrado la tienda no acepta pedidos
-      if (s.closedCutId || s.orders.some((o) => o.id === r.id) || !PICKUP_CODE.test(String(r.pickupCode ?? ''))) return s;
-      // Un pedido de pago en línea solo entra ya pagado
-      if (r.payment && r.payment.status !== 'pagado') return s;
-      const qty: Record<string, number> = {};
-      for (const it of r.items) qty[it.productId] = (qty[it.productId] ?? 0) + Math.floor(it.qty);
-      const reserved = reservedStock(s.orders);
-      const items: SaleItem[] = [];
-      for (const [id, n] of Object.entries(qty)) {
-        const p = s.products.find((x) => x.id === id);
-        if (!p || p.deletedAt || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
-        items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
-      }
-      if (!items.length) return s;
-      const n = Math.max(0, ...s.orders.map((o) => Number(o.folio.slice(2)) || 0)) + 1;
-      const at = iso(r.at);
-      const order: PickupOrder = {
-        id: r.id,
-        folio: orderFolio(n),
-        customer: r.customer,
-        items,
-        note: (r.note ?? '').trim().slice(0, 300),
-        total: items.reduce((t, i) => t + i.qty * i.price, 0),
-        status: 'pendiente',
-        createdAt: at,
-        updatedAt: at,
-        pickupCode: r.pickupCode,
-        ...(r.payment ? { online: r.payment } : {}),
-      };
-      return { ...s, orders: [order, ...s.orders] };
-    }
-    case 'ORDER_ADVANCE': {
-      // Solo avanza una etapa; "entregado" exige cobro (ORDER_DELIVER)
-      const o = s.orders.find((x) => x.id === a.id);
-      const next = o && nextStatus(o.status);
-      // Mientras espera al cliente por un producto agotado no avanza; uno de pago en línea, tampoco sin pagar
-      if (!o || o.issue || o.status !== a.from || !next || next === 'entregado') return s;
-      if (o.online && !isPaidOnline(o)) return s;
-      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, status: next, updatedAt: iso(a.at) } : x)) };
-    }
-    case 'ORDER_DELIVER': {
-      const o = s.orders.find((x) => x.id === a.id);
-      // Sin el código del cliente no se entrega, venga de esta caja o de otro equipo
-      if (!o || o.issue || o.status !== 'listo' || (o.pickupCode && o.pickupCode !== a.pickupCode)) return s;
-      // Pagado en línea: no se cobra otra vez; uno que se paga en la tienda no puede entrar como pagado en línea
-      if (isPaidOnline(o) !== (a.sale.method === 'en_linea')) return s;
-      const after = reducer(s, { type: 'CONFIRM_SALE', sale: a.sale });
-      return {
-        ...after,
-        // La entrega de un pedido pagado en línea se muestra como una venta normal ("Venta exitosa")
-        ...(a.sale.method === 'en_linea' ? { lastSaleId: a.sale.id } : {}),
-        orders: after.orders.map((x) =>
-          x.id === a.id ? { ...x, status: 'entregado', updatedAt: a.sale.date, deliveredAt: a.sale.date, payment: a.payment, saleId: a.sale.id } : x,
-        ),
-      };
-    }
-    case 'ORDER_CANCEL': {
-      // Solo se cancela lo que no se ha entregado; sus piezas dejan de estar apartadas
-      const o = s.orders.find((x) => x.id === a.id);
-      if (!o || !ACTIVE_STATUSES.includes(o.status)) return s;
-      const cancel = { reason: a.reason, missing: a.missing.filter((id) => o.items.some((i) => i.productId === id)), ...(a.note ? { note: a.note } : {}), at: iso(a.at) };
-      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, status: 'cancelado', updatedAt: cancel.at, cancel, issue: undefined } : x)) };
-    }
-    case 'ORDER_ISSUE': {
-      const o = s.orders.find((x) => x.id === a.id);
-      const missing = o ? a.missing.filter((id) => o.items.some((i) => i.productId === id)) : [];
-      if (!o || !ACTIVE_STATUSES.includes(o.status) || !missing.length) return s;
-      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? { ...x, issue: { missing, at: iso(a.at) }, updatedAt: iso(a.at) } : x)) };
-    }
-    case 'ORDER_EDIT': {
-      // Mismas reglas que un pedido nuevo: precios de la caja y existencia sin contar lo que este pedido ya apartaba
-      const o = s.orders.find((x) => x.id === a.id);
-      if (!o || !o.issue || !ACTIVE_STATUSES.includes(o.status)) return s;
-      const qty: Record<string, number> = {};
-      for (const it of a.items) qty[it.productId] = (qty[it.productId] ?? 0) + Math.floor(it.qty);
-      const reserved = reservedStock(s.orders, o.id);
-      const items: SaleItem[] = [];
-      for (const [id, n] of Object.entries(qty)) {
-        const p = s.products.find((x) => x.id === id);
-        if (!p || p.deletedAt || p.showInApp === false || n < 1 || n > p.stock - (reserved[id] ?? 0)) return s;
-        items.push({ productId: p.id, name: p.name, qty: n, price: p.price });
-      }
-      if (!items.length) return s;
-      const at = iso(a.at);
-      const edited: PickupOrder = { ...o, items, total: items.reduce((t, i) => t + i.qty * i.price, 0), issue: undefined, editedAt: at, updatedAt: at };
-      return { ...s, orders: s.orders.map((x) => (x.id === a.id ? edited : x)) };
-    }
     case 'SET_PAIRING':
       return { ...s, pairing: a.pairing };
     case 'CLOSE_CUT':
-      return { ...s, cuts: [a.cut, ...s.cuts], closedCutId: a.cut.id };
+      return { ...s, cuts: [a.cut, ...s.cuts.filter((c) => c.id !== a.cut.id)], closedCutId: a.cut.id };
     case 'OPEN_SHIFT':
       return { ...s, shift: a.shift, cashMovements: [], closedCutId: null };
     case 'ADD_CASH_MOVEMENT':
@@ -538,9 +548,10 @@ function reducer(s: Data, a: Action): Data {
     case 'UPDATE_TICKET_CONFIG':
       return { ...s, ticketConfig: a.config };
     case 'UPSERT_USER': {
-      const key = a.prevEmail ?? a.user.email;
-      const exists = s.users.some((u) => u.email === key);
-      return { ...s, users: exists ? s.users.map((u) => (u.email === key ? a.user : u)) : [...s.users, a.user] };
+      const key = (a.prevEmail ?? a.user.email).toLowerCase();
+      const match = (u: User) => (a.user.id && u.id === a.user.id) || u.email.toLowerCase() === key;
+      const exists = s.users.some(match);
+      return { ...s, users: exists ? s.users.map((u) => (match(u) ? a.user : u)) : [...s.users, a.user] };
     }
     case 'ACCOUNT_NEW': {
       const parked = parkActive(s);
@@ -568,29 +579,94 @@ function reducer(s: Data, a: Action): Data {
         creditMovements: [a.movement, ...s.creditMovements],
         customers: s.customers.map((c) => (c.id === a.movement.customerId ? { ...c, balance: Math.max(0, c.balance - a.movement.amount) } : c)),
       };
-    case 'STOCK':
-      return s;
+    case 'CREDIT_MOVEMENTS':
+      return { ...s, creditMovements: [...a.movements, ...s.creditMovements.filter((m) => m.customerId !== a.customerId)] };
+    case 'ORDER_UPSERT': {
+      const exists = s.orders.some((o) => o.id === a.order.id);
+      return { ...s, orders: exists ? s.orders.map((o) => (o.id === a.order.id ? a.order : o)) : [a.order, ...s.orders] };
+    }
+    case 'STOCK': {
+      if (!a.items.length) return s;
+      const byId = new Map(a.items.map((i) => [i.productId, i.stock]));
+      return { ...s, products: s.products.map((p) => (byId.has(p.id) ? { ...p, stock: byId.get(p.id)! } : p)) };
+    }
+    case 'MOVEMENTS_FOR':
+      return { ...s, movements: [...a.movements, ...s.movements.filter((m) => m.productId !== a.productId)] };
+    case 'SERVER_CHANGES': {
+      const c = a.changes;
+      const dead = new Set([...c.eliminados.productos, ...c.eliminados.clientes, ...c.eliminados.usuarios]);
+      const merge = <T extends { id?: string }>(list: T[], fresh: T[]) => {
+        const ids = new Set(fresh.map((x) => x.id));
+        const kept = c.completo ? [] : list.filter((x) => !ids.has(x.id) && !dead.has(x.id ?? ''));
+        return [...fresh, ...kept];
+      };
+      const cajaDto = c.cajas.find((x) => x.id === (a.cajaId ?? s.caja?.id));
+      const caja = cajaDto ? toRegister(cajaDto) : s.caja;
+      const products = merge(s.products, c.productos.map(toProduct)).sort((x, y) => x.name.localeCompare(y.name, 'es'));
+      let next: Data = {
+        ...s,
+        cursor: c.cursor,
+        caja: caja && s.caja && caja.id === s.caja.id ? { ...caja, lastSaleFolio: Math.max(caja.lastSaleFolio, s.caja.lastSaleFolio), lastCutFolio: Math.max(caja.lastCutFolio, s.caja.lastCutFolio) } : caja,
+        store: c.tienda ? toStore(c.tienda, caja?.name ?? s.store.register) : { ...s.store, register: caja?.name ?? s.store.register },
+        ticketConfig: c.tienda ? c.tienda.ticketConfig : s.ticketConfig,
+        users: merge(s.users, c.usuarios.map(toUser)),
+        products,
+        customers: merge(s.customers, c.clientes.map(toCustomer)),
+      };
+      for (const p of c.productos) next = { ...next, ...refreshLines(next, toProduct(p)) };
+      return next;
+    }
+    case 'SERVER_SNAPSHOT': {
+      const x = a.snapshot;
+      const ids = new Set(x.sales.map((v) => v.id));
+      // Las ventas hechas sin internet que todavía no suben se conservan
+      const local = s.sales.filter((v) => v.pending && !ids.has(v.id));
+      const shift = toShift(x.caja);
+      const mine = x.cuts.filter((c) => c.cajaId === x.caja.id).sort((p, q) => q.date.localeCompare(p.date));
+      return {
+        ...s,
+        caja: toRegister(x.caja),
+        shift,
+        closedCutId: shift.id ? null : (mine[0]?.id ?? null),
+        sales: [...local, ...x.sales],
+        cuts: x.cuts,
+        cashMovements: x.cashMovements,
+        orders: x.orders,
+        devices: x.devices,
+        movements: x.movements,
+        creditMovements: x.creditMovements ?? s.creditMovements,
+      };
+    }
+    case 'RESET':
+      return emptyData(a.tiendaId);
   }
-  // Mensaje de otra versión: se ignora
   return s;
 }
 
-interface AppState extends Omit<Data, 'products' | 'version'> {
+interface AppState extends Omit<Data, 'products' | 'version' | 'cursor' | 'tiendaId'> {
   products: ProductView[];
+  // Hay internet y el canal en vivo con el servidor está conectado
   online: boolean;
   syncConnected: boolean;
+  // Ya se descargaron los datos de la tienda al menos una vez
+  ready: boolean;
   uploading: boolean;
   pending: PendingItem[];
-  lastUpload: { count: number; at: number } | null;
+  lastUpload: UploadReport | null;
 
   isLive: (key: string) => boolean;
-  newPairingCode: () => void;
-  removeDevice: (id: string) => void;
+  newPairingCode: () => Promise<Outcome<null>>;
+  removeDevice: (id: string) => Promise<Outcome<null>>;
+  // Borrado lógico; requiere conexión. La API responde 409 producto-en-uso si está en una cuenta o apartado en un pedido.
+  deleteProduct: (id: string) => Promise<Outcome<null>>;
 
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  registerStore: (storeName: string, name: string, email: string) => void;
+  // Regresan el mensaje de error, o null si entró
+  login: (email: string, password: string) => Promise<string | null>;
+  registerStore: (input: { storeName: string; name: string; email: string; phone: string; password: string }) => Promise<string | null>;
   logout: () => void;
+  // Vuelve a descargar todo del servidor
+  refresh: () => Promise<void>;
 
   saveProduct: (p: Product, isNew: boolean) => 'enviado' | 'pendiente';
   findByBarcode: (code: string) => ProductView | undefined;
@@ -603,17 +679,18 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
   ticketShortages: Shortage[];
   ticketAdd: (p: Product, qty?: number) => void;
   ticketQty: (productId: string, delta: number) => void;
+  ticketSetQty: (productId: string, qty: number) => void;
   ticketRemove: (productId: string) => void;
   ticketClear: () => void;
-  // El servidor revisa el inventario antes; si no alcanza, no se cobra y dice qué falta
+  // El servidor revisa el inventario antes; si no alcanza, no se cobra y dice qué falta. Sin conexión se cobra y sube después.
   confirmSale: (method: PaymentMethod, paid: number) => Promise<Outcome<Sale>>;
 
-  receiveOrder: (request: OrderRequest) => void;
+  // Pide y recoge: todo pasa por el servidor (requiere conexión)
   advanceOrder: (id: string) => Promise<Outcome<null>>;
-  // Borrado lógico; lo revisa el servidor (no se borra lo que está en una cuenta o apartado en un pedido)
-  deleteProduct: (id: string) => Promise<Outcome<null>>;
-  cancelOrder: (id: string, reason: CancelReason, missing: string[], note?: string) => void;
-  reportShortage: (id: string, missing: string[]) => void;
+  cancelOrder: (id: string, reason: CancelReason, missing: string[], note?: string) => Promise<Outcome<null>>;
+  reportShortage: (id: string, missing: string[]) => Promise<Outcome<null>>;
+  // El servidor busca el pedido listo con ese código (escrito o QR). La caja nunca recibe el código: solo lo compara.
+  verifyPickupCode: (raw: string) => Promise<Outcome<PickupOrder>>;
   // method en_linea: pedido pagado en la app, no se cobra (el servidor valida el código)
   deliverOrder: (id: string, method: CashMethod, received: number, pickupCode: string) => Promise<Outcome<Sale>>;
 
@@ -626,129 +703,51 @@ interface AppState extends Omit<Data, 'products' | 'version'> {
   saveCustomer: (c: Omit<Customer, 'id' | 'balance' | 'createdAt'> & { id?: string }) => Customer;
   addCreditPayment: (customerId: string, amount: number, method: CashMethod, note?: string) => void;
 
-  closeCut: (cut: CashCut) => void;
+  // Regresa el folio del corte
+  closeCut: (cut: CashCut) => number;
   openShift: (openingFund: number) => void;
   addCashMovement: (type: CashMovementType, amount: number, note: string) => void;
-  updateStore: (store: Store) => void;
-  updateTicketConfig: (config: TicketConfig) => void;
-  saveUser: (user: User, prevEmail?: string) => void;
+  updateStore: (store: Store) => Promise<Outcome<null>>;
+  updateTicketConfig: (config: TicketConfig) => Promise<Outcome<null>>;
+  saveUser: (user: User, prevEmail?: string) => Promise<Outcome<User>>;
 }
 
 const Ctx = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, localDispatch] = useReducer(reducer, undefined, loadData);
+  const [session, setSession] = useState<CajaSession | null>(loadSession);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
+  const [data, dispatch] = useReducer(reducer, undefined, loadData);
   const dataRef = useRef(data);
   dataRef.current = data;
-  const channel = useRef<SyncLink | null>(null);
 
-  const [queue, setQueue] = useState<Op[]>(() => read(QUEUE_KEY, []));
+  const [queue, setQueueState] = useState<Op[]>(() => read(QUEUE_KEY, []));
   const queueRef = useRef(queue);
-  queueRef.current = queue;
+  // La cola se lee justo después de cambiarla (al cobrar): se actualiza la referencia al momento
+  const setQueue = useCallback((fn: (q: Op[]) => Op[]) => {
+    queueRef.current = fn(queueRef.current);
+    setQueueState(queueRef.current);
+  }, []);
+
   const [uploading, setUploading] = useState(false);
-  const flushing = useRef(false);
-  const [lastUpload, setLastUpload] = useState<{ count: number; at: number } | null>(null);
+  const flushing = useRef<Promise<void> | null>(null);
+  const [lastUpload, setLastUpload] = useState<UploadReport | null>(null);
 
-  const [online, setOnline] = useState(navigator.onLine);
-  const [syncConnected, setSyncConnected] = useState(false);
-  const syncUp = useRef(false);
-  syncUp.current = syncConnected;
-  const [presence, setPresence] = useState<Record<string, number>>({});
-  const presenceRef = useRef(presence);
-  presenceRef.current = presence;
-
-  const [sessionEmail, setSessionEmail] = useState<string | null>(() => read(SESSION_KEY, null));
-
-  const dispatch = useCallback((a: Action) => {
-    localDispatch(a);
-    channel.current?.post(a);
-  }, []);
-
-  // Para lo que mueve existencias: primero lo aprueba el servidor y solo entonces se aplica aquí
-  const send = useCallback(async (a: Action): Promise<SendResult> => {
-    const r = channel.current ? await channel.current.send(a) : ({ ok: true, offline: true } as const);
-    if (r.ok) localDispatch(a);
-    return r;
-  }, []);
+  const [netOnline, setNetOnline] = useState(navigator.onLine);
+  const [hubUp, setHubUp] = useState(false);
+  const hubRef = useRef<Hub | null>(null);
+  const [presence, setPresence] = useState<Set<string>>(new Set());
+  const [ready, setReady] = useState(() => dataRef.current.cursor > 0);
 
   useEffect(() => write(DATA_KEY, data), [data]);
   useEffect(() => write(QUEUE_KEY, queue), [queue]);
-  useEffect(() => write(SESSION_KEY, sessionEmail), [sessionEmail]);
-
-  const markSeen = useCallback((keys: string[]) => {
-    keys.filter((k) => k !== 'panel').forEach((id) => dispatch({ type: 'DEVICE_SEEN', id, at: presenceRef.current[id] ?? Date.now() }));
-  }, [dispatch]);
+  useEffect(() => write(SESSION_KEY, session), [session]);
 
   useEffect(() => {
-    const share = () => ch.post({ type: 'SNAPSHOT', data: dataRef.current });
-    const ch = openSync(
-      CHANNEL,
-      (raw) => onMessage(raw as Message),
-      () => {
-        ch.post({ type: 'WHO' });
-        share();
-      },
-      setSyncConnected,
-    );
-    channel.current = ch;
-    const onMessage = (msg: Message) => {
-      if (msg.type === 'SNAPSHOT') return;
-      if (msg.type === 'PING') setPresence((p) => ({ ...p, [msg.key]: Date.now() }));
-      else if (msg.type === 'BYE') {
-        if (!(msg.key in presenceRef.current)) return;
-        markSeen([msg.key]);
-        setPresence((p) => {
-          const next = { ...p };
-          delete next[msg.key];
-          return next;
-        });
-      } else if (msg.type === 'WHO') {
-        if (navigator.onLine) ch.post({ type: 'PING', key: PRESENCE_KEY });
-        share();
-      } else localDispatch(msg);
-    };
-    ch.post({ type: 'WHO' });
-    share();
-    return () => ch.close();
-  }, [markSeen]);
-
-  useEffect(() => {
-    const ch = channel.current;
-    if (!ch) return;
-    if (!online) {
-      ch.post({ type: 'BYE', key: PRESENCE_KEY });
-      return;
-    }
-    const ping = () => ch.post({ type: 'PING', key: PRESENCE_KEY });
-    ping();
-    const t = window.setInterval(ping, PING_MS);
-    const bye = () => ch.post({ type: 'BYE', key: PRESENCE_KEY });
-    window.addEventListener('pagehide', bye);
-    return () => {
-      window.clearInterval(t);
-      window.removeEventListener('pagehide', bye);
-      bye();
-    };
-  }, [online]);
-
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      const now = Date.now();
-      const stale = Object.keys(presenceRef.current).filter((k) => now - presenceRef.current[k] > STALE_MS);
-      if (!stale.length) return;
-      markSeen(stale);
-      setPresence((p) => {
-        const next = { ...p };
-        stale.forEach((k) => delete next[k]);
-        return next;
-      });
-    }, 3000);
-    return () => window.clearInterval(t);
-  }, [markSeen]);
-
-  useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
+    const on = () => setNetOnline(true);
+    const off = () => setNetOnline(false);
     window.addEventListener('online', on);
     window.addEventListener('offline', off);
     return () => {
@@ -757,197 +756,508 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const opToAction = useCallback((op: Op): Action => {
-    switch (op.kind) {
-      case 'producto':
-        return { type: 'UPSERT_PRODUCT', product: op.product, isNew: op.isNew, at: op.at };
-      case 'venta':
-        return { type: 'MARK_SALE_SYNCED', saleId: op.saleId };
+  const logout = useCallback((expired = false) => {
+    if (!expired && sessionRef.current) void request('POST', '/auth/salir').catch(() => undefined);
+    setApiToken(null);
+    setSession(null);
+    hubRef.current?.stop();
+    hubRef.current = null;
+    setHubUp(false);
+  }, []);
+
+  useEffect(() => {
+    onSessionExpired(() => logout(true));
+    return () => onSessionExpired(null);
+  }, [logout]);
+
+  // ---------- Descargar del servidor ----------
+
+  // Cambios del catálogo, usuarios y clientes desde el último cursor
+  const pull = useCallback(async () => {
+    if (!sessionRef.current) return;
+    try {
+      const c = await request<CambiosDto>('GET', `/sync/cambios?desde=${dataRef.current.cursor}`);
+      dispatch({ type: 'SERVER_CHANGES', changes: c, cajaId: dataRef.current.caja?.id ?? null });
+    } catch {
+      /* sin conexión: se reintenta con el siguiente aviso */
     }
   }, []);
 
-  const flush = useCallback(() => {
-    if (flushing.current || !navigator.onLine || queueRef.current.length === 0) return;
-    flushing.current = true;
-    setUploading(true);
-    window.setTimeout(() => {
-      flushing.current = false;
-      setUploading(false);
-      if (!navigator.onLine) return;
-      const ops = queueRef.current;
-      ops.forEach((op) => dispatch(opToAction(op)));
-      const ids = new Set(ops.map((o) => o.id));
-      setQueue((q) => q.filter((o) => !ids.has(o.id)));
-      setLastUpload({ count: ops.length, at: Date.now() });
-    }, 1500);
-  }, [dispatch, opToAction]);
+  const pullTimer = useRef<number>();
+  const schedulePull = useCallback(() => {
+    window.clearTimeout(pullTimer.current);
+    pullTimer.current = window.setTimeout(() => void pull(), 300);
+  }, [pull]);
 
-  useEffect(() => {
-    if (online) flush();
-  }, [online, flush]);
-
-  const run = useCallback((op: Op) => {
-    if (navigator.onLine) {
-      dispatch(opToAction(op));
-      return 'enviado' as const;
+  const refreshCredit = useCallback(async (customerId: string) => {
+    try {
+      const list = await request<MovimientoCreditoDto[]>('GET', `/clientes-credito/${enc(customerId)}/movimientos`);
+      dispatch({ type: 'CREDIT_MOVEMENTS', customerId, movements: list.map(toCreditMovement) });
+    } catch {
+      /* se vuelve a leer en la siguiente descarga */
     }
-    setQueue((q) => [...q, op]);
-    return 'pendiente' as const;
-  }, [dispatch, opToAction]);
+  }, []);
+
+  // El celular mandó un producto (o canceló un envío). La caja anota en qué cuenta quedó.
+  const receiveEnvio = useCallback((e: EnvioDto) => {
+    const s = dataRef.current;
+    if (!s.caja || (e.cajaId && e.cajaId !== s.caja.id)) return;
+    if (e.status === 'cancelado') {
+      dispatch({ type: 'REMOVE_SENT', sentId: e.id });
+      return;
+    }
+    if (e.status !== 'en-caja' || s.sent.some((x) => x.id === e.id)) return;
+    const target = e.accountId && e.accountId !== s.account.id ? s.parked.find((p) => p.id === e.accountId) : undefined;
+    const accountId = target?.id ?? s.account.id;
+    const accountName = target?.name ?? s.account.name;
+    dispatch({ type: 'SCAN_TO_REGISTER', product: toProduct(e.product), qty: e.qty, sentId: e.id, at: Date.parse(e.at) || Date.now(), deviceId: e.deviceId ?? '', accountId: e.accountId });
+    if (e.accountId !== accountId || e.accountName !== accountName) {
+      void request('POST', `/envios/${enc(e.id)}/cuenta`, { accountId, accountName }).catch(() => undefined);
+    }
+  }, []);
+
+  const flushRef = useRef<() => Promise<void>>(async () => undefined);
+
+  // Todo lo de la tienda: catálogo, caja y turno, ventas recientes, cortes, pedidos, celulares
+  const loadAll = useCallback(async (withCredit = true) => {
+    if (!sessionRef.current) return;
+    // Primero sube lo pendiente, para no pisar lo que se hizo sin internet
+    await flushRef.current();
+    let c: CambiosDto;
+    try {
+      c = await request<CambiosDto>('GET', '/sync/cambios?desde=0');
+    } catch {
+      return;
+    }
+    const cajas = c.cajas.filter((x) => x.active);
+    const saved = read<string | null>(CAJA_KEY, null);
+    const caja = cajas.find((x) => x.id === (dataRef.current.caja?.id ?? saved)) ?? cajas[0] ?? null;
+    if (caja) write(CAJA_KEY, caja.id);
+    dispatch({ type: 'SERVER_CHANGES', changes: c, cajaId: caja?.id ?? null });
+    setReady(true);
+    if (!caja) return;
+
+    // Lo que el rol no puede ver (por ejemplo, ventas para Inventario) se queda vacío
+    const get = <T,>(path: string, fallback: T) =>
+      request<T>('GET', path).catch((e) => {
+        if (isNetworkError(e)) throw e;
+        return fallback;
+      });
+    const since = enc(new Date(Date.now() - HISTORY_DAYS * 864e5).toISOString());
+    try {
+      const [ventas, cortes, efectivo, activos, recientes, dispositivos, movs, envios] = await Promise.all([
+        get<VentaDto[]>(`/ventas?desde=${since}&limite=1000`, []),
+        get<CorteDto[]>('/cortes', []),
+        caja.openShift ? get<MovimientoEfectivoDto[]>(`/turnos/${caja.openShift.id}/movimientos`, []) : Promise.resolve([]),
+        get<PedidoGestionDto[]>('/gestion/pedidos?estado=activos', []),
+        get<PedidoGestionDto[]>(`/gestion/pedidos?estado=todos&desde=${since}`, []),
+        get<DispositivoDto[]>('/dispositivos', []),
+        get<MovimientoInventarioDto[]>('/inventario/movimientos?limite=500', []),
+        get<EnvioDto[]>('/envios?estado=en-caja', []),
+      ]);
+      const credit = withCredit
+        ? (await Promise.all(c.clientes.slice(0, 200).map((cl) => get<MovimientoCreditoDto[]>(`/clientes-credito/${cl.id}/movimientos`, [])))).flat()
+        : undefined;
+      // Si mientras tanto se volvió a llenar la cola (se cobró sin conexión), no se pisa el turno local
+      if (queueRef.current.some((o) => o.tipo === 'turno_abrir' || o.tipo === 'turno_cerrar')) return;
+      const orders = new Map<string, PickupOrder>();
+      for (const o of [...recientes, ...activos]) orders.set(o.id, toOrder(o));
+      dispatch({
+        type: 'SERVER_SNAPSHOT',
+        snapshot: {
+          caja,
+          sales: ventas.map(toSale),
+          cuts: cortes.map(toCut),
+          cashMovements: efectivo.map(toCashMovement),
+          orders: [...orders.values()].sort((p, q) => q.createdAt.localeCompare(p.createdAt)),
+          devices: dispositivos.map((d) => toDevice(d, caja.name)),
+          movements: movs.map(toMovement),
+          creditMovements: credit?.map(toCreditMovement),
+        },
+      });
+      setPresence(new Set(dispositivos.filter((d) => d.online).map((d) => d.id)));
+      envios.forEach(receiveEnvio);
+    } catch {
+      /* sin conexión a medias: se queda lo que había */
+    }
+  }, [receiveEnvio]);
+
+  const loadTimer = useRef<number>();
+  const scheduleLoad = useCallback(() => {
+    window.clearTimeout(loadTimer.current);
+    loadTimer.current = window.setTimeout(() => void loadAll(false), 400);
+  }, [loadAll]);
+
+  // ---------- Subir la cola ----------
+
+  const flush = useCallback(async (): Promise<void> => {
+    if (flushing.current) return flushing.current;
+    const caja = dataRef.current.caja;
+    if (!navigator.onLine || !sessionRef.current || !caja || queueRef.current.length === 0) return;
+    const ops = queueRef.current;
+    const run = (async () => {
+      setUploading(true);
+      try {
+        const r = await request<{ resultados: ResultadoOperacion[]; cursor: number }>('POST', '/sync/subir', {
+          cajaId: caja.id,
+          operaciones: ops.map((o) => ({ id: o.id, tipo: o.tipo, ocurridaEn: o.ocurridaEn, datos: o.datos })),
+        });
+        const results = new Map(r.resultados.map((x) => [x.id, x]));
+        const handled = ops.filter((o) => results.has(o.id));
+        setQueue((q) => q.filter((o) => !results.has(o.id)));
+        const sales = handled.flatMap((o) => (o.tipo === 'venta' && o.saleId ? [o.saleId] : []));
+        if (sales.length) dispatch({ type: 'MARK_SALES_SYNCED', ids: sales });
+        const report = (estado: ResultadoOperacion['estado']) =>
+          handled
+            .filter((o) => results.get(o.id)!.estado === estado)
+            .map((o) => ({ title: o.title, message: results.get(o.id)!.mensaje ?? '' }));
+        if (handled.length) setLastUpload({ count: handled.length, at: Date.now(), rejected: report('rechazada'), warnings: report('con_advertencia') });
+        // Lo que el servidor recalculó (existencias, saldos, cortes) se vuelve a leer
+        new Set(handled.flatMap((o) => (o.customerId ? [o.customerId] : []))).forEach((id) => void refreshCredit(id));
+        // Lo rechazado se había aplicado aquí: se vuelve a leer todo del servidor
+        const rejected = handled.some((o) => results.get(o.id)!.estado === 'rechazada');
+        if (rejected || handled.some((o) => o.tipo === 'turno_abrir' || o.tipo === 'turno_cerrar' || o.tipo === 'movimiento_efectivo' || o.tipo === 'venta')) scheduleLoad();
+        else schedulePull();
+      } catch (e) {
+        if (!isNetworkError(e) && e instanceof ApiError && e.status !== 401) {
+          setLastUpload({ count: 0, at: Date.now(), rejected: [{ title: 'No se pudieron subir los pendientes', message: e.message }], warnings: [] });
+        }
+      } finally {
+        setUploading(false);
+      }
+    })();
+    flushing.current = run;
+    try {
+      await run;
+    } finally {
+      flushing.current = null;
+    }
+  }, [refreshCredit, schedulePull, scheduleLoad, setQueue]);
+  flushRef.current = flush;
+
+  const enqueue = useCallback(
+    (op: Omit<Op, 'id' | 'ocurridaEn' | 'at'>) => {
+      const at = Date.now();
+      setQueue((q) => [...q, { ...op, id: uid(), ocurridaEn: iso(at), at }]);
+      if (navigator.onLine) window.setTimeout(() => void flush(), 0);
+    },
+    [flush, setQueue],
+  );
+
+  // Reintento mientras haya pendientes
+  useEffect(() => {
+    if (!netOnline || !session) return;
+    void flush();
+    const t = window.setInterval(() => queueRef.current.length && void flush(), RETRY_MS);
+    return () => window.clearInterval(t);
+  }, [netOnline, session, flush]);
+
+  // ---------- En vivo ----------
+
+  const cajaId = data.caja?.id;
+  useEffect(() => {
+    if (!session) return;
+    const hub = openHub(
+      { cajaId },
+      {
+        pedido: ((dto: PedidoGestionDto) => dispatch({ type: 'ORDER_UPSERT', order: toOrder(dto) })) as never,
+        envio: ((dto: EnvioDto) => receiveEnvio(dto)) as never,
+        catalogo: (() => schedulePull()) as never,
+        inventario: ((list: { productId: string; stock: number; reserved: number }[]) => dispatch({ type: 'STOCK', items: list })) as never,
+        dispositivo: ((d: { id: string; online: boolean }) => {
+          setPresence((p) => {
+            const next = new Set(p);
+            if (d.online) next.add(d.id);
+            else next.delete(d.id);
+            return next;
+          });
+          if (!d.online) dispatch({ type: 'DEVICE_SEEN', id: d.id, at: Date.now() });
+          // Un celular recién vinculado
+          else if (!dataRef.current.devices.some((x) => x.id === d.id)) scheduleLoad();
+        }) as never,
+        tienda: ((t: { abierta: boolean }) => void t) as never,
+      },
+      (up) => {
+        setHubUp(up);
+        // Al conectarse (o reconectarse) se sube lo pendiente y se vuelve a leer todo
+        if (up) void loadAll(false);
+      },
+    );
+    hubRef.current = hub;
+    return () => {
+      hub.stop();
+      if (hubRef.current === hub) hubRef.current = null;
+      setHubUp(false);
+    };
+  }, [session?.token, cajaId, receiveEnvio, schedulePull, scheduleLoad, loadAll]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Primera descarga al abrir con sesión (también sin el canal en vivo)
+  useEffect(() => {
+    if (session) void loadAll(true);
+  }, [session?.token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------- Vista: lo que espera subir se ve ya aplicado ----------
 
   const view = useMemo(() => {
     const status: SyncState = uploading ? 'subiendo' : 'pendiente';
     const byId = new Map<string, ProductView>(data.products.map((p) => [p.id, p]));
     const created: string[] = [];
     const pending: PendingItem[] = [];
-
     for (const op of queue) {
-      if (op.kind === 'producto') {
-        if (op.isNew && !byId.has(op.product.id)) created.unshift(op.product.id);
+      if (op.tipo === 'producto' && op.product) {
+        const isNew = !byId.has(op.product.id);
+        if (isNew) created.unshift(op.product.id);
         byId.set(op.product.id, { ...op.product, sync: status });
-        pending.push({ id: op.id, kind: op.kind, title: op.product.name, detail: op.isNew ? 'Producto nuevo' : 'Cambios del producto', at: op.at, status });
-      } else {
-        const sale = data.sales.find((x) => x.id === op.saleId);
-        pending.push({
-          id: op.id,
-          kind: op.kind,
-          title: `Venta #${sale?.folio ?? ''}`,
-          detail: sale ? money(sale.total) : 'Venta',
-          at: op.at,
-          status,
-        });
       }
+      pending.push({ id: op.id, kind: op.tipo, title: op.title, detail: op.detail, at: op.at, status });
     }
-
     const createdSet = new Set(created);
-    const products = [...created.map((id) => byId.get(id)!), ...[...byId.values()].filter((p) => !createdSet.has(p.id))].filter((p) => !p.deletedAt);
+    const products = [...created.map((id) => byId.get(id)!), ...[...byId.values()].filter((p) => !createdSet.has(p.id))];
     return { products, pending: pending.reverse() };
-  }, [data.products, data.sales, queue, uploading]);
+  }, [data.products, queue, uploading]);
 
   const viewRef = useRef(view);
   viewRef.current = view;
 
-  const saveProduct = useCallback(
-    (product: Product, isNew: boolean) => run({ id: uid(), kind: 'producto', product, isNew, at: Date.now() }),
-    [run],
-  );
-  const findByBarcode = useCallback((code: string) => viewRef.current.products.find((p) => p.barcode === code.trim()), []);
-  const movementsFor = useCallback(
-    (productId: string) => dataRef.current.movements.filter((m) => m.productId === productId).slice(0, 8),
-    [],
-  );
+  // ---------- Sesión ----------
 
-  const user = data.users.find((u) => u.email === sessionEmail && u.active) ?? null;
+  const user: User | null = useMemo(() => {
+    if (!session) return null;
+    const found = data.users.find((u) => u.email.toLowerCase() === session.email.toLowerCase());
+    if (found) return found.active ? found : null;
+    return { id: session.userId, name: session.name, email: session.email, role: session.role, active: true };
+  }, [session, data.users]);
   const employee = user?.name ?? data.store.owner;
 
-  const addCreditPayment = useCallback(
-    (customerId: string, amount: number, method: CashMethod, note = 'Abono', saleId?: string) =>
-      dispatch({
-        type: 'CREDIT_PAYMENT',
-        movement: { id: uid(), customerId, type: 'abono', amount, date: new Date().toISOString(), employee, note, method, saleId },
-      }),
-    [dispatch, employee],
+  const begin = useCallback((r: AuthRespuesta, email: string): string | null => {
+    const claims = decodeToken(r.token);
+    if (!claims || claims.role !== 'personal' || !claims.staffRole || !claims.tiendaId) {
+      return 'Esta cuenta es de cliente. En la caja entra con una cuenta del personal de la tienda.';
+    }
+    setApiToken(r.token);
+    if (dataRef.current.tiendaId !== claims.tiendaId) {
+      // Otra tienda: lo guardado en este equipo era de la anterior
+      dispatch({ type: 'RESET', tiendaId: claims.tiendaId });
+      setQueue(() => []);
+      write(CAJA_KEY, null);
+      setReady(false);
+    }
+    setSession({ token: r.token, email: r.user.email || email, userId: claims.sub, name: claims.name, role: claims.staffRole, tiendaId: claims.tiendaId, exp: claims.exp });
+    return null;
+  }, [setQueue]);
+
+  // ---------- Acciones ----------
+
+  const saveProduct = useCallback(
+    (product: Product, isNew: boolean) => {
+      const at = Date.now();
+      const prev = viewRef.current.products.find((p) => p.id === product.id);
+      dispatch({ type: 'UPSERT_PRODUCT', product, isNew, at });
+      // Foto: data URL nueva se sube; la misma URL no se manda; quitarla manda ''
+      const photo = product.photo?.startsWith('data:') ? product.photo : product.photo ? undefined : prev?.photo ? '' : undefined;
+      enqueue({
+        tipo: 'producto',
+        title: product.name,
+        detail: isNew ? 'Producto nuevo' : 'Cambios del producto',
+        product,
+        datos: {
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          price: product.price,
+          cost: product.cost,
+          ...(isNew ? { stock: product.stock } : {}),
+          minStock: product.minStock,
+          barcode: product.barcode,
+          saleType: product.saleType ?? 'pieza',
+          ...(photo !== undefined ? { photo } : {}),
+          description: product.description ?? '',
+          showInApp: product.showInApp !== false,
+          updatedAt: iso(at),
+        },
+      });
+      // En una edición la existencia no cambia con el producto: se manda lo que se contó como ajuste
+      if (!isNew && prev && prev.stock !== product.stock) {
+        enqueue({
+          tipo: 'ajuste_inventario',
+          title: product.name,
+          detail: `Existencia ${prev.stock} → ${product.stock}`,
+          datos: { id: uid(), productId: product.id, countedStock: product.stock, note: 'Ajuste desde la caja', at: iso(at) },
+        });
+      }
+      return navigator.onLine ? ('enviado' as const) : ('pendiente' as const);
+    },
+    [enqueue],
   );
+
+  const findByBarcode = useCallback((code: string) => viewRef.current.products.find((p) => p.barcode === code.trim()), []);
+
+  // Los movimientos se leen de lo guardado y se actualizan del servidor en segundo plano
+  const movementsAsked = useRef(new Map<string, number>());
+  const movementsFor = useCallback((productId: string) => {
+    const last = movementsAsked.current.get(productId) ?? 0;
+    if (Date.now() - last > 30000 && navigator.onLine && sessionRef.current) {
+      movementsAsked.current.set(productId, Date.now());
+      void request<MovimientoInventarioDto[]>('GET', `/inventario/movimientos?productoId=${enc(productId)}&limite=20`)
+        .then((list) => dispatch({ type: 'MOVEMENTS_FOR', productId, movements: list.map(toMovement) }))
+        .catch(() => undefined);
+    }
+    return dataRef.current.movements.filter((m) => m.productId === productId).slice(0, 8);
+  }, []);
+
+  const addCreditPayment = useCallback(
+    (customerId: string, amount: number, method: CashMethod, note = 'Abono') => {
+      const s = dataRef.current;
+      const movement: CreditMovement = { id: uid(), customerId, type: 'abono', amount, date: new Date().toISOString(), employee, note, method };
+      dispatch({ type: 'CREDIT_PAYMENT', movement });
+      const customer = s.customers.find((c) => c.id === customerId);
+      enqueue({
+        tipo: 'abono',
+        title: `Abono · ${customer?.name ?? 'cliente'}`,
+        detail: money(amount),
+        customerId,
+        datos: { customerId, id: movement.id, amount, method, note, turnoId: s.shift.id ?? null, date: movement.date },
+      });
+    },
+    [enqueue, employee],
+  );
+
+  const nextSaleFolio = (s: Data) => {
+    const own = s.sales.filter((x) => x.serie === s.caja?.serie && x.origin !== 'pedido').map((x) => x.folio);
+    return Math.max(s.caja?.lastSaleFolio ?? 0, 0, ...own) + 1;
+  };
 
   // A crédito, `paid` es lo que el cliente abona en efectivo al momento; el resto queda a su cuenta
   const confirmSale = useCallback(
     async (method: PaymentMethod, paid: number): Promise<Outcome<Sale>> => {
+      if (navigator.onLine) await flush();
       const s = dataRef.current;
-      const folio = Math.max(...s.sales.map((x) => x.folio), 1000) + 1;
+      if (!s.caja) return { ok: false, message: 'Esta caja todavía no se conecta con el servidor. Revisa la conexión.' };
+      if (!s.shift.id || s.closedCutId) return { ok: false, code: 'turno-cerrado', message: 'No hay un turno abierto. Ábrelo en «Corte del día» para cobrar.' };
+      if (!s.ticket.length) return { ok: false, message: 'La cuenta está vacía.' };
+      const folio = nextSaleFolio(s);
       const total = sumLines(s.ticket);
       const customer = s.customers.find((c) => c.id === s.account.customerId);
-      const offline = !navigator.onLine;
-      const sale: Sale = {
-        id: `v${folio}-${uid().slice(0, 4)}`,
+      const date = new Date().toISOString();
+      const items = s.ticket.map((l) => ({
+        productId: l.product.id,
+        name: l.product.name,
+        qty: l.qty,
+        price: l.product.price,
+        ...(isWeighed(l.product) ? { saleType: 'peso' as const } : {}),
+      }));
+      const sentIds = s.sent.filter((x) => x.status === 'en-caja' && inActive(s, x)).map((x) => x.id);
+      const upfront = method === 'credito' ? Math.min(Math.max(0, paid), total) : 0;
+      const body = {
+        id: uid(),
+        cajaId: s.caja.id,
+        turnoId: s.shift.id,
         folio,
-        date: new Date().toISOString(),
-        items: s.ticket.map((l) => ({ productId: l.product.id, name: l.product.name, qty: l.qty, price: l.product.price })),
+        date,
+        items,
+        method,
+        received: method === 'efectivo' ? paid : undefined,
+        paid: method === 'credito' ? upfront : undefined,
+        customerId: customer?.id,
+        sentIds,
+        // La API revisa que cuadre con la suma de las líneas (en centavos)
+        total,
+      };
+      const local: Sale = {
+        id: body.id,
+        folio,
+        serie: s.caja.serie,
+        date,
+        items,
         total,
         method,
         employee,
-        paid: method === 'efectivo' || (method === 'credito' && paid > 0) ? paid : undefined,
-        pending: offline || undefined,
+        paid: method === 'efectivo' || (method === 'credito' && upfront > 0) ? paid : undefined,
         customerId: customer?.id,
         customerName: customer?.name,
+        turnoId: s.shift.id,
       };
-      const r = await send({ type: 'CONFIRM_SALE', sale });
-      if (!r.ok) return refused(r, 'No se pudo cobrar.');
-      if (method === 'credito' && customer && paid > 0) {
-        addCreditPayment(customer.id, Math.min(paid, total), 'efectivo', `Abono inicial · venta #${folio}`, sale.id);
+
+      // Con conexión y sin pendientes, el servidor revisa la existencia antes de cobrar
+      if (navigator.onLine && queueRef.current.length === 0) {
+        try {
+          const v = await request<VentaDto>('POST', '/ventas', body);
+          const sale = { ...toSale(v), customerName: v.customerName ?? customer?.name };
+          dispatch({ type: 'CONFIRM_SALE', sale, applyStock: false });
+          if (customer && method === 'credito') void refreshCredit(customer.id);
+          return { ok: true, value: sale };
+        } catch (e) {
+          if (!isNetworkError(e)) return refused(e, 'No se pudo cobrar.');
+        }
       }
-      if (offline || r.offline) setQueue((q) => [...q, { id: uid(), kind: 'venta', saleId: sale.id, at: Date.now() }]);
-      return { ok: true, value: sale, offline: r.offline };
+
+      // Sin conexión: se cobra aquí y sube después (el servidor la acepta aunque la existencia quede negativa)
+      const sale = { ...local, pending: true };
+      dispatch({ type: 'CONFIRM_SALE', sale, applyStock: true });
+      if (customer && upfront > 0) {
+        dispatch({
+          type: 'CREDIT_PAYMENT',
+          movement: { id: `ab-${sale.id}`, customerId: customer.id, type: 'abono', amount: upfront, date, employee, note: `Abono inicial · venta #${folio}`, method: 'efectivo', saleId: sale.id },
+        });
+      }
+      enqueue({ tipo: 'venta', title: `Venta #${folio}`, detail: money(total), saleId: sale.id, customerId: customer?.id, datos: body });
+      return { ok: true, value: sale, offline: true };
     },
-    [send, employee, addCreditPayment],
+    [flush, enqueue, employee, refreshCredit],
   );
 
-  // Sin servidor no se borra: él revisa los pedidos de los clientes y avisa a todos los equipos
-  const deleteProduct = useCallback(
-    async (id: string): Promise<Outcome<null>> => {
-      const s = dataRef.current;
-      if (!s.products.some((p) => p.id === id && !p.deletedAt)) return { ok: false, code: 'no-existe', message: 'Ese producto ya no existe.' };
-      const busy = productInUse(id, s);
-      if (busy) return { ok: false, code: 'producto-en-uso', message: busy };
-      if (!channel.current || !syncUp.current) return { ok: false, code: 'sin-conexion', message: 'Sin conexión con el servidor no se puede borrar un producto.' };
-      const r = await send({ type: 'DELETE_PRODUCT', id, at: Date.now() });
-      return r.ok ? { ok: true, value: null } : refused(r, 'No se pudo borrar el producto.');
-    },
-    [send],
-  );
+  const orderCall = useCallback(async (id: string, action: string, body: unknown, fallback: string): Promise<Outcome<null>> => {
+    if (!navigator.onLine) return { ok: false, code: 'sin-conexion', message: 'Sin conexión con el servidor. Revisa la conexión e intenta de nuevo.' };
+    try {
+      const o = await request<PedidoGestionDto>('POST', `/gestion/pedidos/${enc(id)}/${action}`, body);
+      dispatch({ type: 'ORDER_UPSERT', order: toOrder(o) });
+      return { ok: true, value: null };
+    } catch (e) {
+      // Alguien más lo cambió: se vuelve a leer
+      if (e instanceof ApiError && e.status === 409) {
+        void request<PedidoGestionDto>('GET', `/gestion/pedidos/${enc(id)}`)
+          .then((o) => dispatch({ type: 'ORDER_UPSERT', order: toOrder(o) }))
+          .catch(() => undefined);
+      }
+      return refused(e, fallback);
+    }
+  }, []);
 
   // Empezar a preparar exige que alcance el inventario (lo revisa el servidor; si no, se queda en pendiente)
   const advanceOrder = useCallback(
-    async (id: string): Promise<Outcome<null>> => {
+    async (id: string) => {
       const o = dataRef.current.orders.find((x) => x.id === id);
-      if (!o) return { ok: false, message: 'No encontramos ese pedido.' };
-      const r = await send({ type: 'ORDER_ADVANCE', id, from: o.status, at: Date.now() });
-      return r.ok ? { ok: true, value: null, offline: r.offline } : refused(r, 'No se pudo cambiar el pedido.');
+      if (!o) return { ok: false, message: 'No encontramos ese pedido.' } as Outcome<null>;
+      return orderCall(id, 'avanzar', { from: o.status }, 'No se pudo cambiar el pedido.');
     },
-    [send],
+    [orderCall],
   );
 
-  // Entregar y cobrar: la venta entra por el mismo flujo que una de mostrador, una sola vez por pedido
+  // Entregar: el servidor valida el código, crea la venta (serie P) y descuenta la existencia
   const deliverOrder = useCallback(
     async (id: string, method: CashMethod, received: number, pickupCode: string): Promise<Outcome<Sale>> => {
       const s = dataRef.current;
-      const o = s.orders.find((x) => x.id === id);
       const done = s.sales.find((x) => x.orderId === id);
-      if (!o || o.status !== 'listo') return done ? { ok: true, value: done } : { ok: false, message: 'Este pedido no está listo para entregarse.' };
-      if (o.pickupCode && o.pickupCode !== pickupCode) return { ok: false, code: 'codigo-incorrecto', message: 'El código no coincide.' };
-      if (isPaidOnline(o) && method !== 'en_linea') return { ok: false, code: 'metodo-pago', message: 'Este pedido ya está pagado en línea: no se cobra.' };
-      const folio = Math.max(...s.sales.map((x) => x.folio), 1000) + 1;
-      const offline = !navigator.onLine;
-      const sale: Sale = {
-        id: `pedido-${o.id}`,
-        folio,
-        date: new Date().toISOString(),
-        items: o.items,
-        total: o.total,
-        method,
-        employee,
-        paid: method === 'efectivo' ? received : undefined,
-        pending: offline || undefined,
-        customerName: o.customer.name,
-        origin: 'pedido',
-        orderId: o.id,
-        orderFolio: o.folio,
-      };
-      const msg: Action = { type: 'ORDER_DELIVER', id, sale, payment: { method, received: method === 'efectivo' ? received : o.total }, pickupCode };
-      // Pagado en línea: sin servidor no se puede validar el código, así que no se entrega
-      if (method === 'en_linea' && (!channel.current || !syncUp.current)) return { ok: false, code: 'sin-conexion', message: 'Sin conexión con el servidor no se puede validar el código.' };
-      if (method === 'en_linea') {
-        const r = await channel.current!.send(msg);
-        if (!r.ok) return refused(r, 'No se pudo entregar el pedido.');
-        if (r.offline) return { ok: false, code: 'sin-conexion', message: 'Sin conexión con el servidor no se puede validar el código. Revisa la conexión.' };
-        localDispatch(msg);
+      const o = s.orders.find((x) => x.id === id);
+      if (o?.status === 'entregado' && done) return { ok: true, value: done };
+      if (!navigator.onLine) return { ok: false, code: 'sin-conexion', message: 'Entregar un pedido requiere conexión con el servidor.' };
+      try {
+        const r = await request<{ order: PedidoGestionDto; sale: VentaDto }>('POST', `/gestion/pedidos/${enc(id)}/entregar`, {
+          code: pickupCode,
+          method,
+          received: method === 'efectivo' ? received : undefined,
+          cajaId: s.caja?.id,
+          turnoId: s.shift.id,
+        });
+        const sale = toSale(r.sale);
+        dispatch({ type: 'ORDER_UPSERT', order: toOrder(r.order) });
+        dispatch({ type: 'CONFIRM_SALE', sale, applyStock: false });
         return { ok: true, value: sale };
+      } catch (e) {
+        return refused(e, 'No se pudo entregar el pedido.');
       }
-      const r = await send(msg);
-      if (!r.ok) return refused(r, 'No se pudo entregar el pedido.');
-      if (offline || r.offline) setQueue((q) => [...q, { id: uid(), kind: 'venta', saleId: sale.id, at: Date.now() }]);
-      return { ok: true, value: sale, offline: r.offline };
     },
-    [send, employee],
+    [],
   );
 
   const ticketTotal = sumLines(data.ticket);
@@ -958,6 +1268,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     .sort((a, b) => a.openedAt - b.openedAt)
     .map(({ lines, ...a }) => ({ ...a, count: lines.reduce((n, l) => n + l.qty, 0), total: sumLines(lines) }));
   const ticketCount = data.ticket.reduce((s, l) => s + l.qty, 0);
+
+  // El celular elige a qué cuenta abierta mandar lo que escanea: se le avisan cada vez que cambian.
+  // productIds: lo que tiene cada cuenta, para que el servidor no deje borrar un producto que está en una.
+  const productIdsOf = (id: string) =>
+    [...new Set((id === data.account.id ? data.ticket : data.parked.find((p) => p.id === id)?.lines ?? []).map((l) => l.product.id))];
+  const accountsKey = JSON.stringify(accounts.map((a) => [a.id, a.name, a.customerId, a.active, a.count, productIdsOf(a.id)]));
+  useEffect(() => {
+    const caja = dataRef.current.caja;
+    if (!hubUp || !caja || !hubRef.current) return;
+    const t = window.setTimeout(() => {
+      void hubRef.current?.invoke(
+        'PublicarCuentas',
+        caja.id,
+        accounts.map((a) => ({ id: a.id, name: a.name, customerId: a.customerId, active: a.active, count: a.count, productIds: productIdsOf(a.id) })),
+      );
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [accountsKey, hubUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Disponible = existencia − apartado por pedidos − piezas que ya están en alguna cuenta abierta.
   // La pantalla solo avisa con esto; quien decide al cobrar es el servidor.
@@ -973,42 +1301,94 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return l.qty > room ? [{ product: l.product, qty: l.qty, available: room }] : [];
   });
 
+  const online = netOnline && (hubUp || !session);
+
   const value: AppState = {
-    ...data,
+    caja: data.caja,
+    store: data.store,
+    ticketConfig: data.ticketConfig,
+    users: data.users,
+    movements: data.movements,
+    ticket: data.ticket,
+    account: data.account,
+    parked: data.parked,
+    customers: data.customers,
+    creditMovements: data.creditMovements,
+    sales: data.sales,
+    sent: data.sent,
+    lastScan: data.lastScan,
+    cuts: data.cuts,
+    cashMovements: data.cashMovements,
+    shift: data.shift,
+    devices: data.devices,
+    pairing: data.pairing,
+    closedCutId: data.closedCutId,
+    lastSaleId: data.lastSaleId,
+    orders: data.orders,
     products: view.products,
     pending: view.pending,
     online,
-    syncConnected,
+    syncConnected: hubUp,
+    ready,
     uploading,
     lastUpload,
 
-    isLive: (key) => key in presence,
-    newPairingCode: () =>
-      dispatch({
-        type: 'SET_PAIRING',
-        pairing: { code: String(Math.floor(100000 + Math.random() * 900000)), expiresAt: Date.now() + 5 * 60000 },
-      }),
-    removeDevice: (id) => dispatch({ type: 'REMOVE_DEVICE', id }),
+    isLive: (key) => presence.has(key),
+    newPairingCode: async () => {
+      try {
+        const c = await request<CodigoVinculacionDto>('POST', '/dispositivos/codigo');
+        dispatch({ type: 'SET_PAIRING', pairing: { code: c.code, expiresAt: Date.parse(c.expiresAt), qr: c.qr } });
+        return { ok: true, value: null };
+      } catch (e) {
+        return refused(e, 'No se pudo generar el código.');
+      }
+    },
+    removeDevice: async (id) => {
+      try {
+        await request('DELETE', `/dispositivos/${enc(id)}`);
+        dispatch({ type: 'REMOVE_DEVICE', id });
+        return { ok: true, value: null };
+      } catch (e) {
+        return refused(e, 'No se pudo quitar el celular.');
+      }
+    },
+    // Va directo a la API: ella revisa los pedidos de los clientes y las cuentas de las otras cajas, y avisa a todos
+    deleteProduct: async (id) => {
+      const s = dataRef.current;
+      if (!s.products.some((p) => p.id === id)) return { ok: false, code: 'no-existe', message: 'Ese producto ya no existe.' };
+      const busy = productInUse(id, s);
+      if (busy) return { ok: false, code: 'producto-en-uso', message: busy };
+      if (queueRef.current.some((op) => op.product?.id === id || op.datos.productId === id))
+        return { ok: false, code: 'pendiente', message: 'Este producto tiene cambios sin subir. Espera a que se suban e intenta de nuevo.' };
+      try {
+        await request('DELETE', `/productos/${enc(id)}`);
+        dispatch({ type: 'DELETE_PRODUCT', id });
+        return { ok: true, value: null };
+      } catch (e) {
+        return refused(e, 'No se pudo borrar el producto.');
+      }
+    },
 
     user,
-    login: (email, password) => {
-      const mail = email.trim().toLowerCase();
-      if (!mail || password.length < 4) return false;
-      const found = data.users.find((u) => u.email.toLowerCase() === mail);
-      if (found && !found.active) return false;
-      if (!found) {
-        const name = mail.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-        dispatch({ type: 'UPSERT_USER', user: { name, email: mail, role: 'Dueño', active: true } });
+    login: async (email, password) => {
+      try {
+        return begin(await request<AuthRespuesta>('POST', '/auth/entrar', { email, password }), email);
+      } catch (e) {
+        if (isNetworkError(e)) return 'No se pudo contactar al servidor. Revisa la conexión.';
+        return e instanceof ApiError && e.message ? e.message : 'No se pudo iniciar sesión.';
       }
-      setSessionEmail(found?.email ?? mail);
-      return true;
     },
-    registerStore: (storeName, name, email) => {
-      dispatch({ type: 'UPDATE_STORE', store: { ...data.store, name: storeName.trim(), owner: name.trim(), email: email.trim() } });
-      dispatch({ type: 'UPSERT_USER', user: { name: name.trim(), email: email.trim(), role: 'Dueño', active: true } });
-      setSessionEmail(email.trim());
+    registerStore: async (input) => {
+      try {
+        return begin(await request<AuthRespuesta>('POST', '/auth/registro-tienda', input), input.email);
+      } catch (e) {
+        if (isNetworkError(e)) return 'No se pudo contactar al servidor. Revisa la conexión.';
+        if (e instanceof ApiError && e.body.fields) return Object.values(e.body.fields)[0] ?? e.message;
+        return e instanceof ApiError && e.message ? e.message : 'No se pudo crear la tienda.';
+      }
     },
-    logout: () => setSessionEmail(null),
+    logout: () => logout(false),
+    refresh: () => loadAll(true),
 
     saveProduct,
     findByBarcode,
@@ -1020,14 +1400,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ticketShortages,
     ticketAdd: (product, qty = 1) => dispatch({ type: 'TICKET_ADD', product, qty, at: Date.now() }),
     ticketQty: (productId, delta) => dispatch({ type: 'TICKET_QTY', productId, delta }),
+    ticketSetQty: (productId, qty) => dispatch({ type: 'TICKET_SET_QTY', productId, qty }),
     ticketRemove: (productId) => dispatch({ type: 'TICKET_REMOVE', productId }),
-    ticketClear: () => dispatch({ type: 'TICKET_CLEAR' }),
+    ticketClear: () => {
+      // Lo que mandó el celular a esta cuenta queda cancelado también en el servidor
+      const s = dataRef.current;
+      s.sent
+        .filter((x) => x.status === 'en-caja' && inActive(s, x))
+        .forEach((x) => void request('POST', `/envios/${enc(x.id)}/cancelar`).catch(() => undefined));
+      dispatch({ type: 'TICKET_CLEAR' });
+    },
     confirmSale,
-    receiveOrder: (request) => dispatch({ type: 'ORDER_RECEIVED', request }),
     advanceOrder,
-    deleteProduct,
-    cancelOrder: (id, reason, missing, note) => dispatch({ type: 'ORDER_CANCEL', id, reason, missing, note: note?.trim() || undefined, at: Date.now() }),
-    reportShortage: (id, missing) => dispatch({ type: 'ORDER_ISSUE', id, missing, at: Date.now() }),
+    cancelOrder: (id, reason, missing, note) =>
+      orderCall(id, 'cancelar', { reason: reason === 'cliente' ? 'otro' : reason, missing, note: note?.trim() || undefined }, 'No se pudo cancelar el pedido.'),
+    reportShortage: (id, missing) => orderCall(id, 'agotado', { missing }, 'No se pudo avisar al cliente.'),
+    verifyPickupCode: async (raw) => {
+      if (!navigator.onLine) return { ok: false, code: 'sin-conexion', message: 'Entregar un pedido requiere conexión con el servidor.' };
+      try {
+        const o = toOrder(await request<PedidoGestionDto>('POST', '/gestion/pedidos/buscar-codigo', { code: raw }));
+        dispatch({ type: 'ORDER_UPSERT', order: o });
+        return { ok: true, value: o };
+      } catch (e) {
+        return refused(e, 'No se pudo revisar el código.');
+      }
+    },
     deliverOrder,
 
     accounts,
@@ -1049,29 +1446,116 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const prev = data.customers.find((x) => x.id === c.id);
       const customer: Customer = {
         ...c,
-        id: c.id ?? `cl-${uid()}`,
+        id: c.id ?? uid(),
         balance: prev?.balance ?? 0,
         createdAt: prev?.createdAt ?? new Date().toISOString(),
       };
       dispatch({ type: 'UPSERT_CUSTOMER', customer });
+      enqueue({
+        tipo: 'cliente_credito',
+        title: customer.name,
+        detail: prev ? 'Cambios del cliente' : 'Cliente nuevo',
+        datos: { id: customer.id, name: customer.name, phone: customer.phone, creditLimit: customer.creditLimit, note: customer.note, updatedAt: new Date().toISOString() },
+      });
       return customer;
     },
     addCreditPayment: (customerId, amount, method, note) => addCreditPayment(customerId, amount, method, note),
 
-    closeCut: (cut) => dispatch({ type: 'CLOSE_CUT', cut }),
-    openShift: (openingFund) =>
-      dispatch({
-        type: 'OPEN_SHIFT',
-        shift: { ...data.shift, openedAt: new Date().toISOString(), openedBy: employee, openingFund },
-      }),
-    addCashMovement: (type, amount, note) =>
-      dispatch({
-        type: 'ADD_CASH_MOVEMENT',
-        movement: { id: uid(), type, amount, note, date: new Date().toISOString(), employee },
-      }),
-    updateStore: (store) => dispatch({ type: 'UPDATE_STORE', store }),
-    updateTicketConfig: (config) => dispatch({ type: 'UPDATE_TICKET_CONFIG', config }),
-    saveUser: (u, prevEmail) => dispatch({ type: 'UPSERT_USER', user: u, prevEmail }),
+    closeCut: (cut) => {
+      const s = dataRef.current;
+      const own = s.cuts.filter((c) => c.cajaId === s.caja?.id).map((c) => c.folio);
+      const folio = Math.max(s.caja?.lastCutFolio ?? 0, 0, ...own) + 1;
+      const id = uid();
+      const at = new Date().toISOString();
+      dispatch({ type: 'CLOSE_CUT', cut: { ...cut, id, folio, date: at, turnoId: s.shift.id, cajaId: s.caja?.id } });
+      if (s.shift.id) {
+        enqueue({
+          tipo: 'turno_cerrar',
+          title: `Corte #${folio}`,
+          detail: `Efectivo contado ${money(cut.countedCash)}`,
+          datos: { turnoId: s.shift.id, cutId: id, folio, countedCash: cut.countedCash, at },
+        });
+      }
+      return folio;
+    },
+    openShift: (openingFund) => {
+      const s = dataRef.current;
+      if (!s.caja) return;
+      const shift: Shift = {
+        id: uid(),
+        name: s.shift.name || 'Turno',
+        register: s.caja.name,
+        openedAt: new Date().toISOString(),
+        openedBy: employee,
+        openingFund,
+      };
+      dispatch({ type: 'OPEN_SHIFT', shift });
+      enqueue({
+        tipo: 'turno_abrir',
+        title: 'Apertura de turno',
+        detail: `Fondo ${money(openingFund)}`,
+        datos: { id: shift.id, cajaId: s.caja.id, name: shift.name, openingFund, openedAt: shift.openedAt },
+      });
+    },
+    addCashMovement: (type, amount, note) => {
+      const s = dataRef.current;
+      const movement: CashMovement = { id: uid(), type, amount, note, date: new Date().toISOString(), employee };
+      dispatch({ type: 'ADD_CASH_MOVEMENT', movement });
+      if (s.shift.id) {
+        enqueue({
+          tipo: 'movimiento_efectivo',
+          title: type === 'entrada' ? 'Entrada de efectivo' : type === 'retiro' ? 'Retiro de efectivo' : 'Gasto',
+          detail: money(amount),
+          datos: { id: movement.id, turnoId: s.shift.id, type, amount, note, date: movement.date },
+        });
+      }
+    },
+    updateStore: async (store) => {
+      const before = dataRef.current.store;
+      dispatch({ type: 'UPDATE_STORE', store: { ...store, register: before.register } });
+      try {
+        const t = await request<TiendaDto>('PUT', '/tienda/datos', {
+          name: store.name,
+          owner: store.owner,
+          email: store.email,
+          phone: store.phone,
+          address: store.address,
+          rfc: store.rfc,
+          acceptsOrders: store.acceptsOrders,
+        });
+        dispatch({ type: 'UPDATE_STORE', store: toStore(t, before.register) });
+        return { ok: true, value: null };
+      } catch (e) {
+        dispatch({ type: 'UPDATE_STORE', store: before });
+        return refused(e, 'No se pudieron guardar los datos de la tienda.');
+      }
+    },
+    updateTicketConfig: async (config) => {
+      const before = dataRef.current.ticketConfig;
+      dispatch({ type: 'UPDATE_TICKET_CONFIG', config });
+      try {
+        const t = await request<TiendaDto>('PUT', '/tienda/datos', { ticketConfig: config });
+        dispatch({ type: 'UPDATE_TICKET_CONFIG', config: t.ticketConfig });
+        return { ok: true, value: null };
+      } catch (e) {
+        dispatch({ type: 'UPDATE_TICKET_CONFIG', config: before });
+        return refused(e, 'No se pudo guardar el ticket.');
+      }
+    },
+    saveUser: async (u, prevEmail) => {
+      const existing = u.id ?? dataRef.current.users.find((x) => x.email.toLowerCase() === (prevEmail ?? u.email).toLowerCase())?.id;
+      try {
+        const body = { name: u.name, email: u.email, role: u.role, active: u.active };
+        const dto = existing
+          ? await request<PersonalDto>('PUT', `/usuarios/${enc(existing)}`, body)
+          : await request<PersonalDto>('POST', '/usuarios', body);
+        const saved = toUser(dto);
+        dispatch({ type: 'UPSERT_USER', user: saved, prevEmail });
+        return { ok: true, value: saved };
+      } catch (e) {
+        return refused(e, 'No se pudo guardar el usuario.');
+      }
+    },
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

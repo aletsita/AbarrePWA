@@ -165,7 +165,7 @@ function reservedBy(exceptId) {
     if (seen.has(o.id)) return;
     seen.add(o.id);
     if (o.id === exceptId) return;
-    for (const i of o.items ?? []) map[i.productId] = (map[i.productId] ?? 0) + (Number(i.qty) || 0);
+    for (const i of o.items ?? []) map[i.productId] = roundQty((map[i.productId] ?? 0) + (Number(i.qty) || 0));
   };
   for (const o of db.caja?.orders ?? []) if (ACTIVE.includes(o.status)) add(o);
   for (const o of db.orders) if (ACTIVE.includes(o.status) && (!o.payment || o.payment.status === 'pagado')) add(o);
@@ -179,13 +179,13 @@ function shortagesOf(items, exceptId) {
   if (!db.caja) return [];
   const reserved = reservedBy(exceptId);
   const want = {};
-  for (const i of items ?? []) want[i.productId] = (want[i.productId] ?? 0) + (Number(i.qty) || 0);
+  for (const i of items ?? []) want[i.productId] = roundQty((want[i.productId] ?? 0) + (Number(i.qty) || 0));
   const out = [];
   for (const [id, requested] of Object.entries(want)) {
     const p = db.caja.products.find((x) => x.id === id);
     const available = p ? availableOf(p, reserved) : 0;
     if (requested > available) {
-      out.push({ productId: id, name: p?.name ?? items.find((i) => i.productId === id)?.name ?? 'Producto', requested, available, missing: requested - available });
+      out.push({ productId: id, name: p?.name ?? items.find((i) => i.productId === id)?.name ?? 'Producto', requested, available, missing: roundQty(requested - available) });
     }
   }
   return out;
@@ -222,7 +222,7 @@ function announceStock(before) {
   publish({ type: 'STOCK', items, at: Date.now() });
   const visible = changed
     .map((id) => db.caja.products.find((x) => x.id === id))
-    .filter((p) => p.showInApp !== false && !p.deletedAt)
+    .filter((p) => p.showInApp !== false && !p.deletedAt && p.saleType !== 'peso')
     .map((p) => ({ id: p.id, stock: availableOf(p, reserved) }));
   if (visible.length) broadcast('inventario', visible);
 }
@@ -287,6 +287,38 @@ function checkPickupCode(o, code) {
   return { status: 422, body: { code: 'codigo-incorrecto', message: `El código no coincide. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.`, intentos: left } };
 }
 
+// ---------- venta por pieza o por peso (igual que src/domain/weight.ts) ----------
+
+// Cuentas en enteros: gramos y centavos
+const toGrams = (kg) => Math.round(kg * 1000);
+const toCents = (pesos) => Math.round(pesos * 100);
+const roundQty = (qty) => toGrams(qty) / 1000;
+const lineCents = (qty, price, saleType) => (saleType === 'peso' ? Math.round((toCents(price) * toGrams(qty)) / 1000) : toCents(price) * Math.round(qty));
+const MAX_GRAMS = 999_999;
+
+// Revisa que cada línea tenga una cantidad válida para su tipo y que el total sea la suma exacta de las líneas.
+// El precio lo pone la caja (es la dueña del catálogo); aquí se evita un total mal sumado o una cantidad imposible.
+function saleProblem(sale) {
+  if (!Array.isArray(sale.items) || !sale.items.length) return 'La venta no tiene productos.';
+  let cents = 0;
+  for (const i of sale.items) {
+    const qty = Number(i.qty);
+    const price = Number(i.price);
+    if (!Number.isFinite(price) || price < 0) return `Precio inválido en ${i.name ?? 'un producto'}.`;
+    const p = db.caja?.products.find((x) => x.id === i.productId);
+    // La línea dice cómo se vendió; si el producto existe, tiene que coincidir con su tipo
+    const weighed = i.saleType === 'peso';
+    if (p && (p.saleType === 'peso') !== weighed) return `${p.name} se vende por ${p.saleType === 'peso' ? 'peso' : 'pieza'}.`;
+    if (weighed) {
+      const g = toGrams(qty);
+      if (!(g >= 1 && g <= MAX_GRAMS) || Math.abs(qty * 1000 - g) > 1e-6) return `Peso inválido en ${i.name ?? 'un producto'}: usa kilos con hasta 3 decimales.`;
+    } else if (!Number.isInteger(qty) || qty < 1) return `Cantidad inválida en ${i.name ?? 'un producto'}: se vende por pieza.`;
+    cents += lineCents(qty, price, i.saleType);
+  }
+  if (toCents(Number(sale.total)) !== cents) return `El total no cuadra: la suma de los productos da $${(cents / 100).toFixed(2)}.`;
+  return null;
+}
+
 // ---------- borrado lógico de productos ----------
 
 // Por qué no se puede borrar (null = se puede): en una cuenta abierta de la caja o apartado en un pedido sin entregar
@@ -315,6 +347,8 @@ export function gate(msg) {
     case 'CONFIRM_SALE': {
       const sale = msg.sale;
       if (!sale?.id || sale.orderId || recentSales.has(sale.id)) return null;
+      const wrong = saleProblem(sale);
+      if (wrong) return { status: 422, body: { code: 'venta-invalida', message: wrong } };
       const short = shortagesOf(sale.items);
       return short.length ? stockError(short) : null;
     }
@@ -495,7 +529,7 @@ function handleRelay(msg) {
     case 'ADD_STOCK':
       for (const e of msg.entries ?? []) {
         const p = db.caja?.products.find((x) => x.id === e.productId);
-        if (p) p.stock += Number(e.qty) || 0;
+        if (p) p.stock = roundQty(p.stock + (Number(e.qty) || 0));
       }
       break;
   }
@@ -521,7 +555,7 @@ function applySale(sale) {
 function discount(items) {
   for (const i of items ?? []) {
     const p = db.caja.products.find((x) => x.id === i.productId);
-    if (p) p.stock = Math.max(0, p.stock - i.qty);
+    if (p) p.stock = Math.max(0, roundQty(p.stock - i.qty));
   }
 }
 
@@ -614,7 +648,7 @@ function sendToCaja(o) {
 function catalogOf(caja, exceptId) {
   const reserved = reservedBy(exceptId);
   return caja.products
-    .filter((p) => p.showInApp !== false && !p.deletedAt)
+    .filter((p) => p.showInApp !== false && !p.deletedAt && p.saleType !== 'peso')
     .map(({ id, name, category, price, stock, photo, description }) => ({
       id,
       name,

@@ -1,7 +1,7 @@
 import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
 import { closeOutline, mailOutline, personAddOutline, personOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
-import { SelectField, TextField } from '../../../components/Form';
+import { FormSection, SelectField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import { ROLES, type Role } from '../../../data/models';
 
@@ -32,11 +32,21 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
     ? 'Escribe un correo válido'
     : users.some((u) => u.email.toLowerCase() === mail) && 'Ya hay un usuario con ese correo';
 
-  const save = (e?: React.FormEvent) => {
+  const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState('');
+
+  const save = async (e?: React.FormEvent) => {
     e?.preventDefault();
     setTried(true);
-    if (nameError || emailError) return;
-    saveUser({ name: name.trim(), email: mail, role, active: true });
+    if (nameError || emailError || busy) return;
+    setBusy(true);
+    setServerError('');
+    const r = await saveUser({ name: name.trim(), email: mail, role, active: true });
+    setBusy(false);
+    if (!r.ok) {
+      setServerError(r.message);
+      return;
+    }
     onAdded(name.trim(), role);
     onClose();
   };
@@ -52,8 +62,11 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
         </IonToolbar>
       </IonHeader>
       <form className="pmodal-body" onSubmit={save}>
-        <p className="form-intro">Podrá entrar al panel con este correo.</p>
-        <div className="form-grid">
+        <FormSection
+          title="Datos del usuario"
+          icon={personOutline}
+          text="Para entrar, crea su contraseña registrándose con este mismo correo en la app de Abarré. Después entra a la caja o al celular."
+        >
           <TextField className="is-wide" label="Nombre completo" icon={personOutline} autoCapitalize="words" value={name} onChange={setName}
             error={tried && nameError} autoFocus />
           <TextField className="is-wide" label="Correo" icon={mailOutline} type="email" inputMode="email" placeholder="nombre@correo.mx" value={email}
@@ -61,11 +74,12 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
           <SelectField className="is-wide" label="Rol" hint={ROLE_HINT[role]} value={role} onChange={(v) => setRole(v as Role)}>
             {ROLES.map((r) => <option key={r}>{r}</option>)}
           </SelectField>
-        </div>
+        </FormSection>
+        {serverError && <p className="form-error" role="alert">{serverError}</p>}
       </form>
       <div className="pmodal-foot">
         <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
-        <IonButton className="btn-lg" onClick={() => save()}>
+        <IonButton className="btn-lg" disabled={busy} onClick={() => void save()}>
           <IonIcon slot="start" icon={personAddOutline} />
           Agregar usuario
         </IonButton>

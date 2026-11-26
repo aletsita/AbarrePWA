@@ -74,7 +74,15 @@ function relay(msg) {
 }
 
 let saleN = 0;
-const sale = (id, items) => ({ type: 'CONFIRM_SALE', sale: { id: `${id}-${++saleN}`, folio: 1, date: new Date().toISOString(), items, total: 0, method: 'efectivo' } });
+// Como la caja: cada línea lleva el precio del producto y el total es la suma exacta (en centavos)
+const sale = (id, items, total) => {
+  const lines = items.map((i) => {
+    const p = caja.products.find((x) => x.id === i.productId);
+    return { name: p?.name ?? i.productId, price: p?.price ?? 0, ...(p?.saleType === 'peso' ? { saleType: 'peso' } : {}), ...i };
+  });
+  const cents = lines.reduce((t, l) => t + (l.saleType === 'peso' ? Math.round((Math.round(l.price * 100) * Math.round(l.qty * 1000)) / 1000) : Math.round(l.price * 100) * l.qty), 0);
+  return { type: 'CONFIRM_SALE', sale: { id: `${id}-${++saleN}`, folio: 1, date: new Date().toISOString(), items: lines, total: total ?? cents / 100, method: 'efectivo' } };
+};
 
 // ---------- HTTP de la API ----------
 
@@ -486,5 +494,47 @@ describe('catálogo en vivo', () => {
     await tick();
     live.close();
     assert.equal(live.events.length, 0);
+  });
+});
+
+describe('venta por peso', () => {
+  const addQueso = () => {
+    caja.products.push({ id: 'queso', name: 'Queso', price: 80, stock: 1.2, category: 'Lácteos', saleType: 'peso' });
+    snapshot();
+  };
+
+  test('0.350 kg a $80/kg cobra $28 y descuenta 0.35 kg sin restos de punto flotante', async () => {
+    addQueso();
+    const token = await newClient();
+    published.length = 0;
+    const r = relay(sale('peso', [{ productId: 'queso', qty: 0.35 }]));
+    assert.equal(r.status, 204);
+    const stock = published.find((m) => m.type === 'STOCK')?.items.find((i) => i.productId === 'queso');
+    assert.equal(stock.stock, 0.85);
+    // No se ofrece en la app de clientes
+    assert.ok(!(await call('GET', '/catalogo', { token })).data.some((p) => p.id === 'queso'));
+  });
+
+  test('un total que no cuadra se rechaza con 422 y no descuenta', () => {
+    addQueso();
+    const r = relay(sale('peso', [{ productId: 'queso', qty: 0.35 }], 27.99));
+    assert.equal(r.status, 422);
+    assert.equal(r.body.code, 'venta-invalida');
+    assert.match(r.body.message, /28\.00/);
+  });
+
+  test('peso con más de 3 decimales, pieza con decimales o tipo cambiado se rechazan', () => {
+    addQueso();
+    assert.equal(relay(sale('peso', [{ productId: 'queso', qty: 0.3505 }])).status, 422);
+    assert.equal(relay(sale('pieza', [{ productId: 'pan', qty: 1.5 }])).status, 422);
+    // El queso se vende por peso: una línea "por pieza" no pasa
+    assert.equal(relay(sale('tipo', [{ productId: 'queso', qty: 1, saleType: undefined }])).status, 422);
+  });
+
+  test('pedir más kilos de los que hay da 409 con lo que falta', () => {
+    addQueso();
+    const r = relay(sale('peso', [{ productId: 'queso', qty: 1.25 }]));
+    assert.equal(r.status, 409);
+    assert.deepEqual(r.body.faltantes.map((f) => [f.productId, f.available, f.missing]), [['queso', 1.2, 0.05]]);
   });
 });

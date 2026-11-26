@@ -1,12 +1,13 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonAlert } from '@ionic/react';
-import { add, alertCircleOutline, checkmarkCircle, closeOutline, phonePortraitOutline, refreshOutline, serverOutline, timeOutline, wifiOutline } from 'ionicons/icons';
+import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
+import { useAppAlert } from '../../../components/AppAlert';
+import { add, checkmarkCircle, closeOutline, cloudOfflineOutline, personOutline, phonePortraitOutline, pulseOutline, refreshOutline, serverOutline, storefrontOutline, timeOutline, trashOutline, wifiOutline } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
-import { EmptyState } from '../../../components/EmptyState';
+import { Notice } from '../../../components/Notice';
 import { useApp } from '../../../context/AppContext';
 import type { Device } from '../../../data/models';
 import { ago, useNow } from '../../../hooks/useNow';
 import { buildLinkQr, normalizeServer, shortServer } from '../../../lib/link';
-import { URL_SYNC } from '../../../lib/sync';
+import { API_URL } from '../../../lib/api';
 import { PanelHeader } from '../../components/PanelHeader';
 import { QrCode } from '../../components/QrCode';
 import './Devices.css';
@@ -16,8 +17,10 @@ interface ServerOption {
   name: string;
 }
 
-// Direcciones con las que el celular llega al servidor de sincronización.
-// Si VITE_SYNC_URL ya es una dirección pública (no localhost) se usa esa; si no, se le pregunta al servidor.
+// Direcciones con las que el celular llega a la API (AbarreAPI).
+// Si VITE_API_URL ya es una dirección pública (no localhost) se usa esa; si no, se le pregunta a la API
+// (GET /__sync/info: su dirección pública y las de la red local).
+const URL_SYNC = `${API_URL}/__sync`;
 function useServerOptions(isOpen: boolean) {
   const [options, setOptions] = useState<ServerOption[]>([]);
   const [state, setState] = useState<'buscando' | 'listo' | 'error'>('buscando');
@@ -50,6 +53,11 @@ function useServerOptions(isOpen: boolean) {
 
 function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { pairing, newPairingCode, devices, store, syncConnected } = useApp();
+  const [pairError, setPairError] = useState('');
+  const renew = async () => {
+    const r = await newPairingCode();
+    setPairError(r.ok ? '' : r.message);
+  };
   const { options, state } = useServerOptions(isOpen);
   const [server, setServer] = useState('');
   const now = useNow(1000);
@@ -60,7 +68,7 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
     if (!isOpen) return;
     known.current = new Set(devices.map((d) => d.id));
     setLinked(undefined);
-    if (!pairing || pairing.expiresAt < Date.now() + 60000) newPairingCode();
+    if (!pairing || pairing.expiresAt < Date.now() + 60000) void renew();
     // solo al abrir
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -97,22 +105,25 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
         ) : (
           <>
             {!syncConnected && (
-              <p className="lk-alert" role="alert">
-                <IonIcon icon={alertCircleOutline} />
-                <span>
-                  Esta caja no está conectada al servidor de sincronización, así que el celular no podrá vincularse.
-                  Enciéndelo en la computadora con <code>npm run dev:server</code>.
-                </span>
-              </p>
+              <div role="alert" className="lk-alert">
+                <Notice tone="error" title="La caja no está conectada al servidor">
+                  El celular no podrá vincularse. Revisa que la API (AbarreAPI) esté encendida y que haya internet.
+                </Notice>
+              </div>
+            )}
+            {pairError && (
+              <div className="lk-alert">
+                <Notice tone="error" title="No se pudo generar el código">{pairError}</Notice>
+              </div>
             )}
             <ol className="lk-steps">
-              <li>Conecta el celular a la <strong>misma red Wi‑Fi</strong> que esta computadora.</li>
-              <li>En el celular abre Abarré y entra a <strong>Vincular con la caja</strong>.</li>
-              <li>Escanea el código QR, o escribe la dirección y los 6 dígitos.</li>
+              <li><span>1</span><p>Conecta el celular a la <strong>misma red Wi‑Fi</strong> que esta computadora.</p></li>
+              <li><span>2</span><p>En el celular abre Abarré y entra a <strong>Vincular con la caja</strong>.</p></li>
+              <li><span>3</span><p>Escanea el código QR, o escribe la dirección y los 6 dígitos.</p></li>
             </ol>
             <div className="lk-grid">
               <div className={`lk-qr ${expired ? 'is-expired' : ''}`}>
-                {pairing && <QrCode value={buildLinkQr(pairing.code, server || null)} size={196} />}
+                {pairing && <QrCode value={server ? buildLinkQr(pairing.code, server) : pairing.qr ?? buildLinkQr(pairing.code, null)} size={196} />}
               </div>
               <div className="lk-code">
                 <span>Código</span>
@@ -121,7 +132,7 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                   <IonIcon icon={timeOutline} />
                   {expired ? 'Venció' : `Vence en ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
                 </span>
-                <IonButton fill="clear" size="small" onClick={newPairingCode}>
+                <IonButton fill="clear" size="small" onClick={() => void renew()}>
                   <IonIcon slot="start" icon={refreshOutline} />
                   Generar otro
                 </IonButton>
@@ -164,18 +175,22 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
 
 export default function Devices() {
   const { devices, isLive, removeDevice } = useApp();
-  const [alert] = useIonAlert();
+  const showAlert = useAppAlert();
   const now = useNow(5000);
   const [linkOpen, setLinkOpen] = useState(false);
+  const online = devices.filter((d) => isLive(d.id)).length;
 
   const confirmRemove = (d: Device) =>
-    alert({
-      header: `¿Quitar ${d.name}?`,
+    void showAlert({
+      tone: 'warning',
+      title: `¿Quitar ${d.name}?`,
       message: 'El celular dejará de enviar productos a la caja hasta que se vincule de nuevo.',
-      buttons: [
-        { text: 'Cancelar', role: 'cancel' },
-        { text: 'Quitar', role: 'destructive', handler: () => removeDevice(d.id) },
-      ],
+      primary: { text: 'Quitar celular', danger: true },
+      secondary: 'Cancelar',
+    }).then(async (yes) => {
+      if (!yes) return;
+      const r = await removeDevice(d.id);
+      if (!r.ok) void showAlert({ tone: 'error', title: 'No se pudo quitar el celular', message: r.message, primary: 'Entendido' });
     });
 
   return (
@@ -197,36 +212,84 @@ export default function Devices() {
           </div>
 
           {devices.length === 0 ? (
-            <section className="pcard">
-              <EmptyState art="box" title="Sin celulares vinculados" text="Vincula un celular para escanear productos y mandarlos a la caja." />
+            <section className="pcard dev-empty">
+              <span className="dev-empty-icon">
+                <IonIcon icon={phonePortraitOutline} aria-hidden="true" />
+              </span>
+              <h2>Vincula tu primer celular</h2>
+              <p>Con él escaneas productos y los mandas a esta caja, das de alta mercancía y entregas pedidos.</p>
+              <ol className="dev-steps">
+                <li><span>1</span>Instala Abarré en el celular</li>
+                <li><span>2</span>Conéctalo a la misma Wi‑Fi que esta computadora</li>
+                <li><span>3</span>Escanea el QR que te mostramos aquí</li>
+              </ol>
+              <IonButton className="btn-lg" onClick={() => setLinkOpen(true)}>
+                <IonIcon slot="start" icon={add} />
+                Vincular celular
+              </IonButton>
             </section>
           ) : (
-            <div className="dev-grid">
-              {devices.map((d) => {
-                const on = isLive(d.id);
-                return (
-                  <article key={d.id} className={`pcard dev-card ${on ? 'is-on' : 'is-off'}`}>
-                    <div className="dev-top">
-                      <span className="dev-icon"><IonIcon icon={phonePortraitOutline} /></span>
-                      <span className={`pill ${on ? 'is-ok' : 'is-off'}`}>
-                        <span className="dev-dot" />
-                        {on ? 'Conectado' : 'Desconectado'}
-                      </span>
-                    </div>
-                    <h2>{d.name}</h2>
-                    <p className="muted">{d.model}</p>
-                    <dl>
-                      <div><dt>Usuario</dt><dd>{d.owner || 'Sin asignar'}</dd></div>
-                      <div><dt>Caja</dt><dd>{d.register}</dd></div>
-                      <div><dt>Última conexión</dt><dd>{on ? 'Ahora' : ago(new Date(d.lastSeen).getTime(), now)}</dd></div>
-                    </dl>
-                    <IonButton fill="clear" color="danger" size="small" className="dev-remove" onClick={() => confirmRemove(d)}>
-                      Quitar dispositivo
-                    </IonButton>
-                  </article>
-                );
-              })}
-            </div>
+            <>
+              <div className="dev-stats">
+                <div className="dev-stat">
+                  <span className="dev-stat-icon"><IonIcon icon={phonePortraitOutline} aria-hidden="true" /></span>
+                  <strong>{devices.length}</strong>
+                  <span>{devices.length === 1 ? 'Celular vinculado' : 'Celulares vinculados'}</span>
+                </div>
+                <div className="dev-stat is-on">
+                  <span className="dev-stat-icon"><IonIcon icon={pulseOutline} aria-hidden="true" /></span>
+                  <strong>{online}</strong>
+                  <span>Conectados ahora</span>
+                </div>
+                <div className="dev-stat is-off">
+                  <span className="dev-stat-icon"><IonIcon icon={cloudOfflineOutline} aria-hidden="true" /></span>
+                  <strong>{devices.length - online}</strong>
+                  <span>Desconectados</span>
+                </div>
+              </div>
+
+              <div className="dev-grid">
+                {devices.map((d) => {
+                  const on = isLive(d.id);
+                  return (
+                    <article key={d.id} className={`pcard dev-card ${on ? 'is-on' : 'is-off'}`}>
+                      <header className="dev-top">
+                        <span className="dev-icon">
+                          <IonIcon icon={phonePortraitOutline} aria-hidden="true" />
+                          <span className="dev-dot" />
+                        </span>
+                        <span className="dev-name">
+                          <h2>{d.name}</h2>
+                          <small>{d.model}</small>
+                        </span>
+                        <span className="dev-state">{on ? 'Conectado' : 'Desconectado'}</span>
+                      </header>
+                      <ul className="dev-info">
+                        <li>
+                          <IonIcon icon={personOutline} aria-hidden="true" />
+                          <span>Usuario</span>
+                          <strong>{d.owner || 'Sin asignar'}</strong>
+                        </li>
+                        <li>
+                          <IonIcon icon={storefrontOutline} aria-hidden="true" />
+                          <span>Caja</span>
+                          <strong>{d.register}</strong>
+                        </li>
+                        <li>
+                          <IonIcon icon={timeOutline} aria-hidden="true" />
+                          <span>Última conexión</span>
+                          <strong>{on ? 'Ahora' : ago(new Date(d.lastSeen).getTime(), now)}</strong>
+                        </li>
+                      </ul>
+                      <button type="button" className="dev-remove" onClick={() => confirmRemove(d)}>
+                        <IonIcon icon={trashOutline} aria-hidden="true" />
+                        Quitar celular
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </IonContent>

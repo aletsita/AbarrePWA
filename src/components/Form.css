@@ -74,3 +74,16 @@
 .form-note.is-ok { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .form-note.is-bad { background: var(--t-danger-bg); color: var(--ion-color-danger-shade); }
 .form-intro { margin: 0 0 18px; font-size: 0.92rem; line-height: 1.5; color: var(--t-muted); }
+
+/* Sección como tarjeta (formularios largos en modal): ícono, título y contenido */
+.form-section.is-card { padding: 16px; border: 1px solid var(--t-border); border-radius: var(--t-radius); background: var(--t-surface); box-shadow: var(--t-shadow); }
+.form-section.is-card + .form-section.is-card { margin-top: 0; padding-top: 16px; border-top: 1px solid var(--t-border); }
+.form-section.is-card header { display: flex; align-items: center; gap: 10px; }
+.form-section.is-card h3 { font-size: 0.98rem; font-weight: 750; text-transform: none; letter-spacing: 0; color: var(--t-ink); }
+.form-section-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--t-primary-bg); color: var(--ion-color-primary); font-size: 19px; }
+/* Dentro de una tarjeta (Configuración) la sección conserva el encabezado con ícono, sin repetir el borde */
+.pcard .form-section.is-card { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.pcard .form-section.is-card + .form-section.is-card { margin-top: 6px; padding-top: 20px; border-top: 1px solid var(--t-border); }
+.form-section.is-card header p { margin: 2px 0 0; }
+.form-section.is-card header > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.form-section.is-card + .form-section.is-card { margin-top: 12px; }

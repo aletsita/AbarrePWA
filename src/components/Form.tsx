@@ -113,13 +113,20 @@ export function SwitchField({ label, hint, checked, onChange, disabled }: { labe
   );
 }
 
-// Bloque con título dentro de un formulario largo
-export function FormSection({ title, text, children }: { title: string; text?: string; children: ReactNode }) {
+// Bloque con título dentro de un formulario largo; con `icon` se muestra como tarjeta con ícono
+export function FormSection({ title, text, icon, children }: { title: string; text?: string; icon?: string; children: ReactNode }) {
   return (
-    <section className="form-section">
+    <section className={`form-section ${icon ? 'is-card' : ''}`}>
       <header>
-        <h3>{title}</h3>
-        {text && <p>{text}</p>}
+        {icon && (
+          <span className="form-section-icon">
+            <IonIcon icon={icon} aria-hidden="true" />
+          </span>
+        )}
+        <span>
+          <h3>{title}</h3>
+          {text && <p>{text}</p>}
+        </span>
       </header>
       <div className="form-grid">{children}</div>
     </section>

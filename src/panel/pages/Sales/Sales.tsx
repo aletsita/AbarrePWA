@@ -1,3 +1,4 @@
+import { itemCount, lineTotal, qtyText } from '../../../domain/weight';
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
 import {
   bagHandleOutline,
@@ -50,7 +51,7 @@ export default function Sales() {
     (s) => inRange(s.date, range) && (!method || s.method === method) && (!employee || s.employee === employee) && (!origin || saleOrigin(s) === origin),
   );
   const total = list.reduce((n, s) => n + s.total, 0);
-  const pieces = list.reduce((n, s) => n + s.items.reduce((m, i) => m + i.qty, 0), 0);
+  const pieces = list.reduce((n, s) => n + itemCount(s.items), 0);
   const cash = list.filter((s) => s.method === 'efectivo').reduce((n, s) => n + s.total, 0);
   const employees = [...new Set([...users.map((u) => u.name), ...sales.map((s) => s.employee)])];
 
@@ -137,7 +138,7 @@ export default function Sales() {
                           <span className="sales-origin">{ORIGIN_LABEL.tienda}</span>
                         )}
                       </td>
-                      <td className="num" data-label="Artículos">{s.items.reduce((n, i) => n + i.qty, 0)}</td>
+                      <td className="num" data-label="Artículos">{itemCount(s.items)}</td>
                       <td data-label="Pago">
                         <span className={`pill is-${s.method}`}><IonIcon icon={METHOD_ICON[s.method]} />{PAYMENT_LABEL[s.method]}</span>
                       </td>
@@ -180,9 +181,9 @@ export default function Sales() {
                   {detail.items.map((i) => (
                     <tr key={i.productId}>
                       <td>{i.name}</td>
-                      <td className="num">{i.qty}</td>
+                      <td className="num">{qtyText(i.qty, i.saleType)}</td>
                       <td className="num">{money(i.price)}</td>
-                      <td className="num strong">{money(i.qty * i.price)}</td>
+                      <td className="num strong">{money(lineTotal(i.qty, i.price, i.saleType))}</td>
                     </tr>
                   ))}
                 </tbody>

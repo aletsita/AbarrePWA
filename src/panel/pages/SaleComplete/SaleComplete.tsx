@@ -1,3 +1,4 @@
+import { lineTotal, qtyText } from '../../../domain/weight';
 import { IonButton, IonContent, IonIcon, IonPage, useIonViewDidEnter } from '@ionic/react';
 import { calculatorOutline, printOutline } from 'ionicons/icons';
 import { useRef } from 'react';
@@ -87,8 +88,20 @@ export default function SaleComplete() {
               <ul>
                 {sale.items.map((i) => (
                   <li key={i.productId}>
-                    <span>{i.qty} × {i.name}</span>
-                    <span>{money(i.qty * i.price)}</span>
+                    <span>
+                      {i.saleType === 'peso' ? (
+                        <>
+                          {i.name}
+                          <br />
+                          {qtyText(i.qty, 'peso')} × {money(i.price)}/kg
+                        </>
+                      ) : (
+                        <>
+                          {i.qty} × {i.name}
+                        </>
+                      )}
+                    </span>
+                    <span>{money(lineTotal(i.qty, i.price, i.saleType))}</span>
                   </li>
                 ))}
               </ul>
