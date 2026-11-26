@@ -31,7 +31,7 @@ const MOVE_ICON: Record<MovementType, string> = { venta: arrowDown, entrada: arr
 const MOVE_LABEL: Record<MovementType, string> = { venta: 'Venta', entrada: 'Entrada', ajuste: 'Ajuste', alta: 'Alta' };
 
 const blank = (barcode = ''): Product => ({
-  id: `p${uid()}`,
+  id: uid(),
   name: '',
   category: 'Abarrotes',
   price: 0,
@@ -52,7 +52,9 @@ interface Props {
 }
 
 export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Props) {
-  const { saveProduct, deleteProduct, findByBarcode, movementsFor } = useApp();
+  const { saveProduct, deleteProduct, findByBarcode, movementsFor, user } = useApp();
+  // Según la API, solo Dueño e Inventario dan de alta, editan y borran productos
+  const canEdit = user?.role !== 'Cajero';
   const [toast] = useIonToast();
   const showAlert = useAppAlert();
   const [deleting, setDeleting] = useState(false);
@@ -385,14 +387,15 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
           </div>
 
           <div className="pmodal-foot">
-            {!isNew && (
+            {!canEdit && <span className="muted">Solo el dueño o Inventario pueden cambiar productos.</span>}
+            {!isNew && canEdit && (
               <IonButton fill="clear" color="danger" className="btn-lg pmodal-delete" disabled={deleting} onClick={() => void askDelete()}>
                 <IonIcon slot="start" icon={trashOutline} />
                 Borrar
               </IonButton>
             )}
             <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
-            <IonButton className="btn-lg pm-save" onClick={() => save()}>
+            <IonButton className="btn-lg pm-save" disabled={!canEdit} onClick={() => save()}>
               <IonIcon slot="start" icon={saveOutline} />
               {isNew ? 'Agregar producto' : 'Guardar cambios'}
             </IonButton>

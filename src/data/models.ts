@@ -51,6 +51,9 @@ export interface Sale {
   origin?: SaleOrigin;
   orderId?: string;
   orderFolio?: string;
+  // Serie de la caja (A) o de los pedidos (P) y turno al que pertenece (los da el servidor)
+  serie?: string;
+  turnoId?: string;
 }
 
 export type SaleOrigin = 'tienda' | 'pedido';
@@ -105,6 +108,8 @@ export interface CashMovement {
 }
 
 export interface Shift {
+  // Id del turno en el servidor (sin id: no hay turno abierto en esta caja)
+  id?: string;
   name: string;
   register: string;
   openedAt: string;
@@ -136,6 +141,8 @@ export interface CashCut {
   cashOut: number;
   expectedCash: number;
   countedCash: number;
+  turnoId?: string;
+  cajaId?: string;
 }
 
 export interface Device {
@@ -154,7 +161,10 @@ export interface Store {
   phone: string;
   address: string;
   rfc: string;
+  // Nombre de la caja de este equipo
   register: string;
+  // La tienda recibe pedidos de la app
+  acceptsOrders?: boolean;
 }
 
 export interface TicketConfig {
@@ -167,10 +177,14 @@ export interface TicketConfig {
 export type Role = 'Dueño' | 'Cajero' | 'Inventario';
 
 export interface User {
+  // Id en el servidor (sin id: todavía no se guarda)
+  id?: string;
   name: string;
   email: string;
   role: Role;
   active: boolean;
+  // Ya creó su contraseña (si no, la crea al registrarse en la app con ese correo)
+  hasPassword?: boolean;
 }
 
 export const ROLES: Role[] = ['Dueño', 'Cajero', 'Inventario'];
@@ -235,4 +249,16 @@ export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
 
 export const availableCredit = (c: Customer) => Math.max(0, c.creditLimit - c.balance);
 
-export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+// UUID v4: el servidor usa estos id tal cual (ventas, clientes, productos…), así no se duplican al reintentar.
+// crypto.randomUUID solo existe en contextos seguros (https o localhost); en la red local se arma a mano.
+export const uid = (): string => {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === 'function') return c.randomUUID();
+  const b = new Uint8Array(16);
+  if (c?.getRandomValues) c.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+};

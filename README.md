@@ -1,50 +1,57 @@
 # Tendero · Web (caja)
 
-La caja de Abarré: cobro, inventario, ventas, corte del día, dispositivos y configuración. Es una PWA instalable. Este proyecto incluye también el **servidor de sincronización** al que se conectan los celulares ([tendero-mobile](../tendero-mobile)).
+La caja de Abarré: cobro, inventario, ventas, corte del día, dispositivos y configuración. Es una PWA instalable que trabaja contra **[AbarreAPI](../AbarreAPI)** (ASP.NET Core + PostgreSQL), la misma API que usa la app del celular. La base de datos de la API es la fuente de verdad.
 
-Hecho con React 18, TypeScript, Ionic React 8, Vite 5 y vite-plugin-pwa. El servidor usa solo Node.js, sin dependencias.
+Hecho con React 18, TypeScript, Ionic React 8, Vite 5, vite-plugin-pwa y `@microsoft/signalr`.
+
+> La carpeta `server/` es el servidor de Node anterior. Ya no se usa: lo reemplazó AbarreAPI.
+
+## Cómo se conecta con la API
+
+- **Entrar:** `POST /api/auth/entrar` con una cuenta de **personal** (Dueño, Cajero o Inventario). Las cuentas de cliente no entran a la caja.
+- **Datos:** al entrar descarga todo con `GET /api/sync/cambios?desde=0` (tienda, usuarios, cajas, productos, clientes con crédito) y además el turno abierto de su caja, las ventas de 30 días, los cortes, los pedidos, los celulares y los movimientos. Lo guarda en el navegador para seguir trabajando sin internet.
+- **Cobrar:** con conexión, `POST /api/ventas` (el servidor revisa la existencia: `409 sin-stock` dice qué falta). Sin conexión, la venta se cobra y entra a una **cola** que sube sola con `POST /api/sync/subir` cuando vuelve el internet, igual que abonos, gastos, apertura y cierre de turno, clientes y productos.
+- **En vivo (SignalR, `/hubs/tienda`):** pedidos nuevos y sus cambios, productos que manda el celular, cambios del catálogo y la existencia, y qué celulares están conectados. La caja publica sus cuentas abiertas para que el celular elija a cuál mandar.
+- **Pide y recoge:** preparar, avisar de un agotado, cancelar y entregar van directo a la API (requieren conexión). El código para recoger nunca llega a la caja: lo revisa el servidor (`POST /api/gestion/pedidos/buscar-codigo` y `.../entregar`).
+- **Roles:** los decide la API. El Cajero cobra pero no edita productos; solo el Dueño cambia la configuración, los usuarios y genera códigos de vinculación.
 
 ## Requisitos
 
 - Node.js 18 o superior
 - Chrome o Edge recientes
+- AbarreAPI corriendo (ver su README)
 
 ## Desarrollo
 
-Necesitas dos terminales:
-
 ```bash
+# Terminal 1: la API (en AbarreAPI/AbarreAPI)
+dotnet run --launch-profile http     # http://0.0.0.0:8787
+
+# Terminal 2: la caja
 npm install
-npm run dev:server   # sincronización (/__sync) y API de la app del celular (/api) en http://0.0.0.0:8787
-npm run dev          # caja en http://localhost:5173
+npm run dev                          # http://localhost:5173
 ```
 
-En desarrollo, Vite reenvía la ruta `/__sync` al servidor (`server.proxy`). Si el servidor corre en otra dirección, defínela en `SYNC_PROXY_TARGET`.
+En desarrollo la caja usa la API en el mismo origen: Vite reenvía `/api`, `/hubs` (WebSocket), `/archivos` (fotos) y `/__sync` a `http://localhost:8787`. Si la API corre en otra dirección, defínela en `API_PROXY_TARGET`.
 
-Los celulares de la misma red se conectan directamente al servidor: `http://IP-de-tu-PC:8787/__sync`. No hace falta escribirla en ningún lado: el servidor imprime esa dirección al arrancar, y la caja la muestra y la mete en el QR de **Dispositivos → Vincular nuevo celular**. Si Windows pregunta por el firewall, permite el acceso de Node.js en redes **privadas**; si no, el celular no alcanza el servidor.
+Entra con `donpepe@correo.mx` / `abarre123` (Dueño) o `ana.lopez@correo.mx` / `abarre123` (Cajero), las cuentas de la semilla de la API.
+
+Los celulares de la misma red se conectan directamente a la API: `http://IP-de-tu-PC:8787`. La caja muestra esa dirección y la mete en el QR de **Dispositivos → Vincular nuevo celular** (la saca de `GET /__sync/info` de la API). Si Windows pregunta por el firewall, permite el puerto 8787 en redes **privadas**.
 
 ## Producción
 
 ```bash
-npm run build          # genera dist/ con el service worker
-npm run start:server   # sirve dist/ y /__sync en el mismo puerto
+VITE_API_URL=https://api.midominio.com npm run build   # genera dist/ con el service worker
 ```
 
-Basta un solo despliegue: el servidor sirve la web y la sincronización. Detrás de HTTPS (por ejemplo, un proxy inverso), define `PUBLIC_SYNC_URL=https://tu-dominio/__sync` para que el QR de vinculación lleve esa dirección en lugar de la IP local.
-
-`npm run preview` también funciona: sirve `dist/` en http://localhost:4173 y reenvía `/__sync` al servidor, que debe estar corriendo.
+Sube `dist/` a cualquier hosting estático con HTTPS y agrega su origen a `Cors__Origenes` de la API. Si sirves la caja y la API en el mismo dominio (un proxy que mande `/api`, `/hubs` y `/archivos` a la API), deja `VITE_API_URL` vacía.
 
 ### Variables de entorno
 
 | Variable | Dónde | Por defecto | Uso |
 |---|---|---|---|
-| `PORT` | servidor | `8787` | Puerto del servidor |
-| `HOST` | servidor | `0.0.0.0` | Interfaz donde escucha |
-| `ALLOWED_ORIGINS` | servidor | `http://localhost:5173,http://localhost:5174,http://localhost,https://localhost,capacitor://localhost` y cualquier IP de red local (`192.168.x.x`, `10.x.x.x`, `172.16–31.x.x`) | Orígenes con CORS permitido, separados por comas. `*` permite cualquiera. Si la defines, se usa solo tu lista. |
-| `PUBLIC_SYNC_URL` | servidor | — | Dirección pública del servidor que va en el QR (por ejemplo detrás de HTTPS) |
-| `DIST_DIR` | servidor | `dist` | Carpeta del build que se sirve |
-| `SYNC_PROXY_TARGET` | Vite | `http://localhost:8787` | A dónde reenvía Vite `/__sync` |
-| `VITE_SYNC_URL` | build de la web | `/__sync` | URL de sincronización, si no es la del mismo origen |
+| `VITE_API_URL` | build de la web | vacía (mismo origen) | Dirección de AbarreAPI |
+| `API_PROXY_TARGET` | Vite (desarrollo) | `http://localhost:8787` | A dónde reenvía Vite `/api`, `/hubs`, `/archivos` y `/__sync` |
 
 ## Rutas
 

@@ -7,7 +7,7 @@ import { useApp } from '../../../context/AppContext';
 import type { Device } from '../../../data/models';
 import { ago, useNow } from '../../../hooks/useNow';
 import { buildLinkQr, normalizeServer, shortServer } from '../../../lib/link';
-import { URL_SYNC } from '../../../lib/sync';
+import { API_URL } from '../../../lib/api';
 import { PanelHeader } from '../../components/PanelHeader';
 import { QrCode } from '../../components/QrCode';
 import './Devices.css';
@@ -17,8 +17,10 @@ interface ServerOption {
   name: string;
 }
 
-// Direcciones con las que el celular llega al servidor de sincronización.
-// Si VITE_SYNC_URL ya es una dirección pública (no localhost) se usa esa; si no, se le pregunta al servidor.
+// Direcciones con las que el celular llega a la API (AbarreAPI).
+// Si VITE_API_URL ya es una dirección pública (no localhost) se usa esa; si no, se le pregunta a la API
+// (GET /__sync/info: su dirección pública y las de la red local).
+const URL_SYNC = `${API_URL}/__sync`;
 function useServerOptions(isOpen: boolean) {
   const [options, setOptions] = useState<ServerOption[]>([]);
   const [state, setState] = useState<'buscando' | 'listo' | 'error'>('buscando');
@@ -51,6 +53,11 @@ function useServerOptions(isOpen: boolean) {
 
 function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { pairing, newPairingCode, devices, store, syncConnected } = useApp();
+  const [pairError, setPairError] = useState('');
+  const renew = async () => {
+    const r = await newPairingCode();
+    setPairError(r.ok ? '' : r.message);
+  };
   const { options, state } = useServerOptions(isOpen);
   const [server, setServer] = useState('');
   const now = useNow(1000);
@@ -61,7 +68,7 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
     if (!isOpen) return;
     known.current = new Set(devices.map((d) => d.id));
     setLinked(undefined);
-    if (!pairing || pairing.expiresAt < Date.now() + 60000) newPairingCode();
+    if (!pairing || pairing.expiresAt < Date.now() + 60000) void renew();
     // solo al abrir
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -100,8 +107,13 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
             {!syncConnected && (
               <div role="alert" className="lk-alert">
                 <Notice tone="error" title="La caja no está conectada al servidor">
-                  El celular no podrá vincularse. Enciéndelo en la computadora con <code>npm run dev:server</code>.
+                  El celular no podrá vincularse. Revisa que la API (AbarreAPI) esté encendida y que haya internet.
                 </Notice>
+              </div>
+            )}
+            {pairError && (
+              <div className="lk-alert">
+                <Notice tone="error" title="No se pudo generar el código">{pairError}</Notice>
               </div>
             )}
             <ol className="lk-steps">
@@ -111,7 +123,7 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
             </ol>
             <div className="lk-grid">
               <div className={`lk-qr ${expired ? 'is-expired' : ''}`}>
-                {pairing && <QrCode value={buildLinkQr(pairing.code, server || null)} size={196} />}
+                {pairing && <QrCode value={server ? buildLinkQr(pairing.code, server) : pairing.qr ?? buildLinkQr(pairing.code, null)} size={196} />}
               </div>
               <div className="lk-code">
                 <span>Código</span>
@@ -120,7 +132,7 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                   <IonIcon icon={timeOutline} />
                   {expired ? 'Venció' : `Vence en ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
                 </span>
-                <IonButton fill="clear" size="small" onClick={newPairingCode}>
+                <IonButton fill="clear" size="small" onClick={() => void renew()}>
                   <IonIcon slot="start" icon={refreshOutline} />
                   Generar otro
                 </IonButton>
@@ -175,7 +187,11 @@ export default function Devices() {
       message: 'El celular dejará de enviar productos a la caja hasta que se vincule de nuevo.',
       primary: { text: 'Quitar celular', danger: true },
       secondary: 'Cancelar',
-    }).then((yes) => yes && removeDevice(d.id));
+    }).then(async (yes) => {
+      if (!yes) return;
+      const r = await removeDevice(d.id);
+      if (!r.ok) void showAlert({ tone: 'error', title: 'No se pudo quitar el celular', message: r.message, primary: 'Entendido' });
+    });
 
   return (
     <IonPage>

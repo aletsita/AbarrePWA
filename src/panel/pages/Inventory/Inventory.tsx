@@ -15,7 +15,7 @@ import './Inventory.css';
 type Filter = 'todos' | 'poco' | 'sin' | 'pendientes';
 
 export default function Inventory() {
-  const { products } = useApp();
+  const { products, user } = useApp();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('todos');
   const [category, setCategory] = useState('');
@@ -45,10 +45,12 @@ export default function Inventory() {
               <p>{products.length} productos · valor a precio de compra {money(value)}</p>
             </div>
             <div className="ppage-actions">
-              <IonButton className="btn-lg" onClick={() => setAdding(true)}>
-                <IonIcon slot="start" icon={add} />
-                Agregar producto
-              </IonButton>
+              {user?.role !== 'Cajero' && (
+                <IonButton className="btn-lg" onClick={() => setAdding(true)}>
+                  <IonIcon slot="start" icon={add} />
+                  Agregar producto
+                </IonButton>
+              )}
             </div>
           </div>
 

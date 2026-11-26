@@ -1,4 +1,5 @@
 interface ImportMetaEnv {
-  // URL del servidor de sincronización; si falta se usa /__sync en el mismo origen
-  readonly VITE_SYNC_URL?: string;
+  // Dirección de AbarreAPI (https://api.midominio.com). Si falta, la API está en el mismo origen:
+  // en desarrollo Vite reenvía /api, /hubs, /archivos y /__sync a API_PROXY_TARGET (http://localhost:8787).
+  readonly VITE_API_URL?: string;
 }

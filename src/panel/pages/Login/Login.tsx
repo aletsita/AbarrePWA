@@ -11,6 +11,7 @@ import {
 import {
   alertCircleOutline,
   barcodeOutline,
+  callOutline,
   cloudOfflineOutline,
   lockClosedOutline,
   mailOutline,
@@ -29,12 +30,14 @@ import './Login.css';
 type Mode = 'entrar' | 'registro';
 
 export default function Login() {
-  const { user, users, login, registerStore } = useApp();
+  const { user, login, registerStore } = useApp();
   const router = useIonRouter();
   const [mode, setMode] = useState<Mode>('entrar');
   const [email, setEmail] = useState('donpepe@correo.mx');
-  const [password, setPassword] = useState('abarre');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState(false);
   const [storeName, setStoreName] = useState('');
   const [error, setError] = useState('');
   const [help, setHelp] = useState(false);
@@ -50,10 +53,12 @@ export default function Login() {
 
   if (user) return <Redirect to="/panel/caja" />;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     const mail = email.trim().toLowerCase();
-    if (!mail || !password || (mode === 'registro' && (!storeName.trim() || !name.trim()))) {
+    const digits = phone.replace(/\D/g, '');
+    if (!mail || !password || (mode === 'registro' && (!storeName.trim() || !name.trim() || !digits))) {
       setError('Llena todos los campos para continuar.');
       return;
     }
@@ -61,21 +66,24 @@ export default function Login() {
       setError('Revisa tu correo, no parece válido.');
       return;
     }
-    if (password.length < 4) {
-      setError('La contraseña debe tener al menos 4 caracteres.');
+    if (mode === 'registro' && digits.length !== 10) {
+      setError('El teléfono debe tener 10 dígitos.');
       return;
     }
-    if (mode === 'entrar') {
-      if (!login(mail, password)) {
-        setError('Este usuario está desactivado. Pide al dueño que lo active.');
-        return;
-      }
-    } else {
-      if (users.some((u) => u.email.toLowerCase() === mail)) {
-        setError('Ese correo ya tiene cuenta. Inicia sesión.');
-        return;
-      }
-      registerStore(storeName, name, mail);
+    if (mode === 'registro' && password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    // La cuenta la revisa el servidor (AbarreAPI)
+    setBusy(true);
+    const problem =
+      mode === 'entrar'
+        ? await login(mail, password)
+        : await registerStore({ storeName: storeName.trim(), name: name.trim(), email: mail, phone: digits, password });
+    setBusy(false);
+    if (problem) {
+      setError(problem);
+      return;
     }
     try {
       localStorage.setItem('tendero.ultimoCorreo', mail);
@@ -120,7 +128,7 @@ export default function Login() {
               <p>{mode === 'entrar' ? 'Usa el correo con el que te dieron de alta.' : 'Crea la cuenta del dueño de la tienda.'}</p>
             </header>
 
-            <form className="login-card" onSubmit={submit} noValidate>
+            <form className="login-card" onSubmit={(e) => void submit(e)} noValidate>
               <IonSegment value={mode} onIonChange={(e) => switchMode(e.detail.value as Mode)} className="login-seg">
                 <IonSegmentButton value="entrar">
                   <IonLabel>Iniciar sesión</IonLabel>
@@ -134,13 +142,14 @@ export default function Login() {
                 <>
                   <TextField label="Nombre de la tienda" icon={storefrontOutline} placeholder="Ej. Abarrotes Don Pepe" value={storeName} onChange={setStoreName} />
                   <TextField label="Tu nombre" icon={personOutline} autoCapitalize="words" placeholder="Ej. José Ramírez" value={name} onChange={setName} />
+                  <TextField label="Teléfono" icon={callOutline} type="tel" inputMode="tel" autoComplete="tel" placeholder="10 dígitos" value={phone} onChange={setPhone} />
                 </>
               )}
 
               <TextField label="Correo" icon={mailOutline} type="email" inputMode="email" autoComplete="email" placeholder="nombre@correo.mx"
                 value={email} onChange={setEmail} />
               <TextField label="Contraseña" icon={lockClosedOutline} type="password" autoComplete={mode === 'entrar' ? 'current-password' : 'new-password'}
-                placeholder="Mínimo 4 caracteres" value={password} onChange={setPassword} />
+                placeholder={mode === 'entrar' ? 'Tu contraseña' : 'Mínimo 8 caracteres'} value={password} onChange={setPassword} />
 
               {error && (
                 <div className="form-error" role="alert">
@@ -152,12 +161,17 @@ export default function Login() {
               {mode === 'entrar' && (
                 <>
                   <button type="button" className="login-link" onClick={() => setHelp((h) => !h)}>¿Olvidaste tu contraseña?</button>
-                  {help && <p className="login-help">Pide al dueño de la tienda que revise tu usuario en Configuración, Usuarios y roles.</p>}
+                  {help && (
+                    <p className="login-help">
+                      Pide al dueño de la tienda que revise tu usuario en Configuración, Usuarios y roles. Si el dueño te dio de alta y aún no
+                      tienes contraseña, créala registrándote con tu correo en la app de Abarré.
+                    </p>
+                  )}
                 </>
               )}
 
-              <IonButton type="submit" expand="block" className="btn-xl" color="primary">
-                {mode === 'entrar' ? 'Entrar' : 'Crear mi tienda'}
+              <IonButton type="submit" expand="block" className="btn-xl" color="primary" disabled={busy}>
+                {busy ? 'Un momento…' : mode === 'entrar' ? 'Entrar' : 'Crear mi tienda'}
               </IonButton>
             </form>
 

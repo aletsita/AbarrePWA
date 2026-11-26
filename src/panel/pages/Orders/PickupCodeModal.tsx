@@ -5,6 +5,7 @@ import { Notice } from '../../../components/Notice';
 import { money } from '../../../data/models';
 import { cleanPickupCode, isPaidOnline, ORDER_STATUS_LABEL, parsePickupInput, PICKUP_CODE, type PickupOrder } from '../../../data/pickup';
 import { useQrCamera } from '../../../lib/qrCamera';
+import { useApp } from '../../../context/AppContext';
 
 const MAX_FAILS = 5;
 const LOCK_MS = 60000;
@@ -22,9 +23,9 @@ const sanitize = cleanPickupCode;
 
 interface Props {
   isOpen: boolean;
-  // Pedido que se va a entregar; sin él, el código busca entre los pedidos listos
+  // Pedido que se va a entregar; sin él, el servidor busca entre los pedidos listos
   order?: PickupOrder;
-  orders: PickupOrder[];
+  orders?: PickupOrder[];
   onClose: () => void;
   // Regresa un mensaje si el servidor no aceptó el código (por ejemplo, incorrecto o bloqueado)
   onVerified: (order: PickupOrder, code: string) => Promise<string | null> | void;
@@ -32,7 +33,8 @@ interface Props {
 
 // Entregar un pedido exige el código que muestra la app del cliente (QR o 6 dígitos).
 // La caja nunca muestra el código: solo lo compara.
-export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: Props) {
+export function PickupCodeModal({ isOpen, order, onClose, onVerified }: Props) {
+  const { verifyPickupCode } = useApp();
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [camera, setCamera] = useState(false);
@@ -76,32 +78,23 @@ export function PickupCodeModal({ isOpen, order, orders, onClose, onVerified }: 
       setError('Escribe los 6 caracteres del código o escanea el QR del cliente.');
       return;
     }
-    let found: PickupOrder | undefined;
-    if (order) {
-      if (parsed.orderId && parsed.orderId !== order.id) return fail(`Ese código es de otro pedido, no del ${order.folio}.`);
-      if (order.pickupCode !== parsed.code) {
-        const other = orders.find((o) => o.id !== order.id && o.pickupCode === parsed.code);
-        return fail(
-          other
-            ? `Ese código es del pedido ${other.folio} (${other.customer.name}), no del ${order.folio}. Ciérralo y entrega el ${other.folio}.`
-            : `El código no coincide con el del ${order.folio}. Pídele al cliente que lo revise en su app.`,
-        );
-      }
-      found = order;
-    } else {
-      const match = orders.find((o) => o.pickupCode === parsed.code && (!parsed.orderId || o.id === parsed.orderId));
-      if (!match) return fail('No hay ningún pedido con ese código.');
-      if (match.status === 'entregado') return fail(`El pedido ${match.folio} ya se entregó.`);
-      if (match.status === 'cancelado') return fail(`El pedido ${match.folio} está cancelado.`);
-      if (match.issue) {
-        setError(`El pedido ${match.folio} está esperando a que el cliente cambie un producto agotado.`);
-        return;
-      }
-      if (match.status !== 'listo') {
-        setError(`El pedido ${match.folio} todavía está en "${ORDER_STATUS_LABEL[match.status]}". Márcalo como listo antes de entregarlo.`);
-        return;
-      }
-      found = match;
+    if (order && parsed.orderId && parsed.orderId !== order.id) return fail(`Ese código es de otro pedido, no del ${order.folio}.`);
+    // El servidor busca el pedido listo con ese código (limita los intentos y bloquea tras varios errores)
+    setChecking(true);
+    const r = await verifyPickupCode(raw.trim());
+    setChecking(false);
+    if (!r.ok) return r.code === 'sin-conexion' ? setError(r.message) : fail(r.message);
+    const found = r.value;
+    if (order && found.id !== order.id) {
+      return fail(`Ese código es del pedido ${found.folio} (${found.customer.name}), no del ${order.folio}. Ciérralo y entrega el ${found.folio}.`);
+    }
+    if (found.issue) {
+      setError(`El pedido ${found.folio} está esperando a que el cliente cambie un producto agotado.`);
+      return;
+    }
+    if (found.status !== 'listo') {
+      setError(`El pedido ${found.folio} todavía está en "${ORDER_STATUS_LABEL[found.status]}". Márcalo como listo antes de entregarlo.`);
+      return;
     }
     setChecking(true);
     const refused = await onVerified(found, parsed.code);

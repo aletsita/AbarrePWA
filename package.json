@@ -15,6 +15,7 @@
     "@fontsource-variable/inter": "^5.1.0",
     "@ionic/react": "^8.4.0",
     "@ionic/react-router": "^8.4.0",
+    "@microsoft/signalr": "^8.0.7",
     "ionicons": "^7.4.0",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
