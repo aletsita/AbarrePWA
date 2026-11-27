@@ -195,8 +195,23 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
 .st-cancelado { background: var(--t-surface-2); color: var(--t-muted); text-decoration: line-through; }
 
 /* Logotipo: nombre con la tipografía de la marca */
-.brand-word { font-weight: 700; letter-spacing: -0.025em; }
-.brand-word em { font-style: normal; color: inherit; }
+/* Marca: nombre en Poppins Bold con la «é» ámbar e isotipo (ver components/Brand.tsx) */
+.brand-word { font-family: var(--t-brand-font); font-weight: 700; letter-spacing: -0.01em; }
+.brand-word em { font-style: normal; color: var(--t-amber); }
+.brand-mark { display: block; flex: none; color: var(--ion-color-primary); }
+.brand-mark .bm-bars { fill: var(--t-surface); }
+.brand-mark.is-blanco { color: #fff; }
+.brand-mark.is-blanco .bm-bars { fill: var(--t-brand); }
+.brand-mark .bm-ray { fill: var(--t-amber); }
+/* Entrada: la cesta aparece (0.9 → 1) y el rayo ámbar la recorre de izquierda a derecha, una vez */
+.brand-mark.is-animated { overflow: visible; }
+.brand-mark.is-animated .bm-basket { transform-box: fill-box; transform-origin: center; animation: bm-in 0.4s ease-out both; }
+.brand-mark.is-animated .bm-ray { transform-box: fill-box; animation: bm-scan 0.6s 0.3s ease-in-out both; }
+@keyframes bm-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes bm-scan { 0% { opacity: 0; transform: translateX(-130%); } 20% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark.is-animated .bm-basket, .brand-mark.is-animated .bm-ray { animation: none; }
+}
 
 .sr-only {
   position: absolute;

@@ -22,7 +22,7 @@ import {
 } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { Redirect } from 'react-router-dom';
-import { BrandLogo, BrandWord } from '../../../components/Brand';
+import { BrandMark, BrandWord } from '../../../components/Brand';
 import { TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import './Login.css';
@@ -106,7 +106,7 @@ export default function Login() {
         <div className="login-shell">
           <aside className="login-brand">
             <div className="login-brand-top">
-              <BrandLogo size={44} />
+              <BrandMark size={44} animated />
               <BrandWord />
             </div>
             <div className="login-pitch">
@@ -123,7 +123,7 @@ export default function Login() {
 
           <main className="login-main">
             <header className="login-hero">
-              <div className="login-mobile-brand"><BrandLogo size={40} /><BrandWord /></div>
+              <div className="login-mobile-brand"><BrandMark size={40} animated /><BrandWord /></div>
               <h1>{mode === 'entrar' ? 'Entrar a la caja' : 'Registra tu tienda'}</h1>
               <p>{mode === 'entrar' ? 'Usa el correo con el que te dieron de alta.' : 'Crea la cuenta del dueño de la tienda.'}</p>
             </header>

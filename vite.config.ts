@@ -24,9 +24,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: false,
-      includeAssets: ['icons/*.png', 'icons/*.svg'],
+      includeAssets: ['icons/*.png', 'icons/*.svg', 'brand/*.svg', 'favicon.svg', 'favicon.ico'],
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2,webmanifest}'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/__sync/, /^\/api\//, /^\/hubs\//, /^\/archivos\//],
       },

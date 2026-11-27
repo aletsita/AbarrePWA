@@ -220,7 +220,7 @@ export default function Config() {
               </section>
               <aside className="ticket cfg-preview" aria-label="Vista previa del ticket">
                 <header>
-                  {ticket.showLogo && <img src="/icons/icon.svg" alt="" width="36" height="36" />}
+                  {ticket.showLogo && <img src="/brand/isotipo.svg" alt="" width="36" height="36" />}
                   {ticket.header.split('\n').map((l, i) => (i === 0 ? <strong key={i}>{l}</strong> : <span key={i}>{l}</span>))}
                 </header>
                 <p className="ticket-meta">Folio #0000 · {new Date().toLocaleDateString('es-MX')}</p>

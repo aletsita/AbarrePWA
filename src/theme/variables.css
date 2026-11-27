@@ -3,13 +3,23 @@
   --ion-font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --t-display: var(--ion-font-family);
 
-  /* Azul marino institucional */
-  --ion-color-primary: #1f3a8a;
-  --ion-color-primary-rgb: 31, 58, 138;
+  /* Marca Abarré: un solo azul para encabezados, botones, links y selección (blanco encima: contraste 10:1) */
+  --t-brand: #123f8c;
+  --t-brand-rgb: 18, 63, 140;
+  --t-brand-pressed: #0e3370;
+  --t-brand-soft: #e8eef8;
+  --t-brand-ink: #0e2547;
+  /* Ámbar del rayo de escaneo: escáner, la «é» del nombre y destacados */
+  --t-amber: #ffb020;
+  --t-amber-rgb: 255, 176, 32;
+  --t-brand-font: 'Poppins', var(--ion-font-family);
+
+  --ion-color-primary: var(--t-brand);
+  --ion-color-primary-rgb: var(--t-brand-rgb);
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #1b3379;
-  --ion-color-primary-tint: #354e96;
+  --ion-color-primary-shade: var(--t-brand-pressed);
+  --ion-color-primary-tint: #2a5297;
 
   /* Verde sobrio para cobrar y confirmar */
   --ion-color-secondary: #0f6b4f;
@@ -49,15 +59,15 @@
 
   --ion-background-color: #f3f5f9;
   --ion-background-color-rgb: 243, 245, 249;
-  --ion-text-color: #0f1b33;
-  --ion-text-color-rgb: 15, 27, 51;
+  --ion-text-color: #0e2547;
+  --ion-text-color-rgb: 14, 37, 71;
   --ion-toolbar-background: #ffffff;
   --ion-tab-bar-background: #ffffff;
   --ion-item-background: #ffffff;
   --ion-card-background: #ffffff;
   --ion-border-color: #e3e8ef;
 
-  --t-ink: #0f1b33;
+  --t-ink: var(--t-brand-ink);
   --t-on-ink: #ffffff;
   --t-night: #0f1b33;
   --t-night-2: #1b2945;
@@ -74,9 +84,9 @@
   --t-shadow-lift: 0 2px 4px rgba(15, 27, 51, 0.04), 0 12px 28px rgba(15, 27, 51, 0.09);
   --t-shadow-pop: 0 24px 48px rgba(15, 27, 51, 0.18);
   --t-side-text: #3b4659;
-  --t-primary-gradient: linear-gradient(180deg, #2b4aa6 0%, #1f3a8a 100%);
+  --t-primary-gradient: linear-gradient(180deg, #1a4b9c 0%, var(--t-brand) 100%);
   --t-row-hover: #f6f8fc;
-  --t-primary-bg: #eaeff9;
+  --t-primary-bg: var(--t-brand-soft);
   --t-accent-bg: #e3f2ec;
   --t-success-bg: #e5f4ea;
   --t-warning-bg: #fbf1dc;
@@ -84,7 +94,7 @@
   --t-danger-bg: #fbe7e7;
   --t-unsynced-bg: #fdf9ef;
   --t-arrive-bg: #e5f4ea;
-  --t-brand-gradient: linear-gradient(160deg, #233f91 0%, #182d6b 100%);
+  --t-brand-gradient: linear-gradient(160deg, #174a9e 0%, var(--t-brand-pressed) 100%);
 
   --t-content-max: 1080px;
   --t-form-max: 640px;

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.1.0",
+    "@fontsource/poppins": "^5.2.7",
     "@ionic/react": "^8.4.0",
     "@ionic/react-router": "^8.4.0",
     "@microsoft/signalr": "^8.0.7",

@@ -11,6 +11,8 @@ import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
 
 import '@fontsource-variable/inter';
+// Solo para el nombre «Abarré»
+import '@fontsource/poppins/latin-700.css';
 import './theme/variables.css';
 import './theme/global.css';
 
