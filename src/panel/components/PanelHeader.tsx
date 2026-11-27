@@ -49,7 +49,7 @@ export function PanelHeader({ title }: { title: string }) {
       <IonToolbar>
         <IonButtons slot="start">
           <IonMenuButton menu="panel-menu" className="ptop-menu" />
-          <span className="ptop-logo"><BrandLogo size={24} tone="blanco" /></span>
+          <span className="ptop-logo"><BrandLogo size={24} /></span>
         </IonButtons>
         <IonTitle>{title}</IonTitle>
         <div slot="end" className="ptop-end">

@@ -68,17 +68,17 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
 .side-user strong { color: var(--t-ink); font-size: 0.88rem; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side-user span { font-size: 0.75rem; color: var(--t-muted); }
 
-/* Barra superior en azul de la marca, con texto blanco */
-.ptop ion-toolbar { --background: var(--ab-azul-500); --color: var(--ab-blanco); --border-width: 0; --min-height: 60px; }
-.ptop-menu { --color: var(--ab-blanco); }
-.ptop ion-title { font-family: var(--ab-font-display); font-size: 1.1rem; font-weight: 700; color: var(--ab-blanco); padding-inline: 8px; }
+/* Barra superior blanca con borde gris-200; texto e íconos en marino. El azul queda para la sección activa y los botones primarios */
+.ptop ion-toolbar { --background: var(--ab-blanco); --color: var(--ab-marino-900); --border-color: var(--ab-gris-200); --border-style: solid; --border-width: 0 0 1px; --min-height: 60px; }
+.ptop-menu { --color: var(--ab-marino-900); }
+.ptop ion-title { font-family: var(--ab-font-display); font-size: 1.1rem; font-weight: 700; color: var(--ab-marino-900); padding-inline: 8px; }
 .ptop-end { display: flex; align-items: center; gap: 10px; padding-inline-end: 14px; }
-.ptop-clock { display: inline-flex; align-items: baseline; gap: 6px; padding: 0 4px; color: var(--ab-blanco); font-weight: 600; font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ptop-clock ion-icon { align-self: center; font-size: 17px; color: var(--t-on-hero-muted); }
-.ptop-clock small { color: var(--t-on-hero-muted); font-weight: 400; font-size: 12px; }
+.ptop-clock { display: inline-flex; align-items: baseline; gap: 6px; padding: 0 4px; color: var(--ab-marino-900); font-weight: 600; font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ptop-clock ion-icon { align-self: center; font-size: 17px; color: var(--ab-gris-700); }
+.ptop-clock small { color: var(--ab-gris-500); font-weight: 400; font-size: 12px; }
 .ptop-clock small::first-letter { text-transform: uppercase; }
-.ptop-store { display: flex; flex-direction: column; align-items: flex-end; padding-left: 12px; border-left: 1px solid var(--t-on-brand-line); line-height: 1.2; font-size: 12px; color: var(--t-on-hero-muted); }
-.ptop-store strong { color: var(--ab-blanco); font-size: 14px; font-weight: 600; }
+.ptop-store { display: flex; flex-direction: column; align-items: flex-end; padding-left: 12px; border-left: 1px solid var(--ab-gris-200); line-height: 1.2; font-size: 12px; color: var(--ab-gris-500); }
+.ptop-store strong { color: var(--ab-marino-900); font-size: 14px; font-weight: 600; }
 .ptop-user {
   display: grid;
   place-items: center;
@@ -102,7 +102,7 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
   white-space: nowrap;
 }
 .phone-chip.is-on { background: var(--ab-exito-100); color: var(--ab-exito-800); }
-.phone-chip.is-off { background: var(--t-hero-chip); color: var(--ab-blanco); }
+.phone-chip.is-off { background: var(--ab-gris-100); color: var(--ab-gris-700); box-shadow: inset 0 0 0 1px var(--ab-gris-200); }
 .phone-chip.is-live { background: var(--ab-exito-600); color: var(--ab-blanco); }
 .phone-chip ion-icon { font-size: 16px; }
 .phone-chip .live-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: live 1s ease-in-out infinite; }
@@ -229,27 +229,7 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
 .pill.is-ok { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .pill.is-off { background: var(--t-surface-2); color: var(--t-muted); box-shadow: inset 0 0 0 1px var(--t-border); }
 
-/* Modal estándar del panel (marca/components/Modal): blanco, esquinas de 16, sombra grande, máximo 420 px */
-ion-modal.pmodal { --width: min(420px, calc(100% - 32px)); --height: auto; --max-height: 92vh; --border-radius: var(--ab-radio-lg); --background: var(--ab-blanco); --box-shadow: var(--ab-sombra-lg); --backdrop-opacity: 0.5; }
-ion-modal.pmodal::part(backdrop) { background: var(--ab-marino-900); }
-ion-modal.pmodal.is-wide { --width: min(780px, 100%); }
-ion-modal.pmodal.is-narrow { --width: min(420px, calc(100% - 32px)); }
-ion-modal.pmodal .ion-page { position: relative; contain: content; }
-ion-modal.pmodal ion-toolbar { --background: var(--ab-blanco); --color: var(--ab-marino-900); --padding-start: 12px; --padding-end: 8px; --min-height: 60px; --border-width: 0; }
-/* Cerrar: botón de 44 px */
-ion-modal.pmodal ion-toolbar ion-buttons ion-button { --color: var(--ab-gris-700); width: var(--ab-toque-min); height: var(--ab-toque-min); --padding-start: 0; --padding-end: 0; --border-radius: var(--ab-radio-full); }
-ion-modal.pmodal ion-title { font-family: var(--ab-font-display); font-size: 18px; line-height: 24px; font-weight: 500; color: var(--ab-marino-900); }
-ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto; padding: 4px 20px 20px; font-size: 14px; line-height: 20px; color: var(--ab-gris-700); }
-@media (max-width: 599px) {
-  ion-modal.pmodal { --height: 100%; --max-height: 100%; --border-radius: 0; }
-  ion-modal.pmodal .pmodal-body { max-height: none; flex: 1; }
-}
-/* Pie: «Cancelar» a la izquierda y la acción principal a la derecha */
-.pmodal-foot { display: flex; gap: var(--ab-espacio-2); justify-content: flex-end; padding: 12px 20px 20px; border-top: 1px solid var(--ab-gris-200); background: var(--ab-blanco); flex-wrap: wrap; }
-.pmodal-foot ion-button { margin: 0; }
-/* Borrar queda a la izquierda, lejos de Guardar */
-.pmodal-foot .pmodal-delete { margin-right: auto; }
-@media (max-width: 599px) { .pmodal-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); } .pmodal-foot ion-button { flex: 1 1 100%; } }
+/* Los modales del panel usan components/PanelModal (estilos en PanelModal.css) */
 
 /* El ticket simula papel: se queda claro también en modo oscuro */
 .ticket {
@@ -335,6 +315,4 @@ ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto
   .fchips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 2px; scrollbar-width: none; }
   .fchips::-webkit-scrollbar { display: none; }
   .filters .fselect { flex: 1 1 140px; min-width: 0; }
-  ion-modal.pmodal .pmodal-body { padding: 4px 16px 18px; }
-  .pmodal-foot { padding-inline: 16px; }
 }

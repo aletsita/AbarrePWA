@@ -1,9 +1,10 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { closeOutline, mailOutline, personAddOutline, personOutline } from 'ionicons/icons';
+import { IonButton, IonIcon } from '@ionic/react';
+import { mailOutline, personAddOutline, personOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { FormSection, SelectField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import { ROLES, type Role } from '../../../data/models';
+import { PanelModal } from '../../../components/PanelModal';
 
 const ROLE_HINT: Record<Role, string> = {
   Dueño: 'Todo, incluido el corte y la configuración.',
@@ -52,15 +53,7 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="pmodal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>Agregar usuario</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
+    <PanelModal isOpen={isOpen} onClose={onClose} size="form" title="Agregar usuario">
       <form className="pmodal-body" onSubmit={save}>
         <FormSection
           title="Datos del usuario"
@@ -84,6 +77,6 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
           Agregar usuario
         </IonButton>
       </div>
-    </IonModal>
+    </PanelModal>
   );
 }

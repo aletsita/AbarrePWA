@@ -1,32 +1,57 @@
-/* Registrar abono: quién y cuánto debe, el monto, la forma de pago y lo que queda */
-ion-modal.pmodal.is-abono { --width: min(420px, calc(100% - 32px)); }
-.ab-form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.ab-body { display: flex; flex-direction: column; gap: 18px; }
-.ab-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: var(--ab-blanco); box-shadow: var(--t-shadow-lift); }
-.ab-hero-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: var(--ab-radio-md); background: var(--t-hero-chip); font-size: 24px; }
-.ab-hero small { display: block; font-size: 0.8rem; font-weight: 650; opacity: 0.85; }
-.ab-hero-who { flex: 1; min-width: 0; }
-.ab-hero-who strong { display: block; overflow: hidden; font-size: 1.05rem; white-space: nowrap; text-overflow: ellipsis; }
-.ab-hero-debt { flex: none; text-align: right; }
-.ab-hero-debt strong { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; }
+/* Registrar abono: quién y cuánto debe, el monto, la forma de pago y lo que queda.
+   El marco (640 px, encabezado y pie fijos) viene de components/PanelModal. */
 
-.ab-field { display: flex; flex-direction: column; gap: 8px; }
-.ab-label { font-size: 0.92rem; font-weight: 700; color: var(--t-ink); }
-.ab-input { height: 60px; }
-.ab-input.is-error { border-color: var(--ion-color-danger); box-shadow: 0 0 0 3px rgba(var(--ion-color-danger-rgb), 0.12); }
-.ab-quick { flex-wrap: wrap; }
+/* Tarjeta del cliente en dos filas: nombre completo arriba, «Debe» y el saldo abajo */
+.ab-hero { display: flex; flex-direction: column; gap: var(--ab-espacio-4); padding: 20px; border-radius: var(--ab-radio-lg); background: var(--ab-azul-500); color: var(--ab-blanco); }
+.ab-hero-who { display: flex; align-items: center; gap: var(--ab-espacio-3); min-width: 0; }
+.ab-avatar { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: var(--ab-radio-full); background: var(--t-hero-chip); font-size: 16px; font-weight: 600; }
+.ab-hero-who strong { min-width: 0; font-family: var(--ab-font-display); font-size: 18px; line-height: 24px; font-weight: 600; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ab-hero-debt { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ab-espacio-3); padding-top: var(--ab-espacio-4); border-top: 1px solid var(--t-hero-chip); }
+.ab-hero-debt span { font-size: 15px; font-weight: 600; color: var(--t-on-hero-muted); }
+.ab-hero-debt strong { font-family: var(--ab-font-display); font-size: 28px; line-height: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.ab-methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.ab-method { min-height: 56px; padding: 8px 30px 8px 10px; gap: 8px; }
-.ab-method .co-method-icon { width: 34px; height: 34px; font-size: 19px; }
-.ab-method span { min-width: 0; overflow: hidden; font-weight: 650; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 479px) { .ab-methods { grid-template-columns: 1fr; } }
+/* Campos: etiqueta y campo a 8 px */
+.ab-field { display: flex; flex-direction: column; gap: var(--ab-espacio-2); }
+.ab-label { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ab-marino-900); }
 
-.ab-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: var(--t-radius-sm); background: var(--t-surface-2); font-weight: 650; }
-.ab-result strong { font-size: 1.3rem; }
-.ab-result.is-idle { color: var(--t-muted); }
-.ab-result.is-ok { background: var(--t-primary-bg); color: var(--ion-color-primary); }
-.ab-result.is-done { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
-.ab-result.is-short { background: var(--t-danger-bg); color: var(--ion-color-danger); }
+/* Monto: 64 px de alto, número grande en Poppins y el $ en gris */
+.ab-amount { display: flex; align-items: center; gap: var(--ab-espacio-2); height: 64px; padding: 0 var(--ab-espacio-4); border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-gris-100); }
+.ab-amount span { font-family: var(--ab-font-display); font-size: 28px; font-weight: 700; color: var(--ab-gris-500); }
+.ab-amount input { flex: 1; min-width: 0; height: 60px; border: 0; outline: 0; background: transparent; font-family: var(--ab-font-display); font-size: 28px; font-weight: 700; color: var(--ab-marino-900); font-variant-numeric: tabular-nums; }
+.ab-amount input::placeholder { color: var(--ab-gris-200); }
+/* Foco: borde azul de 2 px (el segundo pixel por dentro para que el campo no se mueva) */
+.ab-amount:focus-within { border-color: var(--ab-azul-500); box-shadow: inset 0 0 0 1px var(--ab-azul-500); background: var(--ab-blanco); }
+.ab-amount.is-error { border-color: var(--ab-error-600); box-shadow: inset 0 0 0 1px var(--ab-error-600); }
+.ab-error { margin: 0; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--ab-error-600); }
 
-.ab-foot ion-button[type='submit'] { flex: 1; }
+/* Atajos: 4 columnas del mismo ancho, 44 px de alto */
+.ab-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ab-espacio-2); }
+.ab-quick button { min-height: var(--ab-toque-min); padding: 0 var(--ab-espacio-2); border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-blanco); color: var(--ab-marino-900); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.ab-quick button:hover { border-color: var(--ab-gris-500); }
+.ab-quick button.is-active { border-color: var(--ab-azul-500); background: var(--ab-azul-100); color: var(--ab-azul-600); }
+@media (max-width: 479px) {
+  .ab-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Forma de pago: 3 tarjetas iguales de 88 px, ícono arriba y la etiqueta completa abajo */
+.ab-methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ab-espacio-3); }
+.ab-method { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 88px; padding: var(--ab-espacio-3) 6px; border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-blanco); color: var(--ab-marino-900); font: inherit; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.ab-method:hover { border-color: var(--ab-gris-500); }
+.ab-method:focus-visible, .ab-quick button:focus-visible { outline: 2px solid var(--ab-azul-500); outline-offset: 2px; }
+.ab-method-icon { font-size: 28px; color: var(--ab-gris-700); }
+.ab-method span { font-size: 14px; line-height: 18px; font-weight: 600; text-align: center; white-space: nowrap; }
+.ab-method.is-active { border-color: var(--ab-azul-500); box-shadow: inset 0 0 0 1px var(--ab-azul-500); background: var(--ab-azul-100); }
+.ab-method.is-active .ab-method-icon { color: var(--ab-azul-500); }
+.ab-check { position: absolute; top: 8px; right: 8px; font-size: 20px; color: var(--ab-azul-500); }
+@media (max-width: 419px) {
+  .ab-method span { font-size: 13px; }
+}
+
+/* Resultado: azul con lo que queda; verde si liquida */
+.ab-result { display: flex; align-items: center; justify-content: space-between; gap: var(--ab-espacio-3); min-height: 60px; padding: var(--ab-espacio-4); border-radius: var(--ab-radio-md); background: var(--ab-azul-100); color: var(--ab-azul-600); font-size: 15px; font-weight: 600; }
+.ab-result strong { font-family: var(--ab-font-display); font-size: 20px; line-height: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ab-result.is-done { background: var(--ab-exito-100); color: var(--ab-exito-800); }
+
+/* Pie: Cancelar y el botón principal ocupando el resto */
+.ab-foot { flex-wrap: nowrap; }
+.ab-foot .ab-submit { flex: 1; }

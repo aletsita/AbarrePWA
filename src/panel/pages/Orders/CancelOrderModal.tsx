@@ -1,8 +1,9 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { alertCircleOutline, chatbubbleEllipsesOutline, closeOutline, cubeOutline, notificationsOutline, trashOutline } from 'ionicons/icons';
+import { IonButton, IonIcon } from '@ionic/react';
+import { alertCircleOutline, chatbubbleEllipsesOutline, cubeOutline, notificationsOutline, trashOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { AreaField } from '../../../components/Form';
 import type { PickupOrder } from '../../../data/pickup';
+import { PanelModal } from '../../../components/PanelModal';
 
 type Choice = 'agotado' | 'cancelar';
 
@@ -43,19 +44,9 @@ export function CancelOrderModal({ order, shortages, onClose, onShortage, onCanc
   };
 
   return (
-    <IonModal isOpen={!!order} onDidDismiss={onClose} className="pmodal">
+    <PanelModal isOpen={!!order} onClose={onClose} size="form" title={order ? `Problema con ${order.folio}` : ''}>
       {order && (
         <>
-          <IonHeader className="ion-no-border">
-            <IonToolbar>
-              <IonTitle>Problema con {order.folio}</IonTitle>
-              <IonButtons slot="end">
-                <IonButton onClick={onClose} aria-label="Cerrar">
-                  <IonIcon slot="icon-only" icon={closeOutline} />
-                </IonButton>
-              </IonButtons>
-            </IonToolbar>
-          </IonHeader>
           <div className="pmodal-body">
             <p className="oc-lead">
               Pedido de <strong>{order.customer.name}</strong>. Le avisaremos en su app.
@@ -121,6 +112,6 @@ export function CancelOrderModal({ order, shortages, onClose, onShortage, onCanc
           </div>
         </>
       )}
-    </IonModal>
+    </PanelModal>
   );
 }

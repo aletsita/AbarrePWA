@@ -1,14 +1,9 @@
 import { itemCount, lineTotal, qtyText, roundQty, type SaleType } from '../../../domain/weight';
 import {
   IonButton,
-  IonButtons,
   IonContent,
-  IonHeader,
   IonIcon,
-  IonModal,
   IonPage,
-  IonTitle,
-  IonToolbar,
   } from '@ionic/react';
 import { CashMovementModal } from './CashMovementModal';
 import {
@@ -18,7 +13,6 @@ import {
   arrowUpCircleOutline,
   basketOutline,
   cashOutline,
-  closeOutline,
   lockClosedOutline,
   lockOpenOutline,
   receiptOutline,
@@ -34,6 +28,7 @@ import { PromptModal } from '../../components/PromptModal';
 import { ClosedCut, Difference } from './ClosedCut';
 import './CashCut.css';
 import { useAviso } from '../../../components/Aviso';
+import { PanelModal } from '../../../components/PanelModal';
 
 const MOVE_LABEL: Record<CashMovementType, string> = { entrada: 'Entrada', retiro: 'Retiro', gasto: 'Gasto' };
 const MOVE_ICON: Record<CashMovementType, string> = { entrada: arrowDownCircleOutline, retiro: arrowUpCircleOutline, gasto: basketOutline };
@@ -349,15 +344,7 @@ export default function CashCut() {
         </div>
       </IonContent>
 
-      <IonModal isOpen={confirmOpen} onDidDismiss={() => setConfirmOpen(false)} className="pmodal">
-        <IonHeader className="ion-no-border">
-          <IonToolbar>
-            <IonTitle>¿Cerrar el corte del día?</IonTitle>
-            <IonButtons slot="end">
-              <IonButton onClick={() => setConfirmOpen(false)} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-            </IonButtons>
-          </IonToolbar>
-        </IonHeader>
+      <PanelModal isOpen={confirmOpen} onClose={() => setConfirmOpen(false)} size="form" title="¿Cerrar el corte del día?">
         <div className="pmodal-body">
           <dl className="recon-list">
             <div><dt>Ventas del turno</dt><dd className="money">{money(total)} · {today.length}</dd></div>
@@ -380,19 +367,11 @@ export default function CashCut() {
             Confirmar y cerrar
           </IonButton>
         </div>
-      </IonModal>
+      </PanelModal>
 
-      <IonModal isOpen={!!viewCut} onDidDismiss={() => setViewCut(undefined)} className="pmodal is-wide">
-        <IonHeader className="ion-no-border">
-          <IonToolbar>
-            <IonTitle>Corte #{viewCut?.folio}</IonTitle>
-            <IonButtons slot="end">
-              <IonButton onClick={() => setViewCut(undefined)} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-            </IonButtons>
-          </IonToolbar>
-        </IonHeader>
+      <PanelModal isOpen={!!viewCut} onClose={() => setViewCut(undefined)} size="detail" title={<>Corte #{viewCut?.folio}</>}>
         <div className="pmodal-body">{viewCut && <ClosedCut cut={viewCut} />}</div>
-      </IonModal>
+      </PanelModal>
       <PromptModal
         isOpen={shiftOpen}
         title="Abrir nuevo turno"

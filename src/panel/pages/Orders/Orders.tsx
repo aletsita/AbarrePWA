@@ -1,11 +1,10 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonRouter } from '@ionic/react';
+import { IonButton, IonContent, IonIcon, IonPage, useIonRouter } from '@ionic/react';
 import { useAppAlert } from '../../../components/AppAlert';
 import {
   alertCircleOutline,
   bagCheckOutline,
   callOutline,
   closeCircleOutline,
-  closeOutline,
   createOutline,
   globeOutline,
   flameOutline,
@@ -28,6 +27,7 @@ import { CancelOrderModal } from './CancelOrderModal';
 import { PickupCodeModal } from './PickupCodeModal';
 import './Orders.css';
 import { useAviso } from '../../../components/Aviso';
+import { PanelModal } from '../../../components/PanelModal';
 
 const NEW_MS = 2 * 60000;
 const PREVIEW_ITEMS = 3;
@@ -255,19 +255,9 @@ export default function Orders() {
         </div>
       </IonContent>
 
-      <IonModal isOpen={!!open} onDidDismiss={() => setOpenId(undefined)} className="pmodal">
+      <PanelModal isOpen={!!open} onClose={() => setOpenId(undefined)} size="detail" title={open ? `${open.folio} · ${ORDER_STATUS_LABEL[open.status]}` : ''}>
         {open && (
           <>
-            <IonHeader className="ion-no-border">
-              <IonToolbar>
-                <IonTitle>{open.folio} · {ORDER_STATUS_LABEL[open.status]}</IonTitle>
-                <IonButtons slot="end">
-                  <IonButton onClick={() => setOpenId(undefined)} aria-label="Cerrar">
-                    <IonIcon slot="icon-only" icon={closeOutline} />
-                  </IonButton>
-                </IonButtons>
-              </IonToolbar>
-            </IonHeader>
             <div className="pmodal-body">
               <dl className="sd-facts">
                 <div><dt>Cliente</dt><dd>{open.customer.name}</dd></div>
@@ -352,7 +342,7 @@ export default function Orders() {
             </div>
           </>
         )}
-      </IonModal>
+      </PanelModal>
 
       <CancelOrderModal
         order={problem}

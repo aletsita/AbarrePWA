@@ -1,8 +1,9 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { arrowDownCircleOutline, arrowUpCircleOutline, basketOutline, checkmarkCircle, closeOutline, saveOutline } from 'ionicons/icons';
+import { IonButton, IonIcon } from '@ionic/react';
+import { arrowDownCircleOutline, arrowUpCircleOutline, basketOutline, checkmarkCircle, saveOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { MoneyField, TextField } from '../../../components/Form';
 import type { CashMovementType } from '../../../data/models';
+import { PanelModal } from '../../../components/PanelModal';
 
 const TYPES: { id: CashMovementType; label: string; hint: string; icon: string; example: string }[] = [
   { id: 'entrada', label: 'Entrada', hint: 'Dinero que se mete al cajón', icon: arrowDownCircleOutline, example: 'Ej. Cambio adicional' },
@@ -38,15 +39,7 @@ export function CashMovementModal({ isOpen, onClose, onSave }: Props) {
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="pmodal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>Movimiento de efectivo</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
+    <PanelModal isOpen={isOpen} onClose={onClose} size="form" title="Movimiento de efectivo">
       <form className="pmodal-body form-stack" onSubmit={save}>
         <div className="fld">
           <span className="fld-label">¿Qué tipo de movimiento es?</span>
@@ -74,6 +67,6 @@ export function CashMovementModal({ isOpen, onClose, onSave }: Props) {
           Registrar
         </IonButton>
       </div>
-    </IonModal>
+    </PanelModal>
   );
 }

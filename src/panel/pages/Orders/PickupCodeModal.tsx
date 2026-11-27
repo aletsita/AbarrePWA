@@ -1,4 +1,4 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
+import { IonButton, IonIcon } from '@ionic/react';
 import { cameraOutline, checkmarkDone, closeOutline, globeOutline, cashOutline, keypadOutline, qrCodeOutline } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Notice } from '../../../components/Notice';
@@ -6,6 +6,7 @@ import { money } from '../../../data/models';
 import { cleanPickupCode, isPaidOnline, ORDER_STATUS_LABEL, parsePickupInput, PICKUP_CODE, type PickupOrder } from '../../../data/pickup';
 import { useQrCamera } from '../../../lib/qrCamera';
 import { useApp } from '../../../context/AppContext';
+import { PanelModal } from '../../../components/PanelModal';
 
 const MAX_FAILS = 5;
 const LOCK_MS = 60000;
@@ -113,26 +114,17 @@ export function PickupCodeModal({ isOpen, order, onClose, onVerified }: Props) {
   const { videoRef, status } = useQrCamera(isOpen && camera && !locked, check);
 
   return (
-    <IonModal
+    <PanelModal
       isOpen={isOpen}
+      size="form"
+      title={order ? `Entregar ${order.folio}` : 'Entregar pedido'}
+      className="pc-modal"
       onDidPresent={() => inputRef.current?.focus()}
-      onDidDismiss={() => {
+      onClose={() => {
         reset();
         onClose();
       }}
-      className="pmodal pc-modal"
     >
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>{order ? `Entregar ${order.folio}` : 'Entregar pedido'}</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar">
-              <IonIcon slot="icon-only" icon={closeOutline} />
-            </IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
-
       <form
         className="pmodal-body pc-body"
         onSubmit={(e) => {
@@ -254,6 +246,6 @@ export function PickupCodeModal({ isOpen, order, onClose, onVerified }: Props) {
           </button>
         )}
       </form>
-    </IonModal>
+    </PanelModal>
   );
 }

@@ -1,5 +1,5 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonTitle, IonToolbar } from '@ionic/react';
-import { bagHandleOutline, bookOutline, cardOutline, cashOutline, closeOutline, globeOutline, printOutline, swapHorizontalOutline } from 'ionicons/icons';
+import { IonButton, IonIcon } from '@ionic/react';
+import { bagHandleOutline, bookOutline, cardOutline, cashOutline, globeOutline, printOutline, swapHorizontalOutline } from 'ionicons/icons';
 import { ProductThumb } from '../../../components/ProductThumb';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp } from '../../../context/AppContext';
@@ -22,16 +22,6 @@ export function SaleDetail({ sale, onClose }: { sale: Sale; onClose: () => void 
 
   return (
     <>
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>Detalle de la venta</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar">
-              <IonIcon slot="icon-only" icon={closeOutline} />
-            </IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
       <div className="pmodal-body sd-body">
         <section className="sd-head">
           <div className="sd-head-top">

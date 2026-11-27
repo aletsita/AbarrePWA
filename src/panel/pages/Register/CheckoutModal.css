@@ -1,5 +1,4 @@
 /* Cobro: total grande arriba, forma de pago en tarjetas y el cambio bien visible */
-ion-modal.pmodal.co-modal { --width: min(600px, 100%); }
 .co-body { display: flex; flex-direction: column; gap: 14px; }
 
 .co-total {

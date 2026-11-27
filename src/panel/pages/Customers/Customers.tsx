@@ -1,12 +1,14 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonSearchbar, IonTitle, IonToolbar } from '@ionic/react';
+import { IonButton, IonContent, IonIcon, IonPage, IonSearchbar } from '@ionic/react';
 import {
   add,
   alertCircleOutline,
   arrowDownCircleOutline,
   arrowUpCircleOutline,
+  bagHandleOutline,
+  calendarOutline,
   callOutline,
-  closeOutline,
   createOutline,
+  documentTextOutline,
   peopleOutline,
   walletOutline,
 } from 'ionicons/icons';
@@ -20,6 +22,7 @@ import { CreditPaymentModal } from './CreditPaymentModal';
 import { CustomerModal } from './CustomerModal';
 import '../CashCut/CashCut.css';
 import './Customers.css';
+import { PanelModal } from '../../../components/PanelModal';
 
 type Filter = 'todos' | 'deben' | 'limite';
 
@@ -38,79 +41,102 @@ function CustomerDetail({ customer, onClose, onEdit, onPay }: { customer?: Custo
   const { creditMovements, sales } = useApp();
   const moves = customer ? creditMovements.filter((m) => m.customerId === customer.id) : [];
   const bought = customer ? sales.filter((s) => s.customerId === customer.id) : [];
+  const used = customer ? (customer.creditLimit ? Math.min(1, customer.balance / customer.creditLimit) : customer.balance > 0 ? 1 : 0) : 0;
 
   return (
-    <IonModal isOpen={!!customer} onDidDismiss={onClose} className="pmodal is-wide">
+    <PanelModal isOpen={!!customer} onClose={onClose} size="detail" title={customer?.name ?? ''} className="cu-modal">
       {customer && (
         <>
-          <IonHeader className="ion-no-border">
-            <IonToolbar>
-              <IonTitle>{customer.name}</IonTitle>
-              <IonButtons slot="end">
-                <IonButton onClick={onClose} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-              </IonButtons>
-            </IonToolbar>
-          </IonHeader>
-          <div className="pmodal-body">
-            <div className="cu-summary">
-              <div className={customer.balance > 0 ? 'is-debt' : ''}>
-                <span>Debe</span>
-                <strong className="money">{money(customer.balance)}</strong>
+          <div className="pmodal-body cu-body">
+            {/* Resumen: lo que debe y lo que le queda de crédito, con el avance del límite */}
+            <section className="cu-overview">
+              <div className="cu-summary">
+                <div className={customer.balance > 0 ? 'is-debt' : ''}>
+                  <span>Debe</span>
+                  <strong>{money(customer.balance)}</strong>
+                </div>
+                <div>
+                  <span>Crédito disponible</span>
+                  <strong>{money(availableCredit(customer))}</strong>
+                </div>
               </div>
-              <div>
-                <span>Crédito disponible</span>
-                <strong className="money">{money(availableCredit(customer))}</strong>
+              <div className="cu-progress">
+                <CreditMeter c={customer} />
+                <p>
+                  <strong>{Math.round(used * 100)} % del crédito usado</strong>
+                  <span>
+                    {money(customer.balance)} de {money(customer.creditLimit)}
+                  </span>
+                </p>
               </div>
-              <div>
-                <span>Límite</span>
-                <strong className="money">{money(customer.creditLimit)}</strong>
-              </div>
-            </div>
-            <CreditMeter c={customer} />
-            <p className="cu-facts">
-              {customer.phone && <span><IonIcon icon={callOutline} /> {customer.phone}</span>}
-              <span>{bought.length} {bought.length === 1 ? 'compra' : 'compras'} · cliente desde {shortDate(customer.createdAt)}</span>
-              {customer.note && <span>{customer.note}</span>}
-            </p>
+            </section>
 
-            <h3 className="cu-h3">Movimientos de crédito</h3>
-            {moves.length === 0 ? (
-              <p className="muted">Todavía no ha comprado a crédito.</p>
-            ) : (
-              <ul className="cu-moves">
-                {moves.map((m) => (
-                  <li key={m.id}>
-                    <span className={`cm-icon ${m.type === 'cargo' ? 't-gasto' : 't-entrada'}`}>
-                      <IonIcon icon={m.type === 'cargo' ? arrowUpCircleOutline : arrowDownCircleOutline} />
-                    </span>
-                    <span className="cm-text">
-                      <strong>{m.type === 'cargo' ? `Compra a crédito · ${m.note}` : m.note}</strong>
-                      <span className="muted">
-                        {shortDate(m.date)} · {time(m.date)} · {m.employee}
-                        {m.method && ` · ${PAYMENT_LABEL[m.method]}`}
+            <ul className="cu-facts">
+              {customer.phone && (
+                <li>
+                  <IonIcon icon={callOutline} aria-hidden="true" />
+                  {customer.phone}
+                </li>
+              )}
+              <li>
+                <IonIcon icon={bagHandleOutline} aria-hidden="true" />
+                {bought.length} {bought.length === 1 ? 'compra' : 'compras'}
+              </li>
+              <li>
+                <IonIcon icon={calendarOutline} aria-hidden="true" />
+                Cliente desde {shortDate(customer.createdAt)}
+              </li>
+              {customer.note && (
+                <li>
+                  <IonIcon icon={documentTextOutline} aria-hidden="true" />
+                  {customer.note}
+                </li>
+              )}
+            </ul>
+
+            <section className="cu-history" aria-labelledby="cu-moves-title">
+              <h3 className="cu-h3" id="cu-moves-title">Movimientos de crédito</h3>
+              {moves.length === 0 ? (
+                <p className="muted">Todavía no ha comprado a crédito.</p>
+              ) : (
+                <ul className="cu-moves">
+                  {moves.map((m) => (
+                    <li key={m.id}>
+                      <span className={`cu-move-icon ${m.type === 'cargo' ? 'is-charge' : 'is-payment'}`}>
+                        <IonIcon icon={m.type === 'cargo' ? arrowUpCircleOutline : arrowDownCircleOutline} aria-hidden="true" />
                       </span>
-                    </span>
-                    <span className={`money cm-amt ${m.type === 'cargo' ? 'is-out' : 'is-in'}`}>
-                      {m.type === 'cargo' ? '+' : '−'}{money(m.amount)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      <span className="cu-move-text">
+                        <strong>{m.type === 'cargo' ? `Compra a crédito · ${m.note}` : m.note}</strong>
+                        <span>
+                          {shortDate(m.date)} · {time(m.date)} · {m.employee}
+                          {m.method && ` · ${PAYMENT_LABEL[m.method]}`}
+                        </span>
+                      </span>
+                      <span className={`cu-move-amt ${m.type === 'cargo' ? 'is-charge' : 'is-payment'}`}>
+                        {m.type === 'cargo' ? '+' : '−'}{money(m.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
           <div className="pmodal-foot">
-            <IonButton fill="outline" className="btn-lg" onClick={onEdit}>
+            <IonButton fill="outline" className="amodal-start" onClick={onClose}>
+              Cerrar
+            </IonButton>
+            <IonButton fill="outline" onClick={onEdit}>
               <IonIcon slot="start" icon={createOutline} />
               Editar
             </IonButton>
-            <IonButton className="btn-lg" disabled={customer.balance <= 0} onClick={onPay}>
+            <IonButton disabled={customer.balance <= 0} onClick={onPay}>
               <IonIcon slot="start" icon={walletOutline} />
               Registrar abono
             </IonButton>
           </div>
         </>
       )}
-    </IonModal>
+    </PanelModal>
   );
 }
 

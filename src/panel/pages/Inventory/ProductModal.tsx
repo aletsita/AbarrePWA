@@ -1,11 +1,10 @@
 import { isWeighed, qtyText, roundQty, type SaleType } from '../../../domain/weight';
-import { IonButton, IonHeader, IonIcon, IonModal, IonSpinner } from '@ionic/react';
+import { IonButton, IonIcon, IonSpinner } from '@ionic/react';
 import {
   arrowDown,
   arrowForward,
   arrowUp,
   barcodeOutline,
-  closeOutline,
   constructOutline,
   phonePortraitOutline,
   pricetagOutline,
@@ -26,6 +25,7 @@ import { PhotoPicker } from '../../../components/PhotoPicker';
 import { useApp, type ProductView } from '../../../context/AppContext';
 import { money, shortDate, uid, type MovementType, type Product } from '../../../data/models';
 import { generateInternalEan13 } from '../../../domain/ean13';
+import { PanelModal } from '../../../components/PanelModal';
 import './ProductModal.css';
 import { useAviso } from '../../../components/Aviso';
 
@@ -237,25 +237,17 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   const description = draft.description ?? '';
 
   return (
-    <IonModal
-      ref={modal}
+    <PanelModal
+      modalRef={modal}
       isOpen={isOpen}
+      onClose={onClose}
       canDismiss={confirmClose}
-      onDidDismiss={onClose}
       onDidPresent={() => step === 'codigo' && codeInput.current?.focus()}
-      aria-labelledby="pm-title"
-      className={`pmodal pm-modal ${step === 'form' ? 'is-form' : ''}`}
+      size={step === 'form' ? 'wide' : 'form'}
+      title={title}
+      subtitle={step === 'form' ? 'Los cambios se ven al instante en la tienda y en la app' : undefined}
+      className="pm-modal"
     >
-      <IonHeader className="ion-no-border pm-header">
-        <div className="pm-header-text">
-          <h2 id="pm-title">{title}</h2>
-          {step === 'form' && <p>Los cambios se ven al instante en la tienda y en la app</p>}
-        </div>
-        <button type="button" className="pm-close" onClick={close} aria-label="Cerrar">
-          <IonIcon icon={closeOutline} aria-hidden="true" />
-        </button>
-      </IonHeader>
-
       {step === 'codigo' ? (
         <>
           <form
@@ -498,6 +490,6 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
           </div>
         </>
       )}
-    </IonModal>
+    </PanelModal>
   );
 }

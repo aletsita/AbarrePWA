@@ -1,9 +1,10 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { callOutline, closeOutline, personOutline, saveOutline, walletOutline } from 'ionicons/icons';
+import { IonButton, IonIcon } from '@ionic/react';
+import { callOutline, personOutline, saveOutline, walletOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { AreaField, FormSection, MoneyField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import { money, type Customer } from '../../../data/models';
+import { PanelModal } from '../../../components/PanelModal';
 
 interface Props {
   isOpen: boolean;
@@ -40,15 +41,7 @@ export function CustomerModal({ isOpen, customer, onClose, onSaved }: Props) {
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="pmodal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>{customer ? 'Editar cliente' : 'Nuevo cliente'}</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
+    <PanelModal isOpen={isOpen} onClose={onClose} size="form" title={customer ? 'Editar cliente' : 'Nuevo cliente'}>
       <form className="pmodal-body" onSubmit={save}>
         <FormSection title="Datos del cliente" icon={personOutline}>
           <TextField className="is-wide" label="Nombre" icon={personOutline} placeholder="Ej. Guadalupe Torres" value={name} onChange={setName}
@@ -82,6 +75,6 @@ export function CustomerModal({ isOpen, customer, onClose, onSaved }: Props) {
           Guardar cliente
         </IonButton>
       </div>
-    </IonModal>
+    </PanelModal>
   );
 }

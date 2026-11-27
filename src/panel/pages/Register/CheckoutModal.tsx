@@ -1,12 +1,11 @@
 import { qtyText, roundQty } from '../../../domain/weight';
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar, useIonRouter } from '@ionic/react';
+import { IonButton, IonIcon, useIonRouter } from '@ionic/react';
 import {
   bookOutline,
   cardOutline,
   cashOutline,
   checkmarkCircle,
   checkmarkDone,
-  closeOutline,
   personAddOutline,
   swapHorizontalOutline,
 } from 'ionicons/icons';
@@ -19,6 +18,7 @@ import { useAppAlert } from '../../../components/AppAlert';
 import { Notice } from '../../../components/Notice';
 import { CustomerPicker } from '../Customers/CustomerPicker';
 import './CheckoutModal.css';
+import { PanelModal } from '../../../components/PanelModal';
 
 const METHODS: { id: PaymentMethod; label: string; hint: string; icon: string }[] = [
   { id: 'efectivo', label: 'Efectivo', hint: 'Calcula el cambio', icon: cashOutline },
@@ -107,17 +107,7 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={() => { onClose(); reset(); }} className="pmodal co-modal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>{order ? `Cobrar pedido ${order.folio}` : 'Cobrar'}</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar">
-              <IonIcon slot="icon-only" icon={closeOutline} />
-            </IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
+    <PanelModal isOpen={isOpen} onClose={() => { onClose(); reset(); }} size="form" title={order ? `Cobrar pedido ${order.folio}` : 'Cobrar'} className="co-modal">
 
       <div className="pmodal-body co-body">
         <section className="co-total" aria-label="Total a cobrar">
@@ -290,6 +280,6 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
         onClose={() => setPicking(false)}
         onPick={(c) => linkCustomer(account.id, c)}
       />
-    </IonModal>
+    </PanelModal>
   );
 }

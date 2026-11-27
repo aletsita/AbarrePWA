@@ -2,7 +2,6 @@
 @media (max-width: 767px) { .sales-total { font-size: 1.15rem; } }
 
 /* Detalle de la venta: encabezado, productos, totales, pago y abonos */
-ion-modal.pmodal.sd-modal { --width: min(600px, 100%); }
 .sd-body { display: flex; flex-direction: column; gap: 16px; }
 .sd-head { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: var(--ab-blanco); box-shadow: var(--t-shadow-lift); }
 .sd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

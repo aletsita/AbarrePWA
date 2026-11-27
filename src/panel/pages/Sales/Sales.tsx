@@ -1,5 +1,5 @@
 import { itemCount } from '../../../domain/weight';
-import { IonButton, IonContent, IonIcon, IonModal, IonPage } from '@ionic/react';
+import { IonButton, IonContent, IonIcon, IonPage } from '@ionic/react';
 import {
   bagHandleOutline,
   basketOutline,
@@ -22,6 +22,7 @@ import { money, ORIGIN_LABEL, PAYMENT_LABEL, saleOrigin, shortDate, time, type P
 import { downloadSalesCsv } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import './Sales.css';
+import { PanelModal } from '../../../components/PanelModal';
 
 const METHOD_ICON: Record<PaymentMethod, string> = { efectivo: cashOutline, tarjeta: cardOutline, transferencia: swapHorizontalOutline, credito: bookOutline, en_linea: globeOutline };
 type Range = 'hoy' | 'ayer' | 'semana' | 'todo';
@@ -151,9 +152,9 @@ export default function Sales() {
         </div>
       </IonContent>
 
-      <IonModal isOpen={!!detail} onDidDismiss={() => setDetail(undefined)} className="pmodal sd-modal">
+      <PanelModal isOpen={!!detail} onClose={() => setDetail(undefined)} size="detail" title="Detalle de la venta" className="sd-modal">
         {detail && <SaleDetail sale={detail} onClose={() => setDetail(undefined)} />}
-      </IonModal>
+      </PanelModal>
     </IonPage>
   );
 }

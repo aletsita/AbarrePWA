@@ -1,26 +1,6 @@
 /* Agregar / editar producto (marca/components/Modal con la variante ancha para formularios) */
 
-/* ---------- Encabezado: título, subtítulo y cerrar de 44 px ---------- */
-.pm-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ab-espacio-4); padding: 20px 20px 16px 28px; background: var(--ab-blanco); border-bottom: 1px solid var(--ab-gris-200); }
-.pm-header-text { min-width: 0; }
-.pm-header h2 { margin: 0; font-family: var(--ab-font-display); font-size: 20px; line-height: 28px; font-weight: 700; color: var(--ab-marino-900); }
-.pm-header p { margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--ab-gris-500); }
-.pm-close { display: grid; place-items: center; flex: none; width: var(--ab-toque-min); height: var(--ab-toque-min); margin: -6px -4px 0 0; border: 0; border-radius: var(--ab-radio-full); background: none; color: var(--ab-gris-700); font-size: 24px; cursor: pointer; }
-.pm-close:hover { background: var(--ab-gris-100); }
-.pm-close:focus-visible { outline: 2px solid var(--ab-azul-500); outline-offset: 2px; }
-
-/* ---------- Formulario: 960 px, esquinas de 24, alto máximo 90 vh; solo el cuerpo hace scroll ---------- */
-ion-modal.pmodal.pm-modal.is-form { --width: min(960px, calc(100% - 32px)); }
-ion-modal.pm-modal .ion-page { display: flex; flex-direction: column; }
-ion-modal.pm-modal .pm-header, ion-modal.pm-modal .pmodal-foot { flex: none; }
-ion-modal.pm-modal.is-form .pmodal-body { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
-@media (min-width: 600px) {
-  ion-modal.pmodal.pm-modal.is-form { --border-radius: var(--ab-radio-xl); --max-height: 90vh; }
-  ion-modal.pm-modal.is-form .ion-page { max-height: 90vh; }
-}
-@media (max-width: 599px) {
-  ion-modal.pm-modal.is-form .ion-page { height: 100%; }
-}
+/* Marco, encabezado y pie: components/PanelModal (tamaño «wide», 960 px) */
 
 /* Cuerpo gris con las tarjetas blancas en dos columnas iguales */
 ion-modal.pm-modal .pmodal-body.pm-body { padding: 24px 28px; background: var(--ab-gris-100); }
@@ -30,7 +10,6 @@ ion-modal.pm-modal .pmodal-body.pm-body { padding: 24px 28px; background: var(--
 .pm-wide { grid-column: 1 / -1; }
 @media (max-width: 719px) {
   ion-modal.pm-modal .pmodal-body.pm-body { padding: 20px; }
-  .pm-header { padding-left: 20px; }
   .pm-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -93,21 +72,10 @@ ion-modal.pm-modal .pmodal-body.pm-body { padding: 24px 28px; background: var(--
 .pm-description .fld-hint { justify-content: space-between; gap: var(--ab-espacio-3); }
 .pm-count { flex: none; font-variant-numeric: tabular-nums; }
 
-/* ---------- Pie fijo: Borrar a la izquierda; Cancelar y Guardar a la derecha (44 px, esquinas de 12) ---------- */
-.pm-foot { gap: var(--ab-espacio-3); padding: 14px 28px; }
-.pm-foot ion-button { height: var(--ab-toque-min); min-height: var(--ab-toque-min); margin: 0; --border-radius: var(--ab-radio-md); font-size: 15px; }
-.pm-foot .pmodal-delete { margin-right: auto; --padding-start: var(--ab-espacio-2); --padding-end: var(--ab-espacio-3); }
+/* ---------- Pie: Borrar a la izquierda; Cancelar y Guardar a la derecha ---------- */
+.pm-foot .pmodal-delete { --padding-start: var(--ab-espacio-2); --padding-end: var(--ab-espacio-3); }
 .pm-save { min-width: 180px; }
-@media (max-width: 719px) {
-  .pm-foot { padding: 12px 20px; }
-}
-@media (max-width: 599px) {
-  .pm-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .pm-foot .pmodal-delete { flex: 1 1 100%; margin-right: 0; }
-  .pmodal-foot.pm-foot ion-button:not(.pmodal-delete) { flex: 1 1 0; }
-  .pm-save { min-width: 0; }
-  .pmodal-foot.pm-foot ion-button { --padding-start: 10px; --padding-end: 10px; white-space: nowrap; }
-}
+@media (max-width: 599px) { .pm-save { min-width: 0; } }
 
 /* ---------- Paso del código (antes del formulario) ---------- */
 .pm-lookup { display: flex; flex-direction: column; gap: 14px; }

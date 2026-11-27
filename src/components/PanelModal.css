@@ -1,0 +1,60 @@
+/* Modal único del panel (PanelModal.tsx): 640 px formularios, 760 px detalles, 960 px formularios anchos.
+   Alto máximo 90 vh; encabezado y pie fijos, solo el cuerpo hace scroll. */
+ion-modal.amodal {
+  --width: min(640px, calc(100% - 32px));
+  --height: auto;
+  --max-height: 90vh;
+  --border-radius: var(--ab-radio-xl);
+  --background: var(--ab-blanco);
+  --box-shadow: var(--ab-sombra-lg);
+  --backdrop-opacity: 0.55;
+}
+ion-modal.amodal::part(backdrop) { background: var(--ab-marino-900); }
+ion-modal.amodal.is-detail { --width: min(760px, calc(100% - 32px)); }
+ion-modal.amodal.is-wide { --width: min(960px, calc(100% - 32px)); }
+/* Encima de otro modal, el de arriba conserva su fondo oscurecido (ver modalStack.ts) */
+ion-modal.amodal[data-stack='arriba'] { --backdrop-opacity: 0.55 !important; }
+
+ion-modal.amodal .ion-page { position: relative; contain: content; display: flex; flex-direction: column; max-height: 90vh; }
+/* Formularios que envuelven cuerpo y pie: el scroll sigue siendo solo del cuerpo */
+ion-modal.amodal .ion-page > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+
+/* Encabezado: título Poppins Bold 20 alineado con el contenido (28 px) y cerrar de 44 px */
+.amodal-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ab-espacio-4); padding: 22px 16px 18px 28px; border-bottom: 1px solid var(--ab-gris-200); background: var(--ab-blanco); }
+.amodal-title { min-width: 0; padding-top: 6px; }
+.amodal-title h2 {
+  margin: 0;
+  font-family: var(--ab-font-display);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+  color: var(--ab-marino-900);
+  /* Nombres largos: hasta 2 líneas antes de cortar */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.amodal-title p { margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--ab-gris-500); }
+.amodal-close { display: grid; place-items: center; flex: none; width: var(--ab-toque-min); height: var(--ab-toque-min); border: 0; border-radius: var(--ab-radio-full); background: none; color: var(--ab-gris-700); font-size: 24px; cursor: pointer; }
+.amodal-close:hover { background: var(--ab-gris-100); }
+.amodal-close:focus-visible { outline: 2px solid var(--ab-azul-500); outline-offset: 2px; }
+
+/* Cuerpo: 28 px de relleno, 24 px entre secciones, 8 px entre etiqueta y campo */
+ion-modal.amodal .pmodal-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--ab-espacio-6); padding: 28px; overflow-y: auto; font-size: 14px; line-height: 20px; color: var(--ab-gris-700); }
+ion-modal.amodal .fld { gap: var(--ab-espacio-2); }
+
+/* Pie fijo: borde superior y 24 px de relleno; acción principal a la derecha */
+ion-modal.amodal .pmodal-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--ab-espacio-3); padding: var(--ab-espacio-6); border-top: 1px solid var(--ab-gris-200); background: var(--ab-blanco); }
+ion-modal.amodal .pmodal-foot ion-button { margin: 0; min-height: 48px; height: 48px; --border-radius: var(--ab-radio-md); }
+ion-modal.amodal .pmodal-foot .pmodal-delete,
+ion-modal.amodal .pmodal-foot .amodal-start { margin-right: auto; }
+
+@media (max-width: 599px) {
+  .amodal-head { padding: 18px 12px 14px 20px; }
+  ion-modal.amodal .pmodal-body { padding: 20px; }
+  ion-modal.amodal .pmodal-foot { padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); }
+  ion-modal.amodal .pmodal-foot ion-button { flex: 1 1 0; white-space: nowrap; }
+  ion-modal.amodal .pmodal-foot .pmodal-delete { flex: 1 1 100%; margin-right: 0; }
+}
