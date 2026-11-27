@@ -6,7 +6,6 @@ import {
   IonPage,
   IonToolbar,
   useIonRouter,
-  useIonToast,
   useIonViewDidEnter,
   useIonViewWillLeave,
 } from '@ionic/react';
@@ -43,6 +42,7 @@ import { CustomerPicker } from '../Customers/CustomerPicker';
 import { ProductModal } from '../Inventory/ProductModal';
 import { CheckoutModal } from './CheckoutModal';
 import './Register.css';
+import { useAviso } from '../../../components/Aviso';
 
 function LiveDevice() {
   const { devices, lastScan, isLive } = useApp();
@@ -158,7 +158,7 @@ export default function Register() {
   const customer = customers.find((c) => c.id === account.customerId);
   const canAddAccount = ticket.length > 0 || !!account.customerId;
   const showAlert = useAppAlert();
-  const [toast] = useIonToast();
+  const toast = useAviso();
   const [payOpen, setPayOpen] = useState(false);
   const [newCode, setNewCode] = useState<string>();
   // Producto por peso esperando que se escriba lo que marca la báscula (`kg`: la línea que se está corrigiendo)

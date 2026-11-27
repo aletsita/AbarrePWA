@@ -1,5 +1,5 @@
 import { isWeighed, qtyText, roundQty, type SaleType } from '../../../domain/weight';
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonSpinner, IonTitle, IonToolbar, useIonToast } from '@ionic/react';
+import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonSpinner, IonTitle, IonToolbar } from '@ionic/react';
 import {
   arrowDown,
   arrowForward,
@@ -27,6 +27,7 @@ import { useApp, type ProductView } from '../../../context/AppContext';
 import { money, shortDate, uid, type MovementType, type Product } from '../../../data/models';
 import { generateInternalEan13 } from '../../../domain/ean13';
 import './ProductModal.css';
+import { useAviso } from '../../../components/Aviso';
 
 const MOVE_ICON: Record<MovementType, string> = { venta: arrowDown, entrada: arrowUp, ajuste: constructOutline, alta: sparklesOutline };
 const MOVE_LABEL: Record<MovementType, string> = { venta: 'Venta', entrada: 'Entrada', ajuste: 'Ajuste', alta: 'Alta' };
@@ -58,7 +59,7 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   const canEdit = user?.role !== 'Cajero';
   // Mientras sube el cambio anterior no se guarda otro encima
   const uploading = product?.sync === 'subiendo';
-  const [toast] = useIonToast();
+  const toast = useAviso();
   const showAlert = useAppAlert();
   const [deleting, setDeleting] = useState(false);
   // Los errores de los campos se muestran después del primer intento de guardar

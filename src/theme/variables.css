@@ -175,6 +175,8 @@
 
   /* Capas sobre el azul o sobre la cámara (derivadas de blanco y marino-900) */
   --t-on-brand-line: rgba(255, 255, 255, 0.4);
+  /* Palomita de los avisos sobre marino (marca/components/Aviso) */
+  --t-aviso-ok: #86efac;
   --t-scrim: rgba(14, 37, 71, 0.5);
   --t-scrim-strong: rgba(14, 37, 71, 0.72);
 

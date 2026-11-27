@@ -1,0 +1,27 @@
+/* Modal estándar de Abarré (marca/components/Modal): lo comparten todas las alertas, hojas y formularios */
+
+/* Fondo oscurecido: marino-900 al 50 % */
+ion-modal { --backdrop-opacity: 0.5; }
+ion-modal::part(backdrop) { background: var(--ab-marino-900); }
+
+/* Contenedor blanco, esquinas de 16, sombra grande, 20 px de relleno */
+.ab-modal { display: flex; flex-direction: column; gap: var(--ab-espacio-2); padding: 20px; background: var(--ab-blanco); color: var(--ab-marino-900); text-align: left; }
+.ab-modal-icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: var(--ab-espacio-1); border-radius: var(--ab-radio-full); font-size: 24px; background: var(--ab-azul-100); color: var(--ab-azul-600); }
+.ab-modal.is-warning .ab-modal-icon { background: var(--ab-ambar-100); color: var(--ab-ambar-900); }
+.ab-modal.is-error .ab-modal-icon, .ab-modal.is-danger .ab-modal-icon { background: var(--ab-error-100); color: var(--ab-error-700); }
+.ab-modal.is-success .ab-modal-icon { background: var(--ab-exito-100); color: var(--ab-exito-800); }
+
+/* Encabezado: título (Poppins 500, 18 px) y cerrar de 44 px a la derecha */
+.ab-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ab-espacio-3); }
+.ab-modal-title { margin: 0; font-family: var(--ab-font-display); font-size: 18px; font-weight: 500; line-height: 24px; color: var(--ab-marino-900); overflow-wrap: anywhere; }
+.ab-modal-close { display: grid; place-items: center; flex: none; width: var(--ab-toque-min); height: var(--ab-toque-min); margin: -10px -10px 0 0; border: 0; border-radius: var(--ab-radio-full); background: none; color: var(--ab-gris-700); font-size: 22px; cursor: pointer; }
+.ab-modal-close:hover { background: var(--ab-gris-100); }
+
+/* Cuerpo: Inter 14/20 en gris-700; si es largo hace scroll por dentro */
+.ab-modal-text { margin: 0 0 var(--ab-espacio-3); font-size: 14px; line-height: 20px; color: var(--ab-gris-700); overflow-wrap: anywhere; }
+.ab-modal-text p { margin: 0; }
+.ab-modal-text p + p { margin-top: var(--ab-espacio-2); }
+
+/* Acciones: secundaria a la izquierda, principal a la derecha; en celular las dos ocupan el ancho */
+.ab-modal-actions { display: flex; gap: var(--ab-espacio-2); }
+.ab-modal-actions > * { flex: 1; margin: 0; }

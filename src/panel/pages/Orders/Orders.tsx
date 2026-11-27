@@ -1,4 +1,4 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonRouter, useIonToast } from '@ionic/react';
+import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar, useIonRouter } from '@ionic/react';
 import { useAppAlert } from '../../../components/AppAlert';
 import {
   alertCircleOutline,
@@ -27,6 +27,7 @@ import { CheckoutModal } from '../Register/CheckoutModal';
 import { CancelOrderModal } from './CancelOrderModal';
 import { PickupCodeModal } from './PickupCodeModal';
 import './Orders.css';
+import { useAviso } from '../../../components/Aviso';
 
 const NEW_MS = 2 * 60000;
 const PREVIEW_ITEMS = 3;
@@ -36,8 +37,8 @@ type View = 'curso' | 'entregado' | 'cancelado';
 // Tablero: una columna por etapa, del pedido que lleva más tiempo esperando al más nuevo
 const COLUMNS: { status: Exclude<OrderStatus, 'entregado' | 'cancelado'>; title: string; empty: string; icon: string }[] = [
   { status: 'pendiente', title: 'Pendientes', empty: 'Sin pedidos nuevos', icon: timeOutline },
-  { status: 'preparando', title: 'Preparando', empty: 'Nada en preparación', icon: flameOutline },
-  { status: 'listo', title: 'Listos para recoger', empty: 'Nada esperando al cliente', icon: bagCheckOutline },
+  { status: 'preparando', title: 'Haciendo', empty: 'Nada en preparación', icon: flameOutline },
+  { status: 'listo', title: 'Pedido listo', empty: 'Nada esperando al cliente', icon: bagCheckOutline },
 ];
 
 function ago(iso: string, now: number) {
@@ -61,7 +62,7 @@ export default function Orders() {
   const [problem, setProblem] = useState<PickupOrder>();
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState<string>();
-  const [toast] = useIonToast();
+  const toast = useAviso();
   const router = useIonRouter();
 
   const showAlert = useAppAlert();

@@ -1,26 +1,10 @@
-/* Alerta centrada (igual que en la app móvil): ícono por tipo, título, mensaje y dos botones */
+/* Alerta: el Modal estándar (Modal.css) centrado, ancho máximo de 420 px */
 ion-modal.app-alert-modal {
-  --width: min(400px, calc(100vw - 32px));
+  --width: min(420px, calc(100vw - 32px));
   --height: auto;
   --max-height: calc(100vh - 48px);
   --border-radius: var(--ab-radio-lg);
-  --box-shadow: var(--t-shadow-pop);
-  --backdrop-opacity: 0.45;
+  --box-shadow: var(--ab-sombra-lg);
 }
 ion-modal.app-alert-modal::part(content) { position: relative; }
-
-.app-alert { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 20px 16px; background: var(--t-surface); text-align: center; }
-.app-alert-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; font-size: 30px; }
-.app-alert h2 { margin: 4px 0 0; font-size: 1.2rem; font-weight: 800; line-height: 1.25; }
-.app-alert-msg { font-size: 0.95rem; line-height: 1.45; color: var(--t-muted); }
-.app-alert-msg p { margin: 0; }
-.app-alert-msg p + p { margin-top: 6px; }
-.app-alert-code { padding: 4px 12px; border-radius: var(--ab-radio-sm); background: var(--t-surface-3); font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 1rem; letter-spacing: 0.06em; color: var(--t-ink); overflow-wrap: anywhere; }
-.app-alert-actions { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: 10px; }
-.app-alert-actions ion-button { margin: 0; min-height: 48px; font-weight: 700; text-transform: none; letter-spacing: 0; }
-.app-alert-secondary { --color: var(--t-muted); }
-
-.app-alert.is-info .app-alert-icon { background: var(--t-primary-bg); color: var(--ion-color-primary); }
-.app-alert.is-warning .app-alert-icon { background: var(--t-warning-bg); color: var(--t-warning-text); }
-.app-alert.is-error .app-alert-icon { background: var(--t-danger-bg); color: var(--ion-color-danger); }
-.app-alert.is-success .app-alert-icon { background: var(--t-success-bg); color: var(--ion-color-success); }
+.app-alert-code { align-self: flex-start; padding: var(--ab-espacio-1) var(--ab-espacio-3); border-radius: var(--ab-radio-sm); background: var(--ab-gris-100); font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 1rem; letter-spacing: 0.06em; color: var(--ab-marino-900); overflow-wrap: anywhere; }

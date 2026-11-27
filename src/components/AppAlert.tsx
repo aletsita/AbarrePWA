@@ -1,9 +1,11 @@
 import { IonButton, IonIcon, IonModal } from '@ionic/react';
-import { alertCircleOutline, checkmarkCircleOutline, closeCircleOutline, informationCircleOutline } from 'ionicons/icons';
+import { alertCircleOutline, checkmarkCircleOutline, closeCircleOutline, closeOutline, informationCircleOutline } from 'ionicons/icons';
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import './Modal.css';
 import './AppAlert.css';
 
-// Alerta de la app: título corto, mensaje sencillo, ícono por tipo y dos botones con jerarquía.
+// Alerta de la app con la estructura del Modal de la marca (marca/components/Modal): ícono, título con
+// botón de cerrar, texto y acciones (secundaria a la izquierda, principal a la derecha).
 // Solo para lo que pide una decisión; los avisos sin decisión van como toast.
 export type AlertTone = 'info' | 'warning' | 'error' | 'success';
 
@@ -70,24 +72,32 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         }}
       >
         {current && primary && (
-          <div className={`app-alert is-${current.tone}`} role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title" aria-describedby="app-alert-msg">
-            <span className="app-alert-icon">
+          <div className={`ab-modal app-alert is-${current.tone}`} role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title" aria-describedby="app-alert-msg">
+            <span className="ab-modal-icon">
               <IonIcon icon={TONE_ICON[current.tone]} aria-hidden="true" />
             </span>
-            <h2 id="app-alert-title">{current.title}</h2>
+            <header className="ab-modal-head">
+              <h2 id="app-alert-title" className="ab-modal-title">
+                {current.title}
+              </h2>
+              <button type="button" className="ab-modal-close" onClick={() => close(false)} aria-label="Cerrar">
+                <IonIcon icon={closeOutline} aria-hidden="true" />
+              </button>
+            </header>
             {current.code && <code className="app-alert-code">{current.code}</code>}
-            <div id="app-alert-msg" className="app-alert-msg">
+            <div id="app-alert-msg" className="ab-modal-text">
               {current.message}
             </div>
-            <div className="app-alert-actions">
-              <IonButton expand="block" className="app-alert-primary" color={primary.danger ? 'danger' : 'primary'} onClick={() => close(true)}>
-                {primary.text}
-              </IonButton>
+            {/* Secundario a la izquierda, principal a la derecha (o el de peligro si borra o cancela) */}
+            <div className="ab-modal-actions">
               {current.secondary && (
-                <IonButton expand="block" fill="clear" color="medium" className="app-alert-secondary" onClick={() => close(false)}>
+                <IonButton fill="outline" className="app-alert-secondary" onClick={() => close(false)}>
                   {current.secondary}
                 </IonButton>
               )}
+              <IonButton className="app-alert-primary" color={primary.danger ? 'danger' : undefined} onClick={() => close(true)}>
+                {primary.text}
+              </IonButton>
             </div>
           </div>
         )}

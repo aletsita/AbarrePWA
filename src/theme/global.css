@@ -130,7 +130,27 @@ ion-tab-button.tab-selected ion-icon { background: var(--t-primary-bg); }
 ion-tab-button ion-label { font-size: 0.72rem; margin-top: 2px; }
 ion-tab-button ion-badge { font-size: 0.66rem; border-radius: var(--ab-radio-sm); }
 
-ion-toast.toast-app { --border-radius: var(--ab-radio-sm); --max-width: 440px; --box-shadow: var(--t-shadow-pop); font-weight: 550; }
+/* Aviso (marca/components/Aviso): marino, texto blanco 14 px, esquinas de 12, sombra media, centrado */
+ion-toast.toast-app {
+  --background: var(--ab-marino-900);
+  --color: var(--ab-blanco);
+  --border-radius: var(--ab-radio-md);
+  --box-shadow: var(--ab-sombra-md);
+  --max-width: 420px;
+  --width: calc(100% - 32px);
+  --start: 0;
+  --end: 0;
+  --button-color: var(--ab-blanco);
+  font-family: var(--ab-font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+ion-toast.toast-app::part(container) { padding: 2px var(--ab-espacio-1); }
+ion-toast.toast-app::part(header) { font-weight: 600; }
+ion-toast.toast-app::part(icon) { font-size: 20px; color: var(--t-aviso-ok); }
+ion-toast.toast-app.is-alerta::part(icon), ion-toast.toast-app.is-error::part(icon) { color: var(--ab-ambar-500); }
+ion-toast.toast-app::part(button) { font-weight: 600; }
 ion-alert { --backdrop-opacity: 0.5; }
 ion-alert .alert-wrapper { border-radius: var(--ab-radio-md) !important; }
 ion-alert .alert-title { font-weight: 650 !important; }

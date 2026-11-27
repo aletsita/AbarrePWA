@@ -9,10 +9,11 @@ export type OrderStatus = 'pendiente' | 'preparando' | 'listo' | 'entregado' | '
 // Etapas en orden (cancelado no es una etapa: sale de cualquiera antes de entregado)
 export const ORDER_STATUSES: OrderStatus[] = ['pendiente', 'preparando', 'listo', 'entregado'];
 
+// Nombres de «Estados de un pedido» (marca/README)
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pendiente: 'Pendiente',
-  preparando: 'Preparando',
-  listo: 'Listo para recoger',
+  preparando: 'Haciendo',
+  listo: 'Pedido listo',
   entregado: 'Entregado',
   cancelado: 'Cancelado',
 };

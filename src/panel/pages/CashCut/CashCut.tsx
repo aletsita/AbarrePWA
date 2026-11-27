@@ -9,8 +9,7 @@ import {
   IonPage,
   IonTitle,
   IonToolbar,
-  useIonToast,
-} from '@ionic/react';
+  } from '@ionic/react';
 import { CashMovementModal } from './CashMovementModal';
 import {
   add,
@@ -34,13 +33,14 @@ import { PanelHeader } from '../../components/PanelHeader';
 import { PromptModal } from '../../components/PromptModal';
 import { ClosedCut, Difference } from './ClosedCut';
 import './CashCut.css';
+import { useAviso } from '../../../components/Aviso';
 
 const MOVE_LABEL: Record<CashMovementType, string> = { entrada: 'Entrada', retiro: 'Retiro', gasto: 'Gasto' };
 const MOVE_ICON: Record<CashMovementType, string> = { entrada: arrowDownCircleOutline, retiro: arrowUpCircleOutline, gasto: basketOutline };
 
 export default function CashCut() {
   const { sales, cashMovements, creditMovements, cuts, closedCutId, closeCut, shift, store, user, addCashMovement, openShift } = useApp();
-  const [toast] = useIonToast();
+  const toast = useAviso();
   const [countedText, setCountedText] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
