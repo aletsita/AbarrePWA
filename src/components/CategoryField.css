@@ -1,0 +1,10 @@
+/* Categoría con botón «+» del mismo alto que el campo */
+.cat-field { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cat-field-row { display: flex; align-items: flex-end; gap: 8px; }
+.cat-field-row > :first-child { flex: 1; min-width: 0; }
+.cat-field-add { display: grid; place-items: center; flex: none; width: 48px; height: 48px; border: 1.5px dashed var(--ion-color-primary); border-radius: var(--t-radius-sm); background: var(--t-primary-bg); color: var(--ion-color-primary); font-size: 22px; cursor: pointer; }
+.cat-field-add:hover { background: var(--ion-color-primary); color: #fff; }
+.cat-field-add.is-open { border-style: solid; border-color: var(--t-border-strong); background: var(--t-surface-3); color: var(--t-ink); }
+.cat-field-new { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--t-border); border-radius: var(--t-radius-sm); background: var(--t-surface-2); }
+.cat-field-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.cat-field-actions ion-button { margin: 0; }

@@ -1,5 +1,5 @@
 import { isWeighed, qtyText, roundQty, type SaleType } from '../../../domain/weight';
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar, useIonToast } from '@ionic/react';
+import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonSpinner, IonTitle, IonToolbar, useIonToast } from '@ionic/react';
 import {
   arrowDown,
   arrowForward,
@@ -7,7 +7,7 @@ import {
   barcodeOutline,
   closeOutline,
   constructOutline,
-  cubeOutline,
+  gridOutline,
   phonePortraitOutline,
   pricetagOutline,
   pricetagsOutline,
@@ -17,13 +17,14 @@ import {
 } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
 import { useAppAlert } from '../../../components/AppAlert';
-import { AreaField, FormSection, MoneyField, SelectField, SwitchField, TextField } from '../../../components/Form';
+import { CategoryField } from '../../../components/CategoryField';
+import { AreaField, FormSection, MoneyField, SwitchField, TextField } from '../../../components/Form';
 import { Notice } from '../../../components/Notice';
 import { SaleTypeField } from '../../../components/SaleTypeField';
 import { PhotoPicker } from '../../../components/PhotoPicker';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp, type ProductView } from '../../../context/AppContext';
-import { CATEGORIES, money, shortDate, uid, type MovementType, type Product } from '../../../data/models';
+import { money, shortDate, uid, type MovementType, type Product } from '../../../data/models';
 import { generateInternalEan13 } from '../../../domain/ean13';
 import './ProductModal.css';
 
@@ -55,6 +56,8 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   const { saveProduct, deleteProduct, findByBarcode, movementsFor, user } = useApp();
   // Según la API, solo Dueño e Inventario dan de alta, editan y borran productos
   const canEdit = user?.role !== 'Cajero';
+  // Mientras sube el cambio anterior no se guarda otro encima
+  const uploading = product?.sync === 'subiendo';
   const [toast] = useIonToast();
   const showAlert = useAppAlert();
   const [deleting, setDeleting] = useState(false);
@@ -287,10 +290,19 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
                     <strong className="money">{draft.price > 0 ? money(draft.price) : '$—'}</strong>
                     <span>{weighed ? 'por kg' : 'por pieza'}</span>
                     <span className="pm-chip">{draft.category}</span>
-                    {product?.sync && <SyncBadge state={product.sync} />}
                   </div>
                 </div>
               </div>
+              {product?.sync && (
+                <div className={`pm-sync is-${product.sync}`} role="status">
+                  {product.sync === 'subiendo' ? <IonSpinner name="crescent" /> : <SyncBadge state={product.sync} compact />}
+                  <span>
+                    {product.sync === 'subiendo'
+                      ? 'Subiendo los últimos cambios… Espera un momento para guardar de nuevo.'
+                      : 'Cambios guardados en este equipo; se suben solos al volver la conexión.'}
+                  </span>
+                </div>
+              )}
 
               <FormSection title="Datos del producto" icon={pricetagsOutline}>
                 <TextField
@@ -301,16 +313,13 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
                   error={tried || dupOther ? errors.barcode : undefined}
                   onChange={(v) => set('barcode', v.replace(/\s/g, ''))}
                 />
-                <SelectField label="Categoría" value={draft.category} onChange={(v) => set('category', v)}>
-                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                </SelectField>
                 <div className="is-wide pm-saletype">
                   <span className="pm-label">Se vende por</span>
                   <SaleTypeField value={draft.saleType} onChange={setSaleType} />
                 </div>
               </FormSection>
 
-              <FormSection title="Precio" icon={pricetagOutline}>
+              <FormSection title="Precio e inventario" icon={pricetagOutline}>
                 <MoneyField label="Precio de compra" hint="Lo que te cuesta" value={nums.cost} onChange={(v) => setNum('cost', v)} />
                 <MoneyField
                   label={weighed ? 'Precio de venta por kg' : 'Precio de venta'}
@@ -326,13 +335,14 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
                       : 'El precio de venta es menor o igual al de compra'}
                   </p>
                 )}
-              </FormSection>
-
-              <FormSection title="Existencia" icon={cubeOutline}>
                 <TextField label={weighed ? 'Kilos en tienda' : 'Piezas en tienda'} inputMode={weighed ? 'decimal' : 'numeric'} value={nums.stock} suffix={weighed ? 'kg' : 'pzas'}
                   onChange={(v) => setQtyNum('stock', v)} />
                 <TextField label="Avisar cuando queden" hint="Se marca como poco stock" inputMode={weighed ? 'decimal' : 'numeric'} value={nums.minStock} suffix={weighed ? 'kg' : 'pzas'}
                   onChange={(v) => setQtyNum('minStock', v)} />
+              </FormSection>
+
+              <FormSection title="Categoría" icon={gridOutline} text="Elige una o crea la tuya con «+»">
+                <CategoryField className="is-wide" value={draft.category} onChange={(v) => set('category', v)} />
               </FormSection>
 
               <FormSection title="Pide y recoge" icon={phonePortraitOutline} text="Lo que ven tus clientes en su app">
@@ -395,9 +405,9 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
               </IonButton>
             )}
             <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
-            <IonButton className="btn-lg pm-save" disabled={!canEdit} onClick={() => save()}>
-              <IonIcon slot="start" icon={saveOutline} />
-              {isNew ? 'Agregar producto' : 'Guardar cambios'}
+            <IonButton className="btn-lg pm-save" disabled={!canEdit || uploading} onClick={() => save()}>
+              {uploading ? <IonSpinner slot="start" name="crescent" /> : <IonIcon slot="start" icon={saveOutline} />}
+              {uploading ? 'Subiendo…' : isNew ? 'Agregar producto' : 'Guardar cambios'}
             </IonButton>
           </div>
         </>

@@ -1,0 +1,32 @@
+/* Registrar abono: quién y cuánto debe, el monto, la forma de pago y lo que queda */
+ion-modal.pmodal.ab-modal { --width: min(520px, 100%); }
+.ab-form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.ab-body { display: flex; flex-direction: column; gap: 18px; }
+.ab-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: #fff; box-shadow: var(--t-shadow-lift); }
+.ab-hero-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 14px; background: rgba(255, 255, 255, 0.18); font-size: 24px; }
+.ab-hero small { display: block; font-size: 0.8rem; font-weight: 650; opacity: 0.85; }
+.ab-hero-who { flex: 1; min-width: 0; }
+.ab-hero-who strong { display: block; overflow: hidden; font-size: 1.05rem; white-space: nowrap; text-overflow: ellipsis; }
+.ab-hero-debt { flex: none; text-align: right; }
+.ab-hero-debt strong { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; }
+
+.ab-field { display: flex; flex-direction: column; gap: 8px; }
+.ab-label { font-size: 0.92rem; font-weight: 700; color: var(--t-ink); }
+.ab-input { height: 60px; }
+.ab-input.is-error { border-color: var(--ion-color-danger); box-shadow: 0 0 0 3px rgba(var(--ion-color-danger-rgb), 0.12); }
+.ab-quick { flex-wrap: wrap; }
+
+.ab-methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ab-method { min-height: 56px; padding: 8px 30px 8px 10px; gap: 8px; }
+.ab-method .co-method-icon { width: 34px; height: 34px; font-size: 19px; }
+.ab-method span { min-width: 0; overflow: hidden; font-weight: 650; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 479px) { .ab-methods { grid-template-columns: 1fr; } }
+
+.ab-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: var(--t-radius-sm); background: var(--t-surface-2); font-weight: 650; }
+.ab-result strong { font-size: 1.3rem; }
+.ab-result.is-idle { color: var(--t-muted); }
+.ab-result.is-ok { background: var(--t-primary-bg); color: var(--ion-color-primary); }
+.ab-result.is-done { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
+.ab-result.is-short { background: var(--t-danger-bg); color: var(--ion-color-danger); }
+
+.ab-foot ion-button[type='submit'] { flex: 1; }

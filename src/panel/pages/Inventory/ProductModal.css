@@ -54,3 +54,12 @@
   .pm-history { order: 2; }
 }
 
+
+/* Cambios que aún no terminan de subir: dentro del recuadro, con ajuste de línea */
+.pm-sync { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border-radius: var(--t-radius-sm); background: var(--t-primary-bg); color: var(--ion-color-primary); font-size: 0.88rem; font-weight: 600; line-height: 1.35; }
+.pm-sync.is-pendiente { background: var(--t-warning-bg); color: var(--t-warning-text); }
+.pm-sync ion-spinner { flex: none; width: 20px; height: 20px; }
+.pm-sync > span { min-width: 0; overflow-wrap: anywhere; }
+.pm-sync .sync-badge { flex: none; }
+.pm-preview { flex-wrap: wrap; min-width: 0; }
+.pm-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

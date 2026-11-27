@@ -1,26 +1,25 @@
-import { itemCount, lineTotal, qtyText } from '../../../domain/weight';
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
+import { itemCount } from '../../../domain/weight';
+import { IonButton, IonContent, IonIcon, IonModal, IonPage } from '@ionic/react';
 import {
   bagHandleOutline,
   basketOutline,
   bookOutline,
   cardOutline,
   cashOutline,
-  closeOutline,
   downloadOutline,
   globeOutline,
-  printOutline,
   receiptOutline,
   swapHorizontalOutline,
   trendingUpOutline,
 } from 'ionicons/icons';
 import { useState } from 'react';
 import { EmptyState } from '../../../components/EmptyState';
+import { SaleDetail } from './SaleDetail';
 import { StatCard } from '../../../components/StatCard';
 import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp } from '../../../context/AppContext';
 import { money, ORIGIN_LABEL, PAYMENT_LABEL, saleOrigin, shortDate, time, type PaymentMethod, type Sale, type SaleOrigin } from '../../../data/models';
-import { downloadSalesCsv, printSale } from '../../../lib/print';
+import { downloadSalesCsv } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import './Sales.css';
 
@@ -40,7 +39,7 @@ function inRange(iso: string, r: Range) {
 }
 
 export default function Sales() {
-  const { sales, users, store, ticketConfig, customers } = useApp();
+  const { sales, users, store } = useApp();
   const [range, setRange] = useState<Range>('hoy');
   const [method, setMethod] = useState<PaymentMethod | ''>('');
   const [employee, setEmployee] = useState('');
@@ -152,63 +151,8 @@ export default function Sales() {
         </div>
       </IonContent>
 
-      <IonModal isOpen={!!detail} onDidDismiss={() => setDetail(undefined)} className="pmodal">
-        {detail && (
-          <>
-            <IonHeader className="ion-no-border">
-              <IonToolbar>
-                <IonTitle>Venta #{detail.folio}</IonTitle>
-                <IonButtons slot="end">
-                  <IonButton onClick={() => setDetail(undefined)} aria-label="Cerrar">
-                    <IonIcon slot="icon-only" icon={closeOutline} />
-                  </IonButton>
-                </IonButtons>
-              </IonToolbar>
-            </IonHeader>
-            <div className="pmodal-body">
-              <dl className="sd-facts">
-                <div><dt>Fecha</dt><dd>{new Date(detail.date).toLocaleDateString('es-MX', { dateStyle: 'long' })} · {time(detail.date)}</dd></div>
-                <div><dt>Atendió</dt><dd>{detail.employee}</dd></div>
-                <div><dt>Origen</dt><dd>{ORIGIN_LABEL[saleOrigin(detail)]}</dd></div>
-                {detail.orderFolio && <div><dt>Pedido</dt><dd><span className="pill is-pickup"><IonIcon icon={bagHandleOutline} />{detail.orderFolio}</span></dd></div>}
-                {detail.customerName && <div><dt>Cliente</dt><dd>{detail.customerName}</dd></div>}
-                <div><dt>Pago</dt><dd><span className={`pill is-${detail.method}`}><IonIcon icon={METHOD_ICON[detail.method]} />{PAYMENT_LABEL[detail.method]}</span></dd></div>
-                {detail.pending && <div><dt>Estado</dt><dd><SyncBadge state="pendiente" /></dd></div>}
-              </dl>
-              <table className="ptable sd-items">
-                <thead><tr><th>Producto</th><th className="num">Cant.</th><th className="num">Precio</th><th className="num">Importe</th></tr></thead>
-                <tbody>
-                  {detail.items.map((i) => (
-                    <tr key={i.productId}>
-                      <td>{i.name}</td>
-                      <td className="num">{qtyText(i.qty, i.saleType)}</td>
-                      <td className="num">{money(i.price)}</td>
-                      <td className="num strong">{money(lineTotal(i.qty, i.price, i.saleType))}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="sd-total">
-                <span>Total</span>
-                <strong className="money">{money(detail.total)}</strong>
-              </div>
-              {detail.method === 'efectivo' && detail.paid && (
-                <p className="sd-paid">Pagó con {money(detail.paid)} · cambio {money(detail.paid - detail.total)}</p>
-              )}
-              {detail.method === 'credito' && (
-                <p className="sd-paid">
-                  {detail.paid ? `Abonó ${money(detail.paid)} al momento · ` : ''}quedó a cuenta de {detail.customerName}
-                </p>
-              )}
-            </div>
-            <div className="pmodal-foot">
-              <IonButton fill="outline" className="btn-lg" onClick={() => printSale(detail, store, ticketConfig, customers.find((c) => c.id === detail.customerId))}>
-                <IonIcon slot="start" icon={printOutline} />
-                Reimprimir ticket
-              </IonButton>
-            </div>
-          </>
-        )}
+      <IonModal isOpen={!!detail} onDidDismiss={() => setDetail(undefined)} className="pmodal sd-modal">
+        {detail && <SaleDetail sale={detail} onClose={() => setDetail(undefined)} />}
       </IonModal>
     </IonPage>
   );
