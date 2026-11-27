@@ -1,20 +1,22 @@
 import { IonButton, IonIcon } from '@ionic/react';
-import { add, checkmark, closeOutline } from 'ionicons/icons';
-import { useRef, useState } from 'react';
+import { add, checkmark } from 'ionicons/icons';
+import { useId, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { categoryList } from '../data/models';
-import { SelectField, TextField } from './Form';
+import { TextField } from './Form';
 import './CategoryField.css';
 
-// Selector de categoría con «+» para crear una propia. La categoría nueva se guarda con el producto
-// (es su nombre, igual que las de siempre), queda elegida y aparece en el selector.
+// Categoría en chips, con «+ Nueva» para crear una propia. La categoría nueva se guarda con el producto
+// (es su nombre, igual que las de siempre), queda elegida y aparece entre los chips.
 export function CategoryField({ value, onChange, className = '' }: { value: string; onChange: (c: string) => void; className?: string }) {
   const { products } = useApp();
+  const labelId = useId();
   const [mine, setMine] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [tried, setTried] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const addBtn = useRef<HTMLButtonElement>(null);
   const list = categoryList(products, [...mine, value]);
 
   const clean = name.trim().replace(/\s+/g, ' ');
@@ -25,6 +27,7 @@ export function CategoryField({ value, onChange, className = '' }: { value: stri
     setAdding(false);
     setName('');
     setTried(false);
+    setTimeout(() => addBtn.current?.focus(), 0);
   };
   const create = () => {
     setTried(true);
@@ -37,26 +40,31 @@ export function CategoryField({ value, onChange, className = '' }: { value: stri
 
   return (
     <div className={`cat-field ${className}`}>
-      <div className="cat-field-row">
-        <SelectField label="Categoría" value={value} onChange={onChange}>
-          {list.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
-        </SelectField>
-        <button
-          type="button"
-          className={`cat-field-add ${adding ? 'is-open' : ''}`}
-          onClick={() => {
-            if (adding) return close();
-            setAdding(true);
-            setTimeout(() => input.current?.focus(), 50);
-          }}
-          aria-expanded={adding}
-          aria-label={adding ? 'Cerrar nueva categoría' : 'Crear categoría'}
-          title="Crear categoría"
-        >
-          <IonIcon icon={adding ? closeOutline : add} aria-hidden="true" />
-        </button>
+      <span className="fld-label" id={labelId}>
+        Categoría
+      </span>
+      <div className="cat-chips" role="radiogroup" aria-labelledby={labelId}>
+        {list.map((c) => (
+          <button key={c} type="button" role="radio" aria-checked={c === value} className={`cat-chip ${c === value ? 'is-active' : ''}`} onClick={() => onChange(c)}>
+            {c === value && <IonIcon icon={checkmark} aria-hidden="true" />}
+            <span>{c}</span>
+          </button>
+        ))}
+        {!adding && (
+          <button
+            ref={addBtn}
+            type="button"
+            className="cat-chip is-new"
+            onClick={() => {
+              setAdding(true);
+              setTimeout(() => input.current?.focus(), 50);
+            }}
+            aria-expanded={false}
+          >
+            <IonIcon icon={add} aria-hidden="true" />
+            <span>Nueva</span>
+          </button>
+        )}
       </div>
       {adding && (
         <div className="cat-field-new">
@@ -80,10 +88,10 @@ export function CategoryField({ value, onChange, className = '' }: { value: stri
             }}
           />
           <div className="cat-field-actions">
-            <IonButton fill="outline" size="small" onClick={close}>
+            <IonButton fill="outline" onClick={close}>
               Cancelar
             </IonButton>
-            <IonButton size="small" onClick={create}>
+            <IonButton onClick={create}>
               <IonIcon slot="start" icon={checkmark} />
               Crear y elegir
             </IonButton>

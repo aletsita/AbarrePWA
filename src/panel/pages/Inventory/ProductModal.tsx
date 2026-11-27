@@ -1,5 +1,5 @@
 import { isWeighed, qtyText, roundQty, type SaleType } from '../../../domain/weight';
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonSpinner, IonTitle, IonToolbar } from '@ionic/react';
+import { IonButton, IonHeader, IonIcon, IonModal, IonSpinner } from '@ionic/react';
 import {
   arrowDown,
   arrowForward,
@@ -7,10 +7,11 @@ import {
   barcodeOutline,
   closeOutline,
   constructOutline,
-  gridOutline,
   phonePortraitOutline,
   pricetagOutline,
   pricetagsOutline,
+  scanOutline,
+  swapVerticalOutline,
   saveOutline,
   sparklesOutline,
   trashOutline,
@@ -22,7 +23,6 @@ import { AreaField, FormSection, MoneyField, SwitchField, TextField } from '../.
 import { Notice } from '../../../components/Notice';
 import { SaleTypeField } from '../../../components/SaleTypeField';
 import { PhotoPicker } from '../../../components/PhotoPicker';
-import { SyncBadge } from '../../../components/SyncBadge';
 import { useApp, type ProductView } from '../../../context/AppContext';
 import { money, shortDate, uid, type MovementType, type Product } from '../../../data/models';
 import { generateInternalEan13 } from '../../../domain/ean13';
@@ -31,6 +31,8 @@ import { useAviso } from '../../../components/Aviso';
 
 const MOVE_ICON: Record<MovementType, string> = { venta: arrowDown, entrada: arrowUp, ajuste: constructOutline, alta: sparklesOutline };
 const MOVE_LABEL: Record<MovementType, string> = { venta: 'Venta', entrada: 'Entrada', ajuste: 'Ajuste', alta: 'Alta' };
+// Largo máximo de la descripción (el mismo de antes; el contador lo muestra)
+const DESCRIPTION_MAX = 300;
 
 const blank = (barcode = ''): Product => ({
   id: uid(),
@@ -70,6 +72,12 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   const [notice, setNotice] = useState('');
   const [code, setCode] = useState('');
   const codeInput = useRef<HTMLInputElement>(null);
+  const barcodeInput = useRef<HTMLInputElement>(null);
+  const modal = useRef<HTMLIonModalElement>(null);
+  // Cómo estaba el producto al abrirlo: si cambió, cerrar pide confirmación
+  const initial = useRef('');
+  // Ya se guardó o se borró: se cierra sin preguntar
+  const leaving = useRef(false);
   // Texto de los campos numéricos tal como se escribe ("14." no debe volverse 14 a medio teclear)
   const [nums, setNums] = useState({ cost: '', price: '', stock: '', minStock: '' });
 
@@ -87,21 +95,27 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
     setTried(false);
     setNotice('');
     setCode('');
+    leaving.current = false;
     if (product) {
       const { sync: _sync, ...p } = product;
-      setDraft(p);
+      start(p);
       setIsNew(false);
       setStep('form');
     } else if (barcode) {
-      setDraft(blank(barcode));
+      start(blank(barcode));
       setIsNew(true);
       setStep('form');
     } else {
-      setDraft(blank());
+      start(blank());
       setIsNew(true);
       setStep('codigo');
     }
   }, [isOpen, product, barcode]);
+
+  const start = (p: Product) => {
+    initial.current = JSON.stringify(p);
+    setDraft(p);
+  };
 
   const lookup = (value: string) => {
     const c = value.trim();
@@ -109,11 +123,11 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
     const found = findByBarcode(c);
     if (found) {
       const { sync: _sync, ...p } = found;
-      setDraft(p);
+      start(p);
       setIsNew(false);
       setNotice(`El código ${c} ya está registrado. Puedes actualizar sus datos o su existencia.`);
     } else {
-      setDraft(blank(c));
+      start(blank(c));
       setIsNew(true);
     }
     setStep('form');
@@ -153,6 +167,20 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   };
   const valid = !errors.name && !errors.price && !errors.barcode;
   const margin = draft.price - draft.cost;
+  const dirty = step === 'form' && canEdit && JSON.stringify(draft) !== initial.current;
+
+  // Cerrar (X, Cancelar, Esc o tocar fuera) pasa por aquí: con cambios sin guardar, pregunta antes
+  const confirmClose = async () => {
+    if (leaving.current || !dirty) return true;
+    return showAlert({
+      tone: 'warning',
+      title: '¿Salir sin guardar?',
+      message: 'Los cambios que hiciste en este producto se van a perder.',
+      primary: { text: 'Salir sin guardar', danger: true },
+      secondary: 'Seguir editando',
+    });
+  };
+  const close = () => void modal.current?.dismiss();
 
   const save = () => {
     setTried(true);
@@ -175,6 +203,7 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
       position: 'top',
       cssClass: 'toast-app',
     });
+    leaving.current = true;
     onSaved?.(p, isNew);
     onClose();
   };
@@ -197,27 +226,34 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
       return;
     }
     void toast({ message: `${draft.name} se borró del inventario`, duration: 2000, color: 'success', position: 'top', cssClass: 'toast-app' });
+    leaving.current = true;
     onClose();
   };
 
   const moves = !isNew ? movementsFor(draft.id) : [];
 
+  const title = step === 'codigo' ? 'Agregar producto' : isNew ? 'Producto nuevo' : 'Editar producto';
+  const unit = weighed ? 'kg' : 'pzas';
+  const description = draft.description ?? '';
+
   return (
     <IonModal
+      ref={modal}
       isOpen={isOpen}
+      canDismiss={confirmClose}
       onDidDismiss={onClose}
       onDidPresent={() => step === 'codigo' && codeInput.current?.focus()}
-      className={`pmodal ${step === 'form' && !isNew ? 'is-wide' : ''}`}
+      aria-labelledby="pm-title"
+      className={`pmodal pm-modal ${step === 'form' ? 'is-form' : ''}`}
     >
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>{step === 'codigo' ? 'Agregar producto' : isNew ? 'Producto nuevo' : 'Editar producto'}</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar">
-              <IonIcon slot="icon-only" icon={closeOutline} />
-            </IonButton>
-          </IonButtons>
-        </IonToolbar>
+      <IonHeader className="ion-no-border pm-header">
+        <div className="pm-header-text">
+          <h2 id="pm-title">{title}</h2>
+          {step === 'form' && <p>Los cambios se ven al instante en la tienda y en la app</p>}
+        </div>
+        <button type="button" className="pm-close" onClick={close} aria-label="Cerrar">
+          <IonIcon icon={closeOutline} aria-hidden="true" />
+        </button>
       </IonHeader>
 
       {step === 'codigo' ? (
@@ -259,7 +295,7 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
             </button>
           </form>
           <div className="pmodal-foot">
-            <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
+            <IonButton fill="outline" className="btn-lg" onClick={close}>Cancelar</IonButton>
             <IonButton className="btn-lg" disabled={!code.trim()} onClick={() => lookup(code)}>
               Continuar
               <IonIcon slot="end" icon={arrowForward} />
@@ -268,147 +304,196 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
         </>
       ) : (
         <>
-          <div className="pmodal-body pm-grid">
-            <section className="pm-form">
-              {notice && <Notice tone="info" title="Este producto ya existe">{notice}</Notice>}
-              {tried && !valid && (
-                <Notice tone="error" title="Faltan datos">
-                  Revisa los campos marcados en rojo.
-                </Notice>
-              )}
-
-              <div className="pm-head">
-                <PhotoPicker value={draft.photo} onChange={(photo) => set('photo', photo)} />
-                <div className="pm-head-fields">
-                  <TextField
-                    label="Nombre del producto"
-                    placeholder="Ej. Café Legal 200 g"
-                    value={draft.name}
-                    error={tried && errors.name}
-                    onChange={(v) => set('name', v)}
-                  />
-                  <div className="pm-preview">
-                    <strong className="money">{draft.price > 0 ? money(draft.price) : '$—'}</strong>
-                    <span>{weighed ? 'por kg' : 'por pieza'}</span>
-                    <span className="pm-chip">{draft.category}</span>
-                  </div>
-                </div>
-              </div>
-              {product?.sync && (
-                <div className={`pm-sync is-${product.sync}`} role="status">
-                  {product.sync === 'subiendo' ? <IonSpinner name="crescent" /> : <SyncBadge state={product.sync} compact />}
-                  <span>
-                    {product.sync === 'subiendo'
-                      ? 'Subiendo los últimos cambios… Espera un momento para guardar de nuevo.'
-                      : 'Cambios guardados en este equipo; se suben solos al volver la conexión.'}
-                  </span>
-                </div>
-              )}
-
-              <FormSection title="Datos del producto" icon={pricetagsOutline}>
-                <TextField
-                  label="Código de barras"
-                  icon={barcodeOutline}
-                  inputMode="numeric"
-                  value={draft.barcode}
-                  error={tried || dupOther ? errors.barcode : undefined}
-                  onChange={(v) => set('barcode', v.replace(/\s/g, ''))}
-                />
-                <div className="is-wide pm-saletype">
-                  <span className="pm-label">Se vende por</span>
-                  <SaleTypeField value={draft.saleType} onChange={setSaleType} />
-                </div>
-              </FormSection>
-
-              <FormSection title="Precio e inventario" icon={pricetagOutline}>
-                <MoneyField label="Precio de compra" hint="Lo que te cuesta" value={nums.cost} onChange={(v) => setNum('cost', v)} />
-                <MoneyField
-                  label={weighed ? 'Precio de venta por kg' : 'Precio de venta'}
-                  hint="Lo que cobras"
-                  value={nums.price}
-                  error={tried && errors.price}
-                  onChange={(v) => setNum('price', v)}
-                />
-                {draft.price > 0 && draft.cost > 0 && (
-                  <p className={`form-note ${margin > 0 ? 'is-ok' : 'is-bad'}`}>
-                    {margin > 0
-                      ? <>Ganas <strong>{money(margin)}</strong> por {weighed ? 'kilo' : 'pieza'} ({Math.round((margin / draft.price) * 100)} %)</>
-                      : 'El precio de venta es menor o igual al de compra'}
+          <div className="pmodal-body pm-body">
+            {(notice || (tried && !valid) || product?.sync === 'pendiente') && (
+              <div className="pm-notices">
+                {notice && <Notice tone="info" title="Este producto ya existe">{notice}</Notice>}
+                {tried && !valid && (
+                  <Notice tone="error" title="Faltan datos">
+                    Revisa los campos marcados en rojo.
+                  </Notice>
+                )}
+                {product?.sync === 'pendiente' && (
+                  <p className="pm-sync is-pendiente" role="status">
+                    Cambios guardados en este equipo; se suben solos al volver la conexión.
                   </p>
                 )}
-                <TextField label={weighed ? 'Kilos en tienda' : 'Piezas en tienda'} inputMode={weighed ? 'decimal' : 'numeric'} value={nums.stock} suffix={weighed ? 'kg' : 'pzas'}
-                  onChange={(v) => setQtyNum('stock', v)} />
-                <TextField label="Avisar cuando queden" hint="Se marca como poco stock" inputMode={weighed ? 'decimal' : 'numeric'} value={nums.minStock} suffix={weighed ? 'kg' : 'pzas'}
-                  onChange={(v) => setQtyNum('minStock', v)} />
-              </FormSection>
-
-              <FormSection title="Categoría" icon={gridOutline} text="Elige una o crea la tuya con «+»">
-                <CategoryField className="is-wide" value={draft.category} onChange={(v) => set('category', v)} />
-              </FormSection>
-
-              <FormSection title="Pide y recoge" icon={phonePortraitOutline} text="Lo que ven tus clientes en su app">
-                <AreaField
-                  label="Descripción"
-                  optional
-                  hint="La ven tus clientes en el detalle del producto"
-                  placeholder="Ej. Café soluble clásico, frasco de 200 g."
-                  maxLength={300}
-                  value={draft.description ?? ''}
-                  onChange={(v) => set('description', v)}
-                />
-                <SwitchField
-                  label="Mostrar en la app"
-                  hint={
-                    weighed
-                      ? 'Los productos por peso no se piden desde la app: se venden en caja'
-                      : draft.showInApp === false
-                        ? 'Tus clientes no lo ven en el catálogo'
-                        : draft.stock > 0
-                          ? 'Tus clientes pueden pedirlo desde su celular'
-                          : 'Aparece como agotado hasta que haya existencia'
-                  }
-                  disabled={weighed}
-                  checked={!weighed && draft.showInApp !== false}
-                  onChange={(v) => set('showInApp', v)}
-                />
-              </FormSection>
-            </section>
-
-            {!isNew && (
-              <section className="pm-history">
-                <h3>Movimientos</h3>
-                {moves.length === 0 ? (
-                  <p className="muted">Sin movimientos todavía.</p>
-                ) : (
-                  <ul>
-                    {moves.map((m) => (
-                      <li key={m.id}>
-                        <span className={`pm-move-icon type-${m.type}`}><IonIcon icon={MOVE_ICON[m.type]} /></span>
-                        <span className="pm-move-text">
-                          <strong>{MOVE_LABEL[m.type]}</strong>
-                          <span className="muted">{m.note} · {shortDate(m.date)}</span>
-                        </span>
-                        <span className={`pm-move-qty ${m.qty > 0 ? 'is-in' : 'is-out'}`}>{m.qty > 0 ? '+' : ''}{qtyText(m.qty, draft.saleType)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
+              </div>
             )}
+
+            <div className="pm-grid pm-form">
+              {/* Columna izquierda: datos del producto */}
+              <div className="pm-col">
+                <FormSection title="Datos del producto" icon={pricetagsOutline}>
+                  <div className="pm-top is-wide">
+                    <PhotoPicker value={draft.photo} onChange={(photo) => set('photo', photo)} busy={uploading ? 'Subiendo…' : undefined} withButton />
+                    <div className="pm-top-fields">
+                      <TextField
+                        label="Nombre del producto"
+                        placeholder="Ej. Café Legal 200 g"
+                        value={draft.name}
+                        error={tried && errors.name}
+                        onChange={(v) => set('name', v)}
+                      />
+                      <p className="pm-price">
+                        <strong>{draft.price > 0 ? money(draft.price) : '$—'}</strong>
+                        <span>{weighed ? 'por kg' : 'por pieza'}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <TextField
+                    className="is-wide pm-barcode"
+                    label="Código de barras"
+                    icon={barcodeOutline}
+                    inputMode="numeric"
+                    inputRef={barcodeInput}
+                    value={draft.barcode}
+                    error={tried || dupOther ? errors.barcode : undefined}
+                    onChange={(v) => set('barcode', v.replace(/\s/g, ''))}
+                    suffix={
+                      // El lector de códigos escribe donde está el cursor: «Escanear» deja el campo listo para leer
+                      <button
+                        type="button"
+                        className="pm-scan"
+                        onClick={() => barcodeInput.current?.select()}
+                        title="Pasa el producto por el lector de códigos"
+                      >
+                        <IonIcon icon={scanOutline} aria-hidden="true" />
+                        Escanear
+                      </button>
+                    }
+                  />
+
+                  <div className="is-wide pm-saletype">
+                    <span className="fld-label">Se vende por</span>
+                    <SaleTypeField value={draft.saleType} onChange={setSaleType} />
+                  </div>
+
+                  <CategoryField className="is-wide" value={draft.category} onChange={(v) => set('category', v)} />
+                </FormSection>
+              </div>
+
+              {/* Columna derecha: precio e inventario, y lo que ve el cliente */}
+              <div className="pm-col">
+                <FormSection title="Precio e inventario" icon={pricetagOutline}>
+                  <MoneyField label="Precio de compra" hint="Lo que te cuesta" value={nums.cost} onChange={(v) => setNum('cost', v)} />
+                  <MoneyField
+                    label={weighed ? 'Precio de venta por kg' : 'Precio de venta'}
+                    hint="Lo que cobras"
+                    value={nums.price}
+                    error={tried && errors.price}
+                    onChange={(v) => setNum('price', v)}
+                  />
+                  {draft.price > 0 && draft.cost > 0 && (
+                    <p className={`form-note pm-margin ${margin > 0 ? 'is-ok' : 'is-bad'}`} role="status">
+                      {margin > 0 ? (
+                        <>
+                          Ganas <strong>{money(margin)}</strong> por {weighed ? 'kilo' : 'pieza'} · {Math.round((margin / draft.price) * 100)} % de margen
+                        </>
+                      ) : margin < 0 ? (
+                        'Estás vendiendo por debajo de tu costo'
+                      ) : (
+                        'Vendes al mismo precio que te cuesta'
+                      )}
+                    </p>
+                  )}
+                  <TextField
+                    label={weighed ? 'Kilos en tienda' : 'Piezas en tienda'}
+                    inputMode={weighed ? 'decimal' : 'numeric'}
+                    value={nums.stock}
+                    suffix={unit}
+                    onChange={(v) => setQtyNum('stock', v)}
+                  />
+                  <TextField
+                    label="Avisar cuando queden"
+                    hint="Se marca como poco stock"
+                    inputMode={weighed ? 'decimal' : 'numeric'}
+                    value={nums.minStock}
+                    suffix={unit}
+                    onChange={(v) => setQtyNum('minStock', v)}
+                  />
+                </FormSection>
+
+                <FormSection title="Pide y recoge" icon={phonePortraitOutline} text="Lo que ven tus clientes en su app">
+                  <SwitchField
+                    label="Mostrar en la app"
+                    hint={
+                      weighed
+                        ? 'Los productos por peso no se piden desde la app: se venden en caja'
+                        : draft.showInApp === false
+                          ? 'Tus clientes no lo ven en el catálogo'
+                          : draft.stock > 0
+                            ? 'Tus clientes pueden pedirlo desde su celular'
+                            : 'Aparece como agotado hasta que haya existencia'
+                    }
+                    disabled={weighed}
+                    checked={!weighed && draft.showInApp !== false}
+                    onChange={(v) => set('showInApp', v)}
+                  />
+                  <AreaField
+                    className="is-wide pm-description"
+                    label="Descripción"
+                    optional
+                    hint={
+                      <>
+                        <span>La ven tus clientes en el detalle del producto</span>
+                        <span className="pm-count">
+                          {description.length}/{DESCRIPTION_MAX}
+                        </span>
+                      </>
+                    }
+                    placeholder="Ej. Café soluble clásico, frasco de 200 g."
+                    maxLength={DESCRIPTION_MAX}
+                    value={description}
+                    onChange={(v) => set('description', v)}
+                  />
+                </FormSection>
+              </div>
+
+              {!isNew && (
+                <section className="form-section is-card pm-wide pm-history">
+                  <header>
+                    <span className="form-section-icon">
+                      <IonIcon icon={swapVerticalOutline} aria-hidden="true" />
+                    </span>
+                    <span>
+                      <h3>Movimientos</h3>
+                    </span>
+                  </header>
+                  {moves.length === 0 ? (
+                    <p className="muted">Sin movimientos todavía.</p>
+                  ) : (
+                    <ul>
+                      {moves.map((m) => (
+                        <li key={m.id}>
+                          <span className={`pm-move-icon type-${m.type}`}><IonIcon icon={MOVE_ICON[m.type]} /></span>
+                          <span className="pm-move-text">
+                            <strong>{MOVE_LABEL[m.type]}</strong>
+                            <span className="muted">{m.note} · {shortDate(m.date)}</span>
+                          </span>
+                          <span className={`pm-move-qty ${m.qty > 0 ? 'is-in' : 'is-out'}`}>{m.qty > 0 ? '+' : ''}{qtyText(m.qty, draft.saleType)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+            </div>
           </div>
 
-          <div className="pmodal-foot">
+          <div className="pmodal-foot pm-foot">
             {!canEdit && <span className="muted">Solo el dueño o Inventario pueden cambiar productos.</span>}
             {!isNew && canEdit && (
-              <IonButton fill="clear" color="danger" className="btn-lg pmodal-delete" disabled={deleting} onClick={() => void askDelete()}>
+              <IonButton fill="clear" color="danger" className="pmodal-delete" disabled={deleting} onClick={() => void askDelete()}>
                 <IonIcon slot="start" icon={trashOutline} />
                 Borrar
               </IonButton>
             )}
-            <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
-            <IonButton className="btn-lg pm-save" disabled={!canEdit || uploading} onClick={() => save()}>
+            <IonButton fill="outline" onClick={close}>Cancelar</IonButton>
+            <IonButton className="pm-save" disabled={!canEdit || uploading} onClick={() => save()}>
               {uploading ? <IonSpinner slot="start" name="crescent" /> : <IonIcon slot="start" icon={saveOutline} />}
-              {uploading ? 'Subiendo…' : isNew ? 'Agregar producto' : 'Guardar cambios'}
+              {uploading ? 'Guardando…' : isNew ? 'Agregar producto' : 'Guardar cambios'}
             </IonButton>
           </div>
         </>

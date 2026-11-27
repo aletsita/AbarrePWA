@@ -36,3 +36,8 @@ ion-alert { --background: var(--ab-blanco); --backdrop-opacity: 0.5; --max-width
 ion-alert .alert-wrapper { border-radius: var(--ab-radio-lg) !important; box-shadow: var(--ab-sombra-lg) !important; }
 ion-alert .alert-title { font-family: var(--ab-font-display); font-size: 18px !important; font-weight: 500 !important; color: var(--ab-marino-900) !important; }
 ion-alert .alert-message { font-size: 14px !important; line-height: 20px; color: var(--ab-gris-700) !important; }
+
+/* Modales encimados (modalStack.ts): el de atrás se oculta y el de arriba conserva su fondo oscurecido */
+ion-modal { transition: opacity 0.18s ease; }
+ion-modal[data-stack='oculto'] { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.18s ease, visibility 0s 0.18s; }
+ion-modal[data-stack='arriba'] { --backdrop-opacity: 0.5 !important; --box-shadow: var(--ab-sombra-lg) !important; }

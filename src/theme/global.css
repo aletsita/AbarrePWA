@@ -183,6 +183,8 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
 .sync-badge.is-subiendo { background: var(--t-primary-bg); color: var(--ion-color-primary); }
 .sync-badge.is-compact { padding: 1px 7px; font-size: 0.7rem; }
 
+/* Foto del producto: recuadro sobre gris-100; la X roja quita la foto (área táctil de 44 px) */
+.photo-pick-wrap { display: flex; flex-direction: column; gap: var(--ab-espacio-2); flex-shrink: 0; }
 .photo-pick { position: relative; width: 96px; height: 96px; flex-shrink: 0; }
 .photo-pick-btn {
   display: flex;
@@ -193,37 +195,81 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
   width: 100%;
   height: 100%;
   padding: 0;
-  border: 1.5px dashed var(--t-border-strong);
-  border-radius: var(--t-radius);
-  background: var(--t-surface-2);
-  color: var(--ion-color-primary);
+  border: 1.5px dashed var(--ab-gris-200);
+  border-radius: var(--ab-radio-lg);
+  background: var(--ab-gris-100);
+  color: var(--ab-azul-500);
   font: inherit;
-  font-size: 0.8rem;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.photo-pick-btn:hover { border-color: var(--ion-color-primary); }
+.photo-pick-btn:hover:not(:disabled) { border-color: var(--ab-azul-500); }
+.photo-pick-btn:disabled { cursor: default; }
 .photo-pick-btn ion-icon { font-size: 26px; }
 .photo-pick.has-photo .photo-pick-btn { border-style: solid; }
 .photo-pick-btn img { width: 100%; height: 100%; object-fit: cover; }
 .photo-pick-clear {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: -14px;
+  right: -14px;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: var(--ab-toque-min);
+  height: var(--ab-toque-min);
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--t-surface);
-  color: var(--ion-color-danger);
+  background: transparent;
+  color: var(--ab-error-600);
   font-size: 26px;
   cursor: pointer;
 }
+.photo-pick-clear ion-icon { border-radius: 50%; background: var(--ab-blanco); }
+/* Mientras se sube: el texto y la barra van dentro del recuadro, sin salirse del borde */
+.photo-pick-busy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ab-espacio-2);
+  padding: var(--ab-espacio-3);
+  border-radius: var(--ab-radio-lg);
+  background: rgba(244, 246, 250, 0.9);
+  color: var(--ab-marino-900);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  overflow: hidden;
+}
+.photo-pick-bar { position: relative; width: 100%; height: 4px; border-radius: var(--ab-radio-full); background: var(--ab-gris-200); overflow: hidden; }
+.photo-pick-bar i { position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: inherit; background: var(--ab-azul-500); animation: photo-bar 1.1s ease-in-out infinite; }
+@keyframes photo-bar { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { .photo-pick-bar i { animation: none; width: 100%; opacity: 0.6; } }
+.photo-pick-change {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--ab-toque-min);
+  padding: 0 var(--ab-espacio-2);
+  border: 1px solid var(--ab-gris-200);
+  border-radius: var(--ab-radio-md);
+  background: var(--ab-blanco);
+  color: var(--ab-azul-500);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.photo-pick-change ion-icon { font-size: 18px; }
+.photo-pick-change:hover:not(:disabled) { background: var(--ab-gris-100); }
+.photo-pick-change:disabled { color: var(--ab-gris-500); cursor: default; }
 
 .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: var(--ab-radio-sm); font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
 .st-en-caja { background: var(--t-primary-bg); color: var(--ion-color-primary); }
