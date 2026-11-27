@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Abarré",
   "short_name": "Abarré",
-  "description": "Punto de venta e inventario para tu tiendita. El celular escanea y la caja cobra.",
+  "description": "Punto de venta e inventario para tu tienda local. El celular escanea y la caja cobra.",
   "lang": "es-MX",
   "start_url": "./panel/caja",
   "scope": "./",

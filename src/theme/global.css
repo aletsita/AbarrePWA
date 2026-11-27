@@ -233,7 +233,9 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
 /* Logotipo: nombre con la tipografía de la marca */
 /* Marca: nombre en Poppins Bold con la «é» ámbar e isotipo (ver components/Brand.tsx) */
 .brand-word { font-family: var(--t-brand-font); font-weight: 700; letter-spacing: -0.01em; }
-.brand-word em { font-style: normal; color: var(--t-amber); }
+/* La é va en ámbar solo sobre el azul; sobre blanco el ámbar no se usa como texto */
+.brand-word em { font-style: normal; color: inherit; }
+.brand-word.is-on-blue em { color: var(--t-amber); }
 .brand-mark { display: block; flex: none; color: var(--ion-color-primary); }
 .brand-mark .bm-bars { fill: var(--t-surface); }
 .brand-mark.is-blanco { color: var(--ab-blanco); }
