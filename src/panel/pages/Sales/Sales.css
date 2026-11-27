@@ -4,17 +4,17 @@
 /* Detalle de la venta: encabezado, productos, totales, pago y abonos */
 ion-modal.pmodal.sd-modal { --width: min(600px, 100%); }
 .sd-body { display: flex; flex-direction: column; gap: 16px; }
-.sd-head { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: #fff; box-shadow: var(--t-shadow-lift); }
+.sd-head { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: var(--ab-blanco); box-shadow: var(--t-shadow-lift); }
 .sd-head-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .sd-folio small { display: block; font-size: 0.78rem; font-weight: 650; opacity: 0.85; }
 .sd-folio strong { font-size: 1.25rem; font-weight: 800; }
-.sd-state { padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.2); font-size: 0.78rem; font-weight: 750; white-space: nowrap; }
-.sd-state.is-owed { background: #fff; color: var(--t-warning-text); }
+.sd-state { padding: 4px 10px; border-radius: var(--ab-radio-full); background: var(--t-hero-chip); font-size: 0.78rem; font-weight: 750; white-space: nowrap; }
+.sd-state.is-owed { background: var(--ab-blanco); color: var(--t-warning-text); }
 .sd-date { font-size: 0.88rem; opacity: 0.85; }
 .sd-head-total { margin-top: 4px; font-size: 2.2rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; }
 
 .sd-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 0.95rem; font-weight: 750; color: var(--t-ink); }
-.sd-section h3 span { padding: 1px 8px; border-radius: 999px; background: var(--t-surface-3); font-size: 0.78rem; color: var(--t-muted); }
+.sd-section h3 span { padding: 1px 8px; border-radius: var(--ab-radio-full); background: var(--t-surface-3); font-size: 0.78rem; color: var(--t-muted); }
 .sd-lines, .sd-abonos { margin: 0; padding: 0; list-style: none; border: 1px solid var(--t-border); border-radius: var(--t-radius-sm); }
 .sd-lines li, .sd-abonos li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 .sd-lines li + li, .sd-abonos li + li { border-top: 1px solid var(--t-border); }

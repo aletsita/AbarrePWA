@@ -3,7 +3,7 @@ ion-modal.app-alert-modal {
   --width: min(400px, calc(100vw - 32px));
   --height: auto;
   --max-height: calc(100vh - 48px);
-  --border-radius: 18px;
+  --border-radius: var(--ab-radio-lg);
   --box-shadow: var(--t-shadow-pop);
   --backdrop-opacity: 0.45;
 }
@@ -15,7 +15,7 @@ ion-modal.app-alert-modal::part(content) { position: relative; }
 .app-alert-msg { font-size: 0.95rem; line-height: 1.45; color: var(--t-muted); }
 .app-alert-msg p { margin: 0; }
 .app-alert-msg p + p { margin-top: 6px; }
-.app-alert-code { padding: 4px 12px; border-radius: 8px; background: var(--t-surface-3); font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 1rem; letter-spacing: 0.06em; color: var(--t-ink); overflow-wrap: anywhere; }
+.app-alert-code { padding: 4px 12px; border-radius: var(--ab-radio-sm); background: var(--t-surface-3); font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 1rem; letter-spacing: 0.06em; color: var(--t-ink); overflow-wrap: anywhere; }
 .app-alert-actions { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: 10px; }
 .app-alert-actions ion-button { margin: 0; min-height: 48px; font-weight: 700; text-transform: none; letter-spacing: 0; }
 .app-alert-secondary { --color: var(--t-muted); }

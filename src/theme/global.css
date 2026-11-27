@@ -3,43 +3,63 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 ::selection { background: rgba(var(--ion-color-primary-rgb), 0.22); }
 :focus-visible { outline: 2px solid var(--ion-color-primary); outline-offset: 2px; }
 
-h1, h2, h3 { letter-spacing: -0.015em; }
+/* Tipografía de la marca: Poppins en títulos y precios, Inter en todo lo demás (mínimo 12 px) */
+h1, h2, h3 { font-family: var(--t-display); letter-spacing: -0.01em; color: var(--t-ink); }
+h1, h2 { font-weight: 700; }
+h3 { font-weight: 500; }
 
-ion-toolbar { --min-height: 58px; }
-ion-title { font-weight: 650; font-size: 1.06rem; letter-spacing: -0.01em; }
-.app-header ion-toolbar { --background: var(--t-surface); --border-width: 0 0 1px; --border-color: var(--t-border); }
+/* Encabezado y barra superior en azul de la marca, con texto blanco */
+ion-toolbar { --min-height: 56px; }
+ion-title { font-family: var(--t-display); font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em; }
+.app-header > ion-toolbar:first-of-type { --background: var(--t-brand); --color: var(--ab-blanco); --border-width: 0; }
+.app-header > ion-toolbar:first-of-type ion-title { color: var(--ab-blanco); }
+.app-header > ion-toolbar:first-of-type ion-buttons ion-button { --color: var(--ab-blanco); }
+/* Regresar: círculo de 44 px, translúcido sobre el azul */
+.app-header ion-back-button {
+  --background: var(--t-hero-chip);
+  --border-radius: var(--ab-radio-full);
+  --color: var(--ab-blanco);
+  --icon-font-size: 20px;
+  --padding-start: 0;
+  --padding-end: 0;
+  width: var(--ab-toque-min);
+  height: var(--ab-toque-min);
+  margin-inline-start: var(--ab-espacio-2);
+}
 
-ion-button { --box-shadow: none; --border-radius: var(--t-radius-sm); text-transform: none; letter-spacing: 0; }
-ion-button:not([fill]),
-ion-button[fill='solid'] { --box-shadow: 0 1px 2px rgba(15, 27, 51, 0.14), 0 6px 14px -6px rgba(var(--ion-color-primary-rgb), 0.6); }
-ion-button[color='secondary']:not([fill]) { --box-shadow: 0 1px 2px rgba(15, 27, 51, 0.14), 0 6px 14px -6px rgba(var(--ion-color-secondary-rgb), 0.6); }
-ion-button:not([fill]):not([color]) { --background: var(--t-primary-gradient); }
+/* Botones (marca/components/Botones): Inter 600 a 16 px, esquinas de 12, alto mínimo de 44 */
+ion-button {
+  --box-shadow: none;
+  --border-radius: var(--ab-radio-md);
+  min-height: var(--ab-toque-min);
+  font-family: var(--ab-font-sans);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* Primario: azul sólido; presionado: azul-600 */
+ion-button:not([fill]):not([color]),
+ion-button[fill='solid']:not([color]) { --background: var(--ab-azul-500); --background-activated: var(--ab-azul-600); --background-hover: var(--ab-azul-600); --color: var(--ab-blanco); }
 /* Los botones de las barras (cerrar, menú…) siguen siendo transparentes */
 ion-buttons ion-button:not([fill]):not([color]),
-ion-buttons ion-button:not([fill]) { --background: transparent; --box-shadow: none; }
-ion-button[disabled] { --box-shadow: none; }
-/* Deshabilitado: gris neutro en lugar del color de marca deslavado */
+ion-buttons ion-button:not([fill]) { --background: transparent; --box-shadow: none; min-height: 0; }
+/* Deshabilitado: gris-200 con texto gris-500 (por ejemplo, mientras se sube una imagen) */
 ion-button.button-disabled:not([fill]),
-ion-button.button-disabled[fill='solid'] { opacity: 1; --background: var(--t-surface-3); --color: var(--t-muted); --box-shadow: none; }
+ion-button.button-disabled[fill='solid'] { opacity: 1; --background: var(--ab-gris-200); --color: var(--ab-gris-500); }
 ion-button.button-disabled.ion-color:not([fill]),
-ion-button.button-disabled.ion-color[fill='solid'] { --ion-color-base: var(--t-surface-3) !important; --ion-color-contrast: var(--t-muted) !important; }
-ion-button[fill='outline'] { --border-width: 1.5px; --border-color: var(--t-border-strong); --color: var(--t-ink); --background-hover: var(--t-surface-2); }
+ion-button.button-disabled.ion-color[fill='solid'] { --ion-color-base: var(--ab-gris-200) !important; --ion-color-contrast: var(--ab-gris-500) !important; }
+ion-button.button-disabled[fill='outline'] { opacity: 1; --color: var(--ab-gris-500); --border-color: var(--ab-gris-200); }
+/* Secundario: blanco con borde gris-200 y texto marino (para «Cancelar» y acciones alternas) */
+ion-button[fill='outline'] { --border-width: 1px; --border-color: var(--ab-gris-200); --background: var(--ab-blanco); --color: var(--ab-marino-900); --background-hover: var(--ab-gris-100); }
+/* Contorno de color (por ejemplo, «Cancelar pedido» en rojo): borde y texto del color */
 ion-button[fill='outline'][color] { --border-color: currentColor; --color: var(--ion-color-base); }
-ion-button.btn-xl {
-  height: 52px;
-  --border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 0;
-}
-ion-button.btn-lg {
-  height: 46px;
-  font-size: 0.94rem;
-  font-weight: 600;
-  margin: 0;
-}
+ion-button.btn-xl { height: 52px; font-size: 1rem; margin: 0; }
+ion-button.btn-lg { height: 48px; font-size: 1rem; margin: 0; }
 ion-button[fill='clear'] { font-weight: 600; }
-ion-button[size='small'] { font-weight: 600; --border-radius: 6px; }
+ion-button[size='small'] { min-height: var(--ab-toque-min); font-size: 0.875rem; --border-radius: var(--ab-radio-sm); }
+
+/* Precios y montos en Poppins */
+.money { font-family: var(--t-display); font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.01em; }
 
 .page-pad { padding: 16px; max-width: var(--t-content-max); margin: 0 auto; }
 .page-pad.is-narrow { max-width: var(--t-form-max); }
@@ -65,7 +85,6 @@ ion-button[size='small'] { font-weight: 600; --border-radius: 6px; }
   margin: 22px 4px 8px;
 }
 
-.money { font-variant-numeric: tabular-nums; font-weight: 650; letter-spacing: -0.01em; }
 .muted { color: var(--t-muted); }
 
 .action-footer ion-toolbar {
@@ -106,14 +125,14 @@ ion-tab-bar {
   height: calc(64px + env(safe-area-inset-bottom));
 }
 ion-tab-button { --color: var(--t-muted); --color-selected: var(--ion-color-primary); font-weight: 650; --ripple-color: transparent; }
-ion-tab-button ion-icon { width: 46px; height: 28px; padding: 4px 0; border-radius: 7px; transition: background 0.2s; }
+ion-tab-button ion-icon { width: 46px; height: 28px; padding: 4px 0; border-radius: var(--ab-radio-sm); transition: background 0.2s; }
 ion-tab-button.tab-selected ion-icon { background: var(--t-primary-bg); }
 ion-tab-button ion-label { font-size: 0.72rem; margin-top: 2px; }
-ion-tab-button ion-badge { font-size: 0.66rem; border-radius: 8px; }
+ion-tab-button ion-badge { font-size: 0.66rem; border-radius: var(--ab-radio-sm); }
 
-ion-toast.toast-app { --border-radius: 8px; --max-width: 440px; --box-shadow: var(--t-shadow-pop); font-weight: 550; }
+ion-toast.toast-app { --border-radius: var(--ab-radio-sm); --max-width: 440px; --box-shadow: var(--t-shadow-pop); font-weight: 550; }
 ion-alert { --backdrop-opacity: 0.5; }
-ion-alert .alert-wrapper { border-radius: 12px !important; }
+ion-alert .alert-wrapper { border-radius: var(--ab-radio-md) !important; }
 ion-alert .alert-title { font-weight: 650 !important; }
 ion-backdrop { --backdrop-opacity: 0.5; }
 ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted); }
@@ -122,7 +141,7 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  border-radius: 7px;
+  border-radius: var(--ab-radio-sm);
   overflow: hidden;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -134,7 +153,7 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
   align-items: center;
   gap: 5px;
   padding: 3px 8px;
-  border-radius: 5px;
+  border-radius: var(--ab-radio-sm);
   background: var(--t-warning-bg);
   color: var(--t-warning-text);
   font-size: 0.74rem;
@@ -189,7 +208,7 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
   cursor: pointer;
 }
 
-.status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 5px; font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
+.status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: var(--ab-radio-sm); font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
 .st-en-caja { background: var(--t-primary-bg); color: var(--ion-color-primary); }
 .st-cobrado { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .st-cancelado { background: var(--t-surface-2); color: var(--t-muted); text-decoration: line-through; }
@@ -200,7 +219,7 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
 .brand-word em { font-style: normal; color: var(--t-amber); }
 .brand-mark { display: block; flex: none; color: var(--ion-color-primary); }
 .brand-mark .bm-bars { fill: var(--t-surface); }
-.brand-mark.is-blanco { color: #fff; }
+.brand-mark.is-blanco { color: var(--ab-blanco); }
 .brand-mark.is-blanco .bm-bars { fill: var(--t-brand); }
 .brand-mark .bm-ray { fill: var(--t-amber); }
 /* Entrada: la cesta aparece (0.9 → 1) y el rayo ámbar la recorre de izquierda a derecha, una vez */
@@ -230,7 +249,7 @@ ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted
 }
 
 /* Etiqueta de producto sin piezas disponibles */
-.stock-out { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--t-danger-bg); color: var(--ion-color-danger-shade); font-size: 0.74rem; font-weight: 750; }
+.stock-out { display: inline-block; padding: 1px 8px; border-radius: var(--ab-radio-full); background: var(--t-danger-bg); color: var(--ion-color-danger-shade); font-size: 0.74rem; font-weight: 750; }
 
 /* Formularios en el celular (360–599 px): botones de al menos 44 px para el dedo y texto de 16 px
    en los campos para que iOS no haga zoom. Con interactive-widget=resizes-content (index.html) el teclado

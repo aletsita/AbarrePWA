@@ -1,100 +1,182 @@
-/* Abarré · identidad y tokens de color (estilo formal, tema claro) */
+/* Abarré · tokens de la marca (fuente: marca/tokens.json). Todo color, radio, sombra y espacio sale de aquí. */
 :root {
-  --ion-font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --t-display: var(--ion-font-family);
+  /* ---------- Paleta de la marca (nombres de tokens.json) ---------- */
+  --ab-blanco: #ffffff;
+  --ab-gris-100: #f4f6fa;
+  --ab-gris-200: #e5e8ef;
+  --ab-gris-500: #5f6672;
+  --ab-gris-700: #454b55;
+  --ab-marino-900: #0e2547;
+  --ab-azul-500: #123f8c;
+  --ab-azul-600: #0e3370;
+  --ab-azul-100: #e8eef8;
+  --ab-ambar-500: #ffb020;
+  --ab-ambar-100: #fff4d6;
+  --ab-ambar-900: #7a4b00;
+  --ab-oferta-600: #c2410c;
+  --ab-oferta-100: #ffedd5;
+  --ab-exito-600: #15803d;
+  --ab-exito-100: #dcfce7;
+  --ab-exito-800: #166534;
+  --ab-error-600: #d32f2f;
+  --ab-error-100: #fdecec;
+  --ab-error-700: #b42318;
 
-  /* Marca Abarré: un solo azul para encabezados, botones, links y selección (blanco encima: contraste 10:1) */
-  --t-brand: #123f8c;
+  /* Tipografía: Poppins para títulos y precios, Inter para todo lo demás */
+  --ab-font-display: 'Poppins', system-ui, sans-serif;
+  --ab-font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Espacios en múltiplos de 4 y tamaño táctil mínimo */
+  --ab-espacio-1: 4px;
+  --ab-espacio-2: 8px;
+  --ab-espacio-3: 12px;
+  --ab-espacio-4: 16px;
+  --ab-espacio-6: 24px;
+  --ab-espacio-8: 32px;
+  --ab-toque-min: 44px;
+
+  /* Radios */
+  --ab-radio-sm: 8px;
+  --ab-radio-md: 12px;
+  --ab-radio-lg: 16px;
+  --ab-radio-xl: 24px;
+  --ab-radio-full: 999px;
+
+  /* Sombras ligeras y azuladas, solo en lo que flota */
+  --ab-sombra-sm: 0 1px 2px rgba(14, 37, 71, 0.08);
+  --ab-sombra-md: 0 4px 12px rgba(14, 37, 71, 0.12);
+  --ab-sombra-lg: 0 12px 32px rgba(14, 37, 71, 0.2);
+
+  /* ---------- Roles (lo que usan las pantallas) ---------- */
+  --ion-font-family: var(--ab-font-sans);
+  --t-display: var(--ab-font-display);
+  --t-brand-font: var(--ab-font-display);
+
+  --t-brand: var(--ab-azul-500);
   --t-brand-rgb: 18, 63, 140;
-  --t-brand-pressed: #0e3370;
-  --t-brand-soft: #e8eef8;
-  --t-brand-ink: #0e2547;
-  /* Ámbar del rayo de escaneo: escáner, la «é» del nombre y destacados */
-  --t-amber: #ffb020;
+  --t-brand-pressed: var(--ab-azul-600);
+  --t-brand-soft: var(--ab-azul-100);
+  --t-brand-ink: var(--ab-marino-900);
+  --t-amber: var(--ab-ambar-500);
   --t-amber-rgb: 255, 176, 32;
-  --t-brand-font: 'Poppins', var(--ion-font-family);
 
-  --ion-color-primary: var(--t-brand);
-  --ion-color-primary-rgb: var(--t-brand-rgb);
-  --ion-color-primary-contrast: #ffffff;
+  /* Azul = acción: botón principal, enlaces, sección activa y encabezados (blanco encima: 9.9:1) */
+  --ion-color-primary: var(--ab-azul-500);
+  --ion-color-primary-rgb: 18, 63, 140;
+  --ion-color-primary-contrast: var(--ab-blanco);
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: var(--t-brand-pressed);
-  --ion-color-primary-tint: #2a5297;
+  --ion-color-primary-shade: var(--ab-azul-600);
+  --ion-color-primary-tint: var(--ab-azul-500);
 
-  /* Verde sobrio para cobrar y confirmar */
-  --ion-color-secondary: #0f6b4f;
-  --ion-color-secondary-rgb: 15, 107, 79;
-  --ion-color-secondary-contrast: #ffffff;
+  /* Un solo color de acción: «secondary» también es el azul de la marca */
+  --ion-color-secondary: var(--ab-azul-500);
+  --ion-color-secondary-rgb: 18, 63, 140;
+  --ion-color-secondary-contrast: var(--ab-blanco);
   --ion-color-secondary-contrast-rgb: 255, 255, 255;
-  --ion-color-secondary-shade: #0d5e46;
-  --ion-color-secondary-tint: #277a61;
+  --ion-color-secondary-shade: var(--ab-azul-600);
+  --ion-color-secondary-tint: var(--ab-azul-500);
 
-  --ion-color-success: #15803d;
+  --ion-color-success: var(--ab-exito-600);
   --ion-color-success-rgb: 21, 128, 61;
-  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast: var(--ab-blanco);
   --ion-color-success-contrast-rgb: 255, 255, 255;
-  --ion-color-success-shade: #136f35;
-  --ion-color-success-tint: #2c8d50;
+  --ion-color-success-shade: var(--ab-exito-800);
+  --ion-color-success-tint: var(--ab-exito-600);
 
-  --ion-color-warning: #a16207;
-  --ion-color-warning-rgb: 161, 98, 7;
-  --ion-color-warning-contrast: #ffffff;
-  --ion-color-warning-contrast-rgb: 255, 255, 255;
-  --ion-color-warning-shade: #8e5606;
-  --ion-color-warning-tint: #aa7220;
+  /* Ámbar: encima siempre texto marino, nunca ámbar como texto sobre blanco */
+  --ion-color-warning: var(--ab-ambar-500);
+  --ion-color-warning-rgb: 255, 176, 32;
+  --ion-color-warning-contrast: var(--ab-marino-900);
+  --ion-color-warning-contrast-rgb: 14, 37, 71;
+  --ion-color-warning-shade: var(--ab-ambar-900);
+  --ion-color-warning-tint: var(--ab-ambar-500);
 
-  --ion-color-danger: #b91c1c;
-  --ion-color-danger-rgb: 185, 28, 28;
-  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger: var(--ab-error-600);
+  --ion-color-danger-rgb: 211, 47, 47;
+  --ion-color-danger-contrast: var(--ab-blanco);
   --ion-color-danger-contrast-rgb: 255, 255, 255;
-  --ion-color-danger-shade: #a31919;
-  --ion-color-danger-tint: #c03333;
+  --ion-color-danger-shade: var(--ab-error-700);
+  --ion-color-danger-tint: var(--ab-error-600);
 
-  --ion-color-dark: #0f1b33;
-  --ion-color-dark-rgb: 15, 27, 51;
-  --ion-color-dark-contrast: #ffffff;
+  --ion-color-medium: var(--ab-gris-500);
+  --ion-color-medium-rgb: 95, 102, 114;
+  --ion-color-medium-contrast: var(--ab-blanco);
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: var(--ab-gris-700);
+  --ion-color-medium-tint: var(--ab-gris-500);
+
+  --ion-color-dark: var(--ab-marino-900);
+  --ion-color-dark-rgb: 14, 37, 71;
+  --ion-color-dark-contrast: var(--ab-blanco);
   --ion-color-dark-contrast-rgb: 255, 255, 255;
-  --ion-color-dark-shade: #0d182d;
-  --ion-color-dark-tint: #273247;
+  --ion-color-dark-shade: var(--ab-marino-900);
+  --ion-color-dark-tint: var(--ab-gris-700);
 
-  --ion-background-color: #f3f5f9;
-  --ion-background-color-rgb: 243, 245, 249;
-  --ion-text-color: #0e2547;
+  --ion-background-color: var(--ab-gris-100);
+  --ion-background-color-rgb: 244, 246, 250;
+  --ion-text-color: var(--ab-marino-900);
   --ion-text-color-rgb: 14, 37, 71;
-  --ion-toolbar-background: #ffffff;
-  --ion-tab-bar-background: #ffffff;
-  --ion-item-background: #ffffff;
-  --ion-card-background: #ffffff;
-  --ion-border-color: #e3e8ef;
+  --ion-toolbar-background: var(--ab-blanco);
+  --ion-tab-bar-background: var(--ab-blanco);
+  --ion-item-background: var(--ab-blanco);
+  --ion-card-background: var(--ab-blanco);
+  --ion-border-color: var(--ab-gris-200);
 
-  --t-ink: var(--t-brand-ink);
-  --t-on-ink: #ffffff;
-  --t-night: #0f1b33;
-  --t-night-2: #1b2945;
-  --t-night-text: #c3cbdb;
-  --t-surface: #ffffff;
-  --t-surface-2: #f8fafc;
-  --t-surface-3: #eef2f6;
-  --t-border: #e3e8ef;
-  --t-border-strong: #cbd3df;
-  --t-muted: #5b6678;
-  --t-radius: 14px;
-  --t-radius-sm: 10px;
-  --t-shadow: 0 1px 2px rgba(15, 27, 51, 0.04), 0 2px 6px rgba(15, 27, 51, 0.03);
-  --t-shadow-lift: 0 2px 4px rgba(15, 27, 51, 0.04), 0 12px 28px rgba(15, 27, 51, 0.09);
-  --t-shadow-pop: 0 24px 48px rgba(15, 27, 51, 0.18);
-  --t-side-text: #3b4659;
-  --t-primary-gradient: linear-gradient(180deg, #1a4b9c 0%, var(--t-brand) 100%);
-  --t-row-hover: #f6f8fc;
-  --t-primary-bg: var(--t-brand-soft);
-  --t-accent-bg: #e3f2ec;
-  --t-success-bg: #e5f4ea;
-  --t-warning-bg: #fbf1dc;
-  --t-warning-text: #7a4a05;
-  --t-danger-bg: #fbe7e7;
-  --t-unsynced-bg: #fdf9ef;
-  --t-arrive-bg: #e5f4ea;
-  --t-brand-gradient: linear-gradient(160deg, #174a9e 0%, var(--t-brand-pressed) 100%);
+  --t-ink: var(--ab-marino-900);
+  --t-on-ink: var(--ab-blanco);
+  --t-night: var(--ab-marino-900);
+  --t-night-2: var(--ab-marino-900);
+  --t-night-text: var(--ab-gris-200);
+  --t-surface: var(--ab-blanco);
+  --t-surface-2: var(--ab-gris-100);
+  --t-surface-3: var(--ab-gris-100);
+  --t-border: var(--ab-gris-200);
+  --t-border-strong: var(--ab-gris-200);
+  --t-muted: var(--ab-gris-500);
+  --t-text-2: var(--ab-gris-700);
+  --t-side-text: var(--ab-gris-700);
+  --t-row-hover: var(--ab-gris-100);
+  --t-img-bg: var(--ab-gris-100);
+
+  --t-radius-xs: var(--ab-radio-sm);
+  --t-radius-sm: var(--ab-radio-md);
+  --t-radius: var(--ab-radio-lg);
+  --t-radius-lg: var(--ab-radio-xl);
+  --t-radius-full: var(--ab-radio-full);
+  --t-touch: var(--ab-toque-min);
+
+  --t-shadow: var(--ab-sombra-sm);
+  --t-shadow-btn: var(--ab-sombra-sm);
+  --t-shadow-lift: var(--ab-sombra-md);
+  --t-shadow-pop: var(--ab-sombra-lg);
+
+  /* Encabezados y bloques de marca: azul sólido (la marca no usa degradados) */
+  --t-hero-bg: var(--ab-azul-500);
+  --t-on-hero: var(--ab-blanco);
+  --t-on-hero-muted: rgba(255, 255, 255, 0.82);
+  --t-hero-chip: rgba(255, 255, 255, 0.16);
+  --t-primary-gradient: var(--ab-azul-500);
+  --t-brand-gradient: var(--ab-azul-500);
+
+  /* Estados: el color siempre va con texto o icono */
+  --t-primary-bg: var(--ab-azul-100);
+  --t-primary-text: var(--ab-azul-600);
+  --t-accent: var(--ab-oferta-600);
+  --t-offer-bg: var(--ab-oferta-100);
+  --t-accent-bg: var(--ab-exito-100);
+  --t-success-bg: var(--ab-exito-100);
+  --t-success-text: var(--ab-exito-800);
+  --t-warning-bg: var(--ab-ambar-100);
+  --t-warning-text: var(--ab-ambar-900);
+  --t-danger-bg: var(--ab-error-100);
+  --t-danger-text: var(--ab-error-700);
+  --t-unsynced-bg: var(--ab-ambar-100);
+  --t-arrive-bg: var(--ab-exito-100);
+
+  /* Capas sobre el azul o sobre la cámara (derivadas de blanco y marino-900) */
+  --t-on-brand-line: rgba(255, 255, 255, 0.4);
+  --t-scrim: rgba(14, 37, 71, 0.5);
+  --t-scrim-strong: rgba(14, 37, 71, 0.72);
 
   --t-content-max: 1080px;
   --t-form-max: 640px;

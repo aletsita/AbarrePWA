@@ -11,7 +11,7 @@ ion-modal.pmodal.co-modal { --width: min(600px, 100%); }
   padding: 18px 16px 20px;
   border-radius: var(--t-radius);
   background: var(--t-brand-gradient);
-  color: #fff;
+  color: var(--ab-blanco);
   text-align: center;
   box-shadow: var(--t-shadow-lift);
 }
@@ -43,12 +43,12 @@ ion-modal.pmodal.co-modal { --width: min(600px, 100%); }
 }
 .co-method:hover { border-color: var(--ion-color-primary); }
 .co-method:focus-visible { outline: 3px solid var(--ion-color-primary); outline-offset: 2px; }
-.co-method-icon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--t-surface-3); color: var(--t-muted); font-size: 22px; }
+.co-method-icon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--ab-radio-md); background: var(--t-surface-3); color: var(--t-muted); font-size: 22px; }
 .co-method-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .co-method-text strong { font-size: 0.98rem; }
 .co-method-text small { font-size: 0.8rem; color: var(--t-muted); }
 .co-method.is-active { border-color: var(--ion-color-primary); background: var(--t-primary-bg); box-shadow: 0 0 0 1px var(--ion-color-primary); }
-.co-method.is-active .co-method-icon { background: var(--ion-color-primary); color: #fff; }
+.co-method.is-active .co-method-icon { background: var(--ion-color-primary); color: var(--ab-blanco); }
 .co-check { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); font-size: 20px; color: var(--ion-color-primary); }
 
 .co-cash { display: flex; flex-direction: column; gap: 10px; }
@@ -64,7 +64,7 @@ ion-modal.pmodal.co-modal { --width: min(600px, 100%); }
   min-width: 72px;
   height: 46px;
   border: 1.5px solid var(--t-border-strong);
-  border-radius: 999px;
+  border-radius: var(--ab-radio-full);
   background: var(--t-surface);
   font: inherit;
   font-weight: 650;

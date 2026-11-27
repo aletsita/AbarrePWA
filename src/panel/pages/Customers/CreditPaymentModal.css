@@ -2,8 +2,8 @@
 ion-modal.pmodal.ab-modal { --width: min(520px, 100%); }
 .ab-form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .ab-body { display: flex; flex-direction: column; gap: 18px; }
-.ab-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: #fff; box-shadow: var(--t-shadow-lift); }
-.ab-hero-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 14px; background: rgba(255, 255, 255, 0.18); font-size: 24px; }
+.ab-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: var(--ab-blanco); box-shadow: var(--t-shadow-lift); }
+.ab-hero-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: var(--ab-radio-md); background: var(--t-hero-chip); font-size: 24px; }
 .ab-hero small { display: block; font-size: 0.8rem; font-weight: 650; opacity: 0.85; }
 .ab-hero-who { flex: 1; min-width: 0; }
 .ab-hero-who strong { display: block; overflow: hidden; font-size: 1.05rem; white-space: nowrap; text-overflow: ellipsis; }

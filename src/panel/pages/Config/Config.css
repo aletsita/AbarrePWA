@@ -1,7 +1,7 @@
 .cfg-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .cfg-card { padding: 22px 24px; }
 .cfg-actions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin: 22px -24px -22px; padding: 14px 24px; border-top: 1px solid var(--t-border); border-radius: 0 0 var(--t-radius) var(--t-radius); background: var(--t-surface-2); font-size: 0.88rem; }
-.cfg-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; background: var(--t-primary-bg); color: var(--ion-color-primary); font-weight: 800; font-size: 0.8rem; flex-shrink: 0; }
+.cfg-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--ab-radio-sm); background: var(--t-primary-bg); color: var(--ion-color-primary); font-weight: 800; font-size: 0.8rem; flex-shrink: 0; }
 .is-inactive .cfg-avatar { background: var(--t-surface-2); color: var(--t-muted); }
 .is-inactive strong { color: var(--t-muted); }
 .cfg-roles { padding: 4px 18px 18px; color: var(--t-ink); font-size: 0.88rem; }
