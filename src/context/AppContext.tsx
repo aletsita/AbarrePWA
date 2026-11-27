@@ -1227,7 +1227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const advanceOrder = useCallback(
     async (id: string) => {
       const o = dataRef.current.orders.find((x) => x.id === id);
-      if (!o) return { ok: false, message: 'No encontramos ese pedido.' } as Outcome<null>;
+      if (!o) return { ok: false, message: 'No encontramos ese pedido. Revisa el código e inténtalo de nuevo.' } as Outcome<null>;
       return orderCall(id, 'avanzar', { from: o.status }, 'No se pudo cambiar el pedido.');
     },
     [orderCall],

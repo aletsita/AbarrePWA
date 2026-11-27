@@ -151,9 +151,6 @@ ion-toast.toast-app::part(header) { font-weight: 600; }
 ion-toast.toast-app::part(icon) { font-size: 20px; color: var(--t-aviso-ok); }
 ion-toast.toast-app.is-alerta::part(icon), ion-toast.toast-app.is-error::part(icon) { color: var(--ab-ambar-500); }
 ion-toast.toast-app::part(button) { font-weight: 600; }
-ion-alert { --backdrop-opacity: 0.5; }
-ion-alert .alert-wrapper { border-radius: var(--ab-radio-md) !important; }
-ion-alert .alert-title { font-weight: 650 !important; }
 ion-backdrop { --backdrop-opacity: 0.5; }
 ion-searchbar { --icon-color: var(--t-muted); --placeholder-color: var(--t-muted); }
 

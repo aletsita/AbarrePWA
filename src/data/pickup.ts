@@ -58,7 +58,7 @@ export function orderNoticeText(status: OrderStatus, folio: string) {
     case 'listo':
       return `Tu pedido ${folio} está listo para recoger`;
     case 'entregado':
-      return `Pedido ${folio} entregado. ¡Gracias!`;
+      return `Pedido ${folio} entregado`;
     case 'cancelado':
       return `La tienda canceló tu pedido ${folio}`;
   }

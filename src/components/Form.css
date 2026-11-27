@@ -1,6 +1,7 @@
+/* Campos de la marca: 48 px de alto, esquinas de 12, borde gris-200 y fondo gris-100 (blanco al escribir) */
 .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.fld-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 0.86rem; font-weight: 650; color: var(--t-ink); }
-.fld-label span { font-size: 0.75rem; font-weight: 500; color: var(--t-muted); }
+.fld-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ab-marino-900); }
+.fld-label span { font-size: 12px; font-weight: 400; color: var(--ab-gris-500); }
 
 .fld-box {
   display: flex;
@@ -8,13 +9,13 @@
   gap: 10px;
   min-height: 48px;
   padding: 0 14px;
-  border: 1px solid var(--t-border-strong);
-  border-radius: var(--t-radius-sm);
-  background: var(--t-surface);
+  border: 1px solid var(--ab-gris-200);
+  border-radius: var(--ab-radio-md);
+  background: var(--ab-gris-100);
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-.fld-box:hover { border-color: var(--t-muted); }
-.fld-box:focus-within { border-color: var(--ion-color-primary); box-shadow: 0 0 0 3px rgba(var(--ion-color-primary-rgb), 0.14); }
+.fld-box:hover { border-color: var(--ab-gris-500); }
+.fld-box:focus-within { border-color: var(--ab-azul-500); background: var(--ab-blanco); box-shadow: 0 0 0 3px rgba(var(--t-brand-rgb), 0.14); }
 .fld-box input,
 .fld-box select,
 .fld-box textarea {
@@ -34,7 +35,7 @@
 .fld-box textarea { height: auto; padding: 11px 14px; line-height: 1.45; resize: vertical; }
 .fld-box.is-select {
   padding: 0;
-  background: var(--t-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238a86a0' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 16px center;
+  background: var(--ab-gris-100) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235f6672' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 16px center;
 }
 .fld-box select { padding: 0 40px 0 14px; appearance: none; cursor: pointer; }
 .fld-box.is-disabled { background-color: var(--t-surface-2); border-color: var(--t-border); }
@@ -44,10 +45,10 @@
 .fld-icon { flex-shrink: 0; font-size: 18px; color: var(--t-muted); }
 .fld-box:focus-within .fld-icon { color: var(--ion-color-primary); }
 .fld-adorn { flex-shrink: 0; font-weight: 650; color: var(--t-muted); }
-.fld-reveal { display: grid; place-items: center; width: 34px; height: 34px; margin-right: -8px; border: 0; border-radius: var(--ab-radio-sm); background: transparent; color: var(--t-muted); font-size: 19px; cursor: pointer; }
+.fld-reveal { display: grid; place-items: center; width: var(--ab-toque-min); height: var(--ab-toque-min); margin-right: -10px; border: 0; border-radius: var(--ab-radio-sm); background: transparent; color: var(--t-muted); font-size: 19px; cursor: pointer; }
 .fld-reveal:hover { background: var(--t-surface-2); color: var(--ion-color-primary); }
 
-.fld-hint, .fld-error { display: flex; align-items: flex-start; gap: 5px; margin: 0; font-size: 0.8rem; line-height: 1.4; }
+.fld-hint, .fld-error { display: flex; align-items: flex-start; gap: 5px; margin: 0; font-size: 12px; line-height: 16px; }
 .fld-hint { color: var(--t-muted); }
 .fld-error { color: var(--ion-color-danger-shade); font-weight: 600; }
 .fld-error ion-icon { flex-shrink: 0; margin-top: 1px; font-size: 15px; }

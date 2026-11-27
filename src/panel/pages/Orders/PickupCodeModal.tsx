@@ -230,7 +230,7 @@ export function PickupCodeModal({ isOpen, order, onClose, onVerified }: Props) {
         )}
 
         {/* La acción principal va junto al código, no hasta el pie del modal */}
-        <IonButton type="submit" expand="block" color="success" className="btn-lg pc-verify" disabled={locked || checking || !text.trim()}>
+        <IonButton type="submit" expand="block" className="btn-lg pc-verify" disabled={locked || checking || !text.trim()}>
           <IonIcon slot="start" icon={checkmarkDone} />
           {checking ? 'Revisando…' : paid ? 'Verificar y entregar' : 'Verificar y cobrar'}
         </IonButton>

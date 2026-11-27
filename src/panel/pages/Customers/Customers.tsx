@@ -103,7 +103,7 @@ function CustomerDetail({ customer, onClose, onEdit, onPay }: { customer?: Custo
               <IonIcon slot="start" icon={createOutline} />
               Editar
             </IonButton>
-            <IonButton color="success" className="btn-lg" disabled={customer.balance <= 0} onClick={onPay}>
+            <IonButton className="btn-lg" disabled={customer.balance <= 0} onClick={onPay}>
               <IonIcon slot="start" icon={walletOutline} />
               Registrar abono
             </IonButton>

@@ -227,18 +227,23 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
 .pill.is-ok { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .pill.is-off { background: var(--t-surface-2); color: var(--t-muted); box-shadow: inset 0 0 0 1px var(--t-border); }
 
-ion-modal.pmodal { --width: min(560px, 100%); --height: auto; --max-height: 92vh; --border-radius: var(--ab-radio-lg); --background: var(--t-surface); --box-shadow: var(--t-shadow-pop); }
+/* Modal estándar del panel (marca/components/Modal): blanco, esquinas de 16, sombra grande, máximo 420 px */
+ion-modal.pmodal { --width: min(420px, calc(100% - 32px)); --height: auto; --max-height: 92vh; --border-radius: var(--ab-radio-lg); --background: var(--ab-blanco); --box-shadow: var(--ab-sombra-lg); --backdrop-opacity: 0.5; }
+ion-modal.pmodal::part(backdrop) { background: var(--ab-marino-900); }
 ion-modal.pmodal.is-wide { --width: min(780px, 100%); }
-ion-modal.pmodal.is-narrow { --width: min(440px, 100%); }
+ion-modal.pmodal.is-narrow { --width: min(420px, calc(100% - 32px)); }
 ion-modal.pmodal .ion-page { position: relative; contain: content; }
-ion-modal.pmodal ion-toolbar { --background: var(--t-surface); --padding-start: 10px; --padding-end: 8px; --min-height: 62px; }
-ion-modal.pmodal ion-title { font-size: 1.12rem; font-weight: 750; color: var(--t-ink); }
-ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto; padding: 6px 24px 24px; }
+ion-modal.pmodal ion-toolbar { --background: var(--ab-blanco); --color: var(--ab-marino-900); --padding-start: 12px; --padding-end: 8px; --min-height: 60px; --border-width: 0; }
+/* Cerrar: botón de 44 px */
+ion-modal.pmodal ion-toolbar ion-buttons ion-button { --color: var(--ab-gris-700); width: var(--ab-toque-min); height: var(--ab-toque-min); --padding-start: 0; --padding-end: 0; --border-radius: var(--ab-radio-full); }
+ion-modal.pmodal ion-title { font-family: var(--ab-font-display); font-size: 18px; line-height: 24px; font-weight: 500; color: var(--ab-marino-900); }
+ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto; padding: 4px 20px 20px; font-size: 14px; line-height: 20px; color: var(--ab-gris-700); }
 @media (max-width: 599px) {
   ion-modal.pmodal { --height: 100%; --max-height: 100%; --border-radius: 0; }
   ion-modal.pmodal .pmodal-body { max-height: none; flex: 1; }
 }
-.pmodal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 22px 22px; border-top: 1px solid var(--t-border); background: var(--t-surface-2); flex-wrap: wrap; }
+/* Pie: «Cancelar» a la izquierda y la acción principal a la derecha */
+.pmodal-foot { display: flex; gap: var(--ab-espacio-2); justify-content: flex-end; padding: 12px 20px 20px; border-top: 1px solid var(--ab-gris-200); background: var(--ab-blanco); flex-wrap: wrap; }
 .pmodal-foot ion-button { margin: 0; }
 /* Borrar queda a la izquierda, lejos de Guardar */
 .pmodal-foot .pmodal-delete { margin-right: auto; }

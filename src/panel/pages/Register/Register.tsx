@@ -178,7 +178,7 @@ export default function Register() {
   // Sin stock: alerta como en la móvil (hay que leerla); un tope alcanzado es un aviso breve
   const warn = (message: string, color: 'warning' | 'danger') =>
     color === 'danger'
-      ? void showAlert({ tone: 'error', title: 'Sin stock', message: message.replace(/^Sin stock: /, ''), primary: 'Entendido' }).then(() => search.current?.focus())
+      ? void showAlert({ tone: 'error', title: 'Agotado', message: message.replace(/^Sin stock: /, ''), primary: 'Entendido' }).then(() => search.current?.focus())
       : void toast({ message, duration: 2600, color, position: 'top', cssClass: 'toast-app' });
 
   // Nunca más de lo disponible: existencia − apartado por pedidos − lo que ya está en esta u otras cuentas

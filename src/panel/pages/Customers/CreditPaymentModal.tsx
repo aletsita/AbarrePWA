@@ -37,7 +37,7 @@ export function CreditPaymentModal({ customer, onClose }: { customer?: Customer;
   const over = amount > balance + 0.005;
 
   return (
-    <IonModal isOpen={!!customer} onDidDismiss={onClose} className="pmodal ab-modal">
+    <IonModal isOpen={!!customer} onDidDismiss={onClose} className="pmodal is-abono">
       <IonHeader className="ion-no-border">
         <IonToolbar>
           <IonTitle>Registrar abono</IonTitle>

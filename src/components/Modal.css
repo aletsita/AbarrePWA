@@ -25,3 +25,14 @@ ion-modal::part(backdrop) { background: var(--ab-marino-900); }
 /* Acciones: secundaria a la izquierda, principal a la derecha; en celular las dos ocupan el ancho */
 .ab-modal-actions { display: flex; gap: var(--ab-espacio-2); }
 .ab-modal-actions > * { flex: 1; margin: 0; }
+
+/* Menús de opciones y alertas nativas de Ionic con la misma apariencia que el Modal */
+ion-action-sheet { --background: var(--ab-blanco); --backdrop-opacity: 0.5; --button-color: var(--ab-marino-900); --button-background-selected: var(--ab-gris-100); --color: var(--ab-gris-700); }
+ion-action-sheet .action-sheet-group { border-radius: var(--ab-radio-xl) var(--ab-radio-xl) 0 0; }
+ion-action-sheet .action-sheet-title { font-family: var(--ab-font-display); font-size: 18px; font-weight: 500; color: var(--ab-marino-900); }
+ion-action-sheet .action-sheet-button { min-height: var(--ab-toque-min); font-size: 16px; }
+ion-action-sheet .action-sheet-destructive { color: var(--ab-error-600); }
+ion-alert { --background: var(--ab-blanco); --backdrop-opacity: 0.5; --max-width: 420px; }
+ion-alert .alert-wrapper { border-radius: var(--ab-radio-lg) !important; box-shadow: var(--ab-sombra-lg) !important; }
+ion-alert .alert-title { font-family: var(--ab-font-display); font-size: 18px !important; font-weight: 500 !important; color: var(--ab-marino-900) !important; }
+ion-alert .alert-message { font-size: 14px !important; line-height: 20px; color: var(--ab-gris-700) !important; }

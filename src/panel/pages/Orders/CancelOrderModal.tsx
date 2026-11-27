@@ -104,11 +104,11 @@ export function CancelOrderModal({ order, shortages, onClose, onShortage, onCanc
             )}
           </div>
           <div className="pmodal-foot">
-            <IonButton fill="clear" className="btn-lg" onClick={onClose}>
+            <IonButton fill="outline" className="btn-lg" onClick={onClose}>
               Volver
             </IonButton>
             {choice === 'agotado' ? (
-              <IonButton color="warning" className="btn-lg" onClick={confirm}>
+              <IonButton className="btn-lg" onClick={confirm}>
                 <IonIcon slot="start" icon={notificationsOutline} />
                 {order.issue ? 'Actualizar aviso' : 'Avisar al cliente'}
               </IonButton>

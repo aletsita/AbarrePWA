@@ -1,5 +1,5 @@
 /* Registrar abono: quién y cuánto debe, el monto, la forma de pago y lo que queda */
-ion-modal.pmodal.ab-modal { --width: min(520px, 100%); }
+ion-modal.pmodal.is-abono { --width: min(420px, calc(100% - 32px)); }
 .ab-form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .ab-body { display: flex; flex-direction: column; gap: 18px; }
 .ab-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--t-radius); background: var(--t-brand-gradient); color: var(--ab-blanco); box-shadow: var(--t-shadow-lift); }

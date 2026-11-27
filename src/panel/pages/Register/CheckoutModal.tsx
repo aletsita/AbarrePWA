@@ -272,7 +272,7 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
         <IonButton fill="outline" className="btn-lg" onClick={onClose}>
           {order ? 'Volver al pedido' : 'Volver a la cuenta'}
         </IonButton>
-        <IonButton color="success" className="btn-lg co-confirm" disabled={!canConfirm || busy} onClick={() => void confirm()}>
+        <IonButton className="btn-lg co-confirm" disabled={!canConfirm || busy} onClick={() => void confirm()}>
           <IonIcon slot="start" icon={checkmarkDone} />
           {busy
             ? 'Cobrando…'
