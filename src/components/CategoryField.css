@@ -1,0 +1,32 @@
+/* Categoría en chips: la elegida en azul con palomita, las demás en gris y «+ Nueva» punteado */
+.cat-field { display: flex; flex-direction: column; gap: var(--ab-espacio-2); min-width: 0; }
+.cat-chips { display: flex; flex-wrap: wrap; gap: var(--ab-espacio-2); }
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: var(--ab-toque-min);
+  padding: 0 var(--ab-espacio-4);
+  border: 1px solid var(--ab-gris-200);
+  border-radius: var(--ab-radio-full);
+  background: var(--ab-gris-100);
+  color: var(--ab-marino-900);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cat-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-chip ion-icon { flex: none; font-size: 18px; }
+.cat-chip:hover { border-color: var(--ab-gris-500); }
+.cat-chip.is-active { border-color: var(--ab-azul-500); background: var(--ab-azul-500); color: var(--ab-blanco); }
+.cat-chip.is-new { border: 1.5px dashed var(--ab-azul-500); background: var(--ab-blanco); color: var(--ab-azul-500); }
+.cat-chip.is-new:hover { background: var(--ab-azul-100); }
+.cat-chip:focus-visible { outline: 2px solid var(--ab-azul-500); outline-offset: 2px; }
+
+.cat-field-new { display: flex; flex-direction: column; gap: var(--ab-espacio-3); padding: var(--ab-espacio-3); border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-gris-100); }
+.cat-field-new .fld-box { background: var(--ab-blanco); }
+.cat-field-actions { display: flex; justify-content: flex-end; gap: var(--ab-espacio-2); flex-wrap: wrap; }
+.cat-field-actions ion-button { margin: 0; min-height: var(--ab-toque-min); }

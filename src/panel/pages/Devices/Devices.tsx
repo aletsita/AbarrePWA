@@ -1,6 +1,6 @@
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonPage, IonTitle, IonToolbar } from '@ionic/react';
+import { IonButton, IonContent, IonIcon, IonPage } from '@ionic/react';
 import { useAppAlert } from '../../../components/AppAlert';
-import { add, checkmarkCircle, closeOutline, cloudOfflineOutline, personOutline, phonePortraitOutline, pulseOutline, refreshOutline, serverOutline, storefrontOutline, timeOutline, trashOutline, wifiOutline } from 'ionicons/icons';
+import { add, checkmarkCircle, cloudOfflineOutline, personOutline, phonePortraitOutline, pulseOutline, refreshOutline, serverOutline, storefrontOutline, timeOutline, trashOutline, wifiOutline } from 'ionicons/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Notice } from '../../../components/Notice';
 import { useApp } from '../../../context/AppContext';
@@ -11,6 +11,7 @@ import { API_URL } from '../../../lib/api';
 import { PanelHeader } from '../../components/PanelHeader';
 import { QrCode } from '../../components/QrCode';
 import './Devices.css';
+import { PanelModal } from '../../../components/PanelModal';
 
 interface ServerOption {
   url: string;
@@ -86,15 +87,7 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
   const expired = !!pairing && left === 0;
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="pmodal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>Vincular nuevo celular</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
+    <PanelModal isOpen={isOpen} onClose={onClose} size="form" title="Vincular nuevo celular">
       <div className="pmodal-body">
         {linked ? (
           <div className="lk-done">
@@ -169,7 +162,7 @@ function LinkModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
       <div className="pmodal-foot">
         <IonButton className="btn-lg" fill={linked ? 'solid' : 'outline'} onClick={onClose}>{linked ? 'Listo' : 'Cerrar'}</IonButton>
       </div>
-    </IonModal>
+    </PanelModal>
   );
 }
 

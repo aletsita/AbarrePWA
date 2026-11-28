@@ -1,15 +1,17 @@
+/* Etiqueta de stock (marca/components/Etiquetas): Disponible verde, Stock bajo ámbar, Agotado rojo; siempre con texto */
 .stock-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: 700;
+  gap: var(--ab-espacio-1);
+  padding: var(--ab-espacio-1) var(--ab-espacio-2);
+  border-radius: var(--ab-radio-sm);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .stock-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.stock-badge.level-ok { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
-.stock-badge.level-poco { background: var(--t-warning-bg); color: var(--t-warning-text); }
-.stock-badge.level-sin { background: var(--t-danger-bg); color: var(--ion-color-danger-shade); }
+.stock-badge.level-ok { background: var(--ab-exito-100); color: var(--ab-exito-800); }
+.stock-badge.level-poco { background: var(--ab-ambar-100); color: var(--ab-ambar-900); }
+.stock-badge.level-sin { background: var(--ab-error-100); color: var(--ab-error-700); }

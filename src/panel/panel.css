@@ -23,21 +23,23 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
   gap: 11px;
   min-height: 44px;
   padding: 0 12px;
-  border-radius: 10px;
-  color: var(--t-side-text);
+  border-radius: var(--ab-radio-md);
+  color: #454b55;
   text-decoration: none;
   font-weight: 550;
   font-size: 0.92rem;
   transition: background 0.12s, color 0.12s;
 }
-.side-link ion-icon { font-size: 19px; color: var(--t-muted); }
+.side-link ion-icon { font-size: 20px; color: #454b55; }
 .side-link span { flex: 1; }
 .side-link:hover { background: var(--t-surface-3); color: var(--t-ink); }
-.side-link.is-active { background: var(--t-primary-bg); color: var(--ion-color-primary); font-weight: 700; }
+.side-link.is-active { background: #e8eef8; color: #123f8c; font-weight: 700; }
 .side-link.is-active::before { content: ""; position: absolute; left: -12px; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--ion-color-primary); }
 .side-link.is-active ion-icon { color: var(--ion-color-primary); }
-.side-link ion-badge { --padding-start: 6px; --padding-end: 6px; border-radius: 5px; font-size: 0.7rem; font-weight: 650; }
-.side-link.is-quiet { font-weight: 500; font-size: 0.88rem; min-height: 40px; }
+.side-link ion-badge { --padding-start: 6px; --padding-end: 6px; border-radius: var(--ab-radio-sm); font-size: 0.7rem; font-weight: 650; }
+.side-link ion-badge[color='danger'] { --background: #d32f2f; --color: var(--ab-blanco); }
+.side-link:focus-visible { outline: 2px solid var(--ab-azul-500); outline-offset: 2px; }
+.side-link.is-quiet { font-weight: 500; font-size: 14px; min-height: var(--ab-toque-min); }
 
 .side-today {
   display: flex;
@@ -47,19 +49,19 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
   overflow: hidden;
   margin: 20px 0 0;
   padding: 16px 16px 14px;
-  border-radius: 14px;
+  border-radius: var(--ab-radio-md);
   background: var(--t-brand-gradient);
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--t-on-hero-muted);
   text-decoration: none;
   font-size: 0.76rem;
   font-weight: 600;
-  box-shadow: 0 10px 24px -12px rgba(24, 45, 107, 0.7);
+  box-shadow: 0 10px 24px -12px rgba(var(--t-brand-rgb), 0.7);
   transition: transform 0.15s, box-shadow 0.15s;
 }
-.side-today::after { content: ""; position: absolute; right: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); }
-.side-today:hover { transform: translateY(-1px); box-shadow: 0 14px 28px -12px rgba(24, 45, 107, 0.8); }
-.side-today strong { color: #fff; font-size: 1.55rem; font-weight: 750; line-height: 1.25; letter-spacing: -0.02em; }
-.side-today small { margin-top: 4px; color: #c9d6ff; font-size: 0.76rem; font-weight: 650; }
+.side-today::after { content: ""; position: absolute; right: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: var(--t-hero-chip); }
+.side-today:hover { transform: translateY(-1px); box-shadow: 0 14px 28px -12px rgba(var(--t-brand-rgb), 0.8); }
+.side-today strong { color: var(--ab-blanco); font-size: 1.55rem; font-weight: 750; line-height: 1.25; letter-spacing: -0.02em; }
+.side-today small { margin-top: 4px; color: var(--t-on-hero-muted); font-size: 0.76rem; font-weight: 650; }
 
 .side-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--t-border); }
 .side-user { display: flex; align-items: center; gap: 10px; padding: 4px 6px 8px; }
@@ -68,20 +70,22 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
 .side-user strong { color: var(--t-ink); font-size: 0.88rem; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side-user span { font-size: 0.75rem; color: var(--t-muted); }
 
-.ptop ion-toolbar { --background: var(--t-surface); --border-width: 0 0 1px; --border-color: var(--t-border); --min-height: 60px; }
-.ptop ion-title { font-size: 1.05rem; font-weight: 700; color: var(--t-ink); padding-inline: 8px; }
+/* Barra superior blanca con borde gris-200; texto e íconos en marino. El azul queda para la sección activa y los botones primarios */
+.ptop ion-toolbar { --background: var(--ab-blanco); --color: var(--ab-marino-900); --border-color: var(--ab-gris-200); --border-style: solid; --border-width: 0 0 1px; --min-height: 72px; }
+.ptop-menu { --color: var(--ab-marino-900); }
+.ptop ion-title { font-family: var(--ab-font-display); font-size: 22px; font-weight: 700; color: var(--ab-marino-900); padding-inline: 8px; }
 .ptop-end { display: flex; align-items: center; gap: 10px; padding-inline-end: 14px; }
-.ptop-clock { display: inline-flex; align-items: baseline; gap: 6px; padding: 0 4px; color: var(--t-ink); font-weight: 700; font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ptop-clock ion-icon { align-self: center; font-size: 17px; color: var(--t-muted); }
-.ptop-clock small { color: var(--t-muted); font-weight: 600; font-size: 0.76rem; }
+.ptop-clock { display: inline-flex; align-items: baseline; gap: 6px; padding: 0 4px; color: var(--ab-marino-900); font-weight: 600; font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ptop-clock ion-icon { align-self: center; font-size: 17px; color: var(--ab-gris-700); }
+.ptop-clock small { color: var(--ab-gris-500); font-weight: 400; font-size: 12px; }
 .ptop-clock small::first-letter { text-transform: uppercase; }
-.ptop-store { display: flex; flex-direction: column; align-items: flex-end; padding-left: 12px; border-left: 1px solid var(--t-border); line-height: 1.2; font-size: 0.76rem; color: var(--t-muted); }
-.ptop-store strong { color: var(--t-ink); font-size: 0.88rem; }
+.ptop-store { display: flex; flex-direction: column; align-items: flex-end; padding-left: 12px; border-left: 1px solid var(--ab-gris-200); line-height: 1.2; font-size: 12px; color: var(--ab-gris-500); }
+.ptop-store strong { color: var(--ab-marino-900); font-size: 14px; font-weight: 600; }
 .ptop-user {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--t-primary-bg);
   color: var(--ion-color-primary);
@@ -94,14 +98,14 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
   gap: 8px;
   height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--ab-radio-full);
   font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
 }
-.phone-chip.is-on { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
-.phone-chip.is-off { background: var(--t-surface-2); color: var(--t-muted); box-shadow: inset 0 0 0 1px var(--t-border); }
-.phone-chip.is-live { background: var(--ion-color-success); color: var(--ion-color-success-contrast); }
+.phone-chip.is-on { background: var(--ab-exito-100); color: var(--ab-exito-800); }
+.phone-chip.is-off { background: var(--ab-gris-100); color: var(--ab-gris-700); box-shadow: inset 0 0 0 1px var(--ab-gris-200); }
+.phone-chip.is-live { background: var(--ab-exito-600); color: var(--ab-blanco); }
 .phone-chip ion-icon { font-size: 16px; }
 .phone-chip .live-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: live 1s ease-in-out infinite; }
 @keyframes live { 50% { opacity: 0.3; } }
@@ -133,13 +137,13 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
 @media (min-width: 1100px) { .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-.filters ion-searchbar { --border-radius: 12px; --background: var(--t-surface); --box-shadow: inset 0 0 0 1px var(--t-border-strong); --color: var(--t-ink); padding: 0; flex: 1 1 260px; min-height: 46px; }
+.filters ion-searchbar { --border-radius: var(--ab-radio-md); --background: var(--t-surface); --box-shadow: inset 0 0 0 1px var(--t-border-strong); --color: var(--t-ink); padding: 0; flex: 1 1 260px; min-height: 46px; }
 .fchips { display: flex; gap: 6px; flex-wrap: wrap; }
 .fchip {
   height: 38px;
   padding: 0 16px;
   border: 1px solid var(--t-border-strong);
-  border-radius: 999px;
+  border-radius: var(--ab-radio-full);
   background: var(--t-surface);
   font: inherit;
   font-weight: 650;
@@ -150,14 +154,14 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .fchip:hover { border-color: var(--ion-color-primary); color: var(--ion-color-primary); }
-.fchip.is-active { background: var(--ion-color-primary); border-color: var(--ion-color-primary); color: var(--ion-color-primary-contrast); box-shadow: 0 4px 10px -4px rgba(var(--ion-color-primary-rgb), 0.6); }
+.fchip.is-active { background: var(--ion-color-primary); border-color: var(--ion-color-primary); color: var(--ion-color-primary-contrast); box-shadow: none; }
 .fchip.tone-warning.is-active { background: var(--ion-color-warning); border-color: var(--ion-color-warning); color: var(--ion-color-warning-contrast); }
 .fchip.tone-danger.is-active { background: var(--ion-color-danger); border-color: var(--ion-color-danger); color: var(--ion-color-danger-contrast); }
 .fselect {
   height: 38px;
   padding: 0 36px 0 14px;
   border: 1px solid var(--t-border-strong);
-  border-radius: 10px;
+  border-radius: var(--ab-radio-md);
   background: var(--t-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238a86a0' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 14px center;
   font: inherit;
   font-weight: 600;
@@ -218,7 +222,7 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
   .ptable.is-cards td.is-end { grid-column: 2; grid-row: 2 / span 2; align-self: center; text-align: right; }
 }
 
-.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--ab-radio-full); font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
 .pill ion-icon { font-size: 15px; }
 .pill.is-efectivo { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .pill.is-tarjeta { background: var(--t-primary-bg); color: var(--ion-color-primary); }
@@ -227,39 +231,24 @@ ion-split-pane.panel { --side-width: 248px; --side-max-width: 248px; --border: 1
 .pill.is-ok { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
 .pill.is-off { background: var(--t-surface-2); color: var(--t-muted); box-shadow: inset 0 0 0 1px var(--t-border); }
 
-ion-modal.pmodal { --width: min(560px, 100%); --height: auto; --max-height: 92vh; --border-radius: 18px; --background: var(--t-surface); --box-shadow: var(--t-shadow-pop); }
-ion-modal.pmodal.is-wide { --width: min(780px, 100%); }
-ion-modal.pmodal.is-narrow { --width: min(440px, 100%); }
-ion-modal.pmodal .ion-page { position: relative; contain: content; }
-ion-modal.pmodal ion-toolbar { --background: var(--t-surface); --padding-start: 10px; --padding-end: 8px; --min-height: 62px; }
-ion-modal.pmodal ion-title { font-size: 1.12rem; font-weight: 750; color: var(--t-ink); }
-ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto; padding: 6px 24px 24px; }
-@media (max-width: 599px) {
-  ion-modal.pmodal { --height: 100%; --max-height: 100%; --border-radius: 0; }
-  ion-modal.pmodal .pmodal-body { max-height: none; flex: 1; }
-}
-.pmodal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 22px 22px; border-top: 1px solid var(--t-border); background: var(--t-surface-2); flex-wrap: wrap; }
-.pmodal-foot ion-button { margin: 0; }
-/* Borrar queda a la izquierda, lejos de Guardar */
-.pmodal-foot .pmodal-delete { margin-right: auto; }
-@media (max-width: 599px) { .pmodal-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); } .pmodal-foot ion-button { flex: 1 1 100%; } }
+/* Los modales del panel usan components/PanelModal (estilos en PanelModal.css) */
 
 /* El ticket simula papel: se queda claro también en modo oscuro */
 .ticket {
   width: 100%;
   max-width: 320px;
   padding: 22px 20px 26px;
-  background: #fffdf8;
-  border: 1px solid #e7e3da;
+  background: var(--ab-blanco);
+  border: 1px solid var(--ab-gris-200);
   border-radius: 2px;
   box-shadow: var(--t-shadow-lift);
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   font-size: 0.82rem;
-  color: #1a1730;
+  color: var(--ab-marino-900);
 }
-.ticket header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding-bottom: 10px; border-bottom: 1px dashed #9a96ad; }
+.ticket header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding-bottom: 10px; border-bottom: 1px dashed var(--ab-gris-500); }
 .ticket-meta { margin: 10px 0; text-align: center; }
-.ticket ul { list-style: none; margin: 0; padding: 0 0 10px; border-bottom: 1px dashed #9a96ad; }
+.ticket ul { list-style: none; margin: 0; padding: 0 0 10px; border-bottom: 1px dashed var(--ab-gris-500); }
 .ticket li, .ticket-total, .ticket-row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
 .ticket-total { font-weight: 800; padding-top: 10px; }
 .ticket footer { margin-top: 14px; text-align: center; white-space: pre-line; }
@@ -284,7 +273,7 @@ ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto
   min-height: 54px;
   padding: 4px 2px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--ab-radio-sm);
   background: none;
   color: var(--t-muted);
   font: inherit;
@@ -295,8 +284,8 @@ ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto
   -webkit-tap-highlight-color: transparent;
 }
 .pnav-item > span:last-child { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pnav-icon { position: relative; display: grid; place-items: center; width: 52px; height: 30px; border-radius: 999px; font-size: 21px; transition: background 0.2s; }
-.pnav-icon ion-badge { position: absolute; top: -4px; right: 2px; min-width: 18px; border-radius: 5px; font-size: 0.62rem; --padding-start: 5px; --padding-end: 5px; box-shadow: 0 0 0 2px var(--t-surface); }
+.pnav-icon { position: relative; display: grid; place-items: center; width: 52px; height: 30px; border-radius: var(--ab-radio-full); font-size: 21px; transition: background 0.2s; }
+.pnav-icon ion-badge { position: absolute; top: -4px; right: 2px; min-width: 18px; border-radius: var(--ab-radio-sm); font-size: 0.62rem; --padding-start: 5px; --padding-end: 5px; box-shadow: 0 0 0 2px var(--t-surface); }
 .pnav-item.is-active { color: var(--ion-color-primary); }
 .pnav-item.is-active .pnav-icon { background: var(--t-primary-bg); }
 .pnav-item:active .pnav-icon { transform: scale(0.94); }
@@ -328,6 +317,4 @@ ion-modal.pmodal .pmodal-body { max-height: calc(92vh - 150px); overflow-y: auto
   .fchips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 2px; scrollbar-width: none; }
   .fchips::-webkit-scrollbar { display: none; }
   .filters .fselect { flex: 1 1 140px; min-width: 0; }
-  ion-modal.pmodal .pmodal-body { padding: 4px 16px 18px; }
-  .pmodal-foot { padding-inline: 16px; }
 }

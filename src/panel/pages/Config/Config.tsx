@@ -1,4 +1,4 @@
-import { IonButton, IonContent, IonIcon, IonPage, IonToggle, useIonToast } from '@ionic/react';
+import { IonButton, IonContent, IonIcon, IonPage, IonToggle } from '@ionic/react';
 import { useAppAlert } from '../../../components/AppAlert';
 import { bagHandleOutline, callOutline, documentTextOutline, eyeOutline, locationOutline, mailOutline, personAddOutline, personOutline, receiptOutline, saveOutline, storefrontOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
@@ -8,6 +8,7 @@ import { initials, money, ROLES, type Role, type Store, type TicketConfig, type 
 import { PanelHeader } from '../../components/PanelHeader';
 import { UserModal } from './UserModal';
 import './Config.css';
+import { useAviso } from '../../../components/Aviso';
 
 type Tab = 'tienda' | 'usuarios' | 'ticket';
 const TABS: { id: Tab; label: string }[] = [
@@ -49,7 +50,7 @@ const STORE_FIELDS = STORE_SECTIONS.flatMap((g) => g.fields);
 
 export default function Config() {
   const { store, ticketConfig, users, user, updateStore, updateTicketConfig, saveUser } = useApp();
-  const [toast] = useIonToast();
+  const toast = useAviso();
   const showAlert = useAppAlert();
   const [addingUser, setAddingUser] = useState(false);
   const [tab, setTab] = useState<Tab>('tienda');
@@ -220,7 +221,7 @@ export default function Config() {
               </section>
               <aside className="ticket cfg-preview" aria-label="Vista previa del ticket">
                 <header>
-                  {ticket.showLogo && <img src="/icons/icon.svg" alt="" width="36" height="36" />}
+                  {ticket.showLogo && <img src="/brand/isotipo.svg" alt="" width="36" height="36" />}
                   {ticket.header.split('\n').map((l, i) => (i === 0 ? <strong key={i}>{l}</strong> : <span key={i}>{l}</span>))}
                 </header>
                 <p className="ticket-meta">Folio #0000 · {new Date().toLocaleDateString('es-MX')}</p>

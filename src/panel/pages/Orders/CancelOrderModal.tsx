@@ -1,8 +1,9 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { alertCircleOutline, chatbubbleEllipsesOutline, closeOutline, cubeOutline, notificationsOutline, trashOutline } from 'ionicons/icons';
+import { IonButton, IonIcon } from '@ionic/react';
+import { alertCircleOutline, chatbubbleEllipsesOutline, cubeOutline, notificationsOutline, trashOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { AreaField } from '../../../components/Form';
 import type { PickupOrder } from '../../../data/pickup';
+import { PanelModal, PanelModalCancel } from '../../../components/PanelModal';
 
 type Choice = 'agotado' | 'cancelar';
 
@@ -34,6 +35,12 @@ export function CancelOrderModal({ order, shortages, onClose, onShortage, onCanc
   const toggle = (id: string) => setMissing((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]));
   const missingError = tried && choice === 'agotado' && missing.length === 0;
   const noteError = tried && choice === 'cancelar' && !note.trim();
+  const startMissing = order?.issue?.missing ?? shortages;
+  const dirty =
+    !!order &&
+    (choice !== (order.issue ? 'cancelar' : 'agotado') ||
+      note.trim() !== '' ||
+      [...missing].sort().join() !== [...startMissing].sort().join());
 
   const confirm = () => {
     setTried(true);
@@ -43,19 +50,9 @@ export function CancelOrderModal({ order, shortages, onClose, onShortage, onCanc
   };
 
   return (
-    <IonModal isOpen={!!order} onDidDismiss={onClose} className="pmodal">
+    <PanelModal isOpen={!!order} onClose={onClose} dirty={dirty} size="form" title={order ? `Problema con ${order.folio}` : ''}>
       {order && (
         <>
-          <IonHeader className="ion-no-border">
-            <IonToolbar>
-              <IonTitle>Problema con {order.folio}</IonTitle>
-              <IonButtons slot="end">
-                <IonButton onClick={onClose} aria-label="Cerrar">
-                  <IonIcon slot="icon-only" icon={closeOutline} />
-                </IonButton>
-              </IonButtons>
-            </IonToolbar>
-          </IonHeader>
           <div className="pmodal-body">
             <p className="oc-lead">
               Pedido de <strong>{order.customer.name}</strong>. Le avisaremos en su app.
@@ -104,11 +101,11 @@ export function CancelOrderModal({ order, shortages, onClose, onShortage, onCanc
             )}
           </div>
           <div className="pmodal-foot">
-            <IonButton fill="clear" className="btn-lg" onClick={onClose}>
+            <PanelModalCancel className="btn-lg">
               Volver
-            </IonButton>
+            </PanelModalCancel>
             {choice === 'agotado' ? (
-              <IonButton color="warning" className="btn-lg" onClick={confirm}>
+              <IonButton className="btn-lg" onClick={confirm}>
                 <IonIcon slot="start" icon={notificationsOutline} />
                 {order.issue ? 'Actualizar aviso' : 'Avisar al cliente'}
               </IonButton>
@@ -121,6 +118,6 @@ export function CancelOrderModal({ order, shortages, onClose, onShortage, onCanc
           </div>
         </>
       )}
-    </IonModal>
+    </PanelModal>
   );
 }

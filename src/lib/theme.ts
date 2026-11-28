@@ -19,7 +19,7 @@ export function getThemeMode(): ThemeMode {
 export function applyTheme(mode = getThemeMode()) {
   const dark = mode === 'oscuro' || (mode === 'sistema' && !!media()?.matches);
   document.documentElement.classList.toggle('theme-dark', dark);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0e0d18' : '#ffffff');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0e0d18' : '#123f8c');
 }
 
 export function setThemeMode(mode: ThemeMode) {

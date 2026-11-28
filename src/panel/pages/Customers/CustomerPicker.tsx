@@ -1,10 +1,11 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonSearchbar, IonTitle, IonToolbar } from '@ionic/react';
-import { checkmarkCircle, closeOutline, personAddOutline, personRemoveOutline } from 'ionicons/icons';
+import { IonButton, IonIcon, IonSearchbar } from '@ionic/react';
+import { checkmarkCircle, personAddOutline, personRemoveOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { availableCredit, initials, money, normalize, type Customer } from '../../../data/models';
 import { CustomerModal } from './CustomerModal';
 import './Customers.css';
+import { PanelModal } from '../../../components/PanelModal';
 
 interface Props {
   isOpen: boolean;
@@ -34,15 +35,7 @@ export function CustomerPicker({ isOpen, selectedId, onClose, onPick }: Props) {
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="pmodal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>Cliente de la cuenta</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
+    <PanelModal isOpen={isOpen} onClose={onClose} size="form" title="Cliente de la cuenta">
       <div className="pmodal-body cp-body">
         <div className="cp-search">
           <IonSearchbar placeholder="Buscar por nombre o teléfono" value={query} onIonInput={(e) => setQuery(e.detail.value ?? '')} />
@@ -80,6 +73,6 @@ export function CustomerPicker({ isOpen, selectedId, onClose, onPick }: Props) {
         </ul>
       </div>
       <CustomerModal isOpen={adding} onClose={() => setAdding(false)} onSaved={(c) => pick(c)} />
-    </IonModal>
+    </PanelModal>
   );
 }

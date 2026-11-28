@@ -1,7 +1,8 @@
-import { useIonRouter, useIonToast } from '@ionic/react';
+import { useIonRouter } from '@ionic/react';
 import { useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { money } from '../data/models';
+import { useAviso } from '../components/Aviso';
 
 // Dos tonos cortos; el navegador solo los permite después de que alguien tocó la página
 function chime() {
@@ -29,7 +30,7 @@ function chime() {
 export function OrderAlerts() {
   const { orders, user } = useApp();
   const router = useIonRouter();
-  const [toast] = useIonToast();
+  const toast = useAviso();
   const known = useRef<Set<string> | null>(null);
   // Respuestas del cliente a un aviso de producto agotado: cambió productos o canceló
   const answers = useRef<Map<string, string> | null>(null);

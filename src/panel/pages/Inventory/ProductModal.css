@@ -1,56 +1,114 @@
-.pm-grid { display: grid; gap: 20px; }
-/* La columna de movimientos solo existe al editar; un producto nuevo usa todo el ancho */
-@media (min-width: 700px) { .pm-grid:has(> .pm-history) { grid-template-columns: minmax(0, 1fr) 260px; } }
-.pm-form { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-.pm-head { display: flex; gap: 16px; align-items: flex-end; }
-.pm-head-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+/* Agregar / editar producto (marca/components/Modal con la variante ancha para formularios) */
 
+/* Marco, encabezado y pie: components/PanelModal (tamaño «wide», 960 px) */
+
+/* Cuerpo gris con las tarjetas blancas en dos columnas iguales */
+ion-modal.pm-modal .pmodal-body.pm-body { padding: 24px 28px; background: var(--ab-gris-100); }
+.pm-notices { display: flex; flex-direction: column; gap: var(--ab-espacio-3); margin-bottom: 20px; }
+.pm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.pm-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.pm-wide { grid-column: 1 / -1; }
+@media (max-width: 719px) {
+  ion-modal.pm-modal .pmodal-body.pm-body { padding: 20px; }
+  .pm-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Tarjetas: blanco, borde gris-200, esquinas de 16, 20 px de relleno; ícono de 36 en azul-100 */
+.pm-modal .form-section.is-card { margin: 0; padding: 20px; border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-lg); background: var(--ab-blanco); box-shadow: none; }
+.pm-modal .form-section.is-card + .form-section.is-card { margin-top: 0; padding-top: 20px; border-top: 1px solid var(--ab-gris-200); }
+.pm-modal .form-section.is-card header { gap: var(--ab-espacio-3); margin-bottom: var(--ab-espacio-4); }
+.pm-modal .form-section-icon { width: 36px; height: 36px; border-radius: var(--ab-radio-md); background: var(--ab-azul-100); color: var(--ab-azul-500); font-size: 20px; }
+.pm-modal .form-section.is-card h3 { font-family: var(--ab-font-display); font-size: 16px; line-height: 24px; font-weight: 600; color: var(--ab-marino-900); }
+.pm-modal .form-section.is-card header p { font-size: 13px; color: var(--ab-gris-500); }
+/* Dentro de la tarjeta: dos campos por fila cuando hay espacio; lo marcado como ancho ocupa la fila */
+.pm-modal .form-grid { gap: var(--ab-espacio-4); }
+
+/* ---------- Campos: 46 px, gris-100, borde gris-200, esquinas de 12, texto de 15 px ---------- */
+.pm-modal .fld-box { min-height: 46px; padding: 0 var(--ab-espacio-3); border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-gris-100); }
+.pm-modal .fld-box input, .pm-modal .fld-box select, .pm-modal .fld-box textarea { height: 44px; font-size: 15px; color: var(--ab-marino-900); }
+/* Foco: borde azul de 2 px (el segundo pixel va por dentro para que el campo no se mueva) */
+.pm-modal .fld-box:focus-within { border-color: var(--ab-azul-500); box-shadow: inset 0 0 0 1px var(--ab-azul-500); background: var(--ab-blanco); }
+.pm-modal .fld.is-invalid .fld-box { border-color: var(--ab-error-600); }
+.pm-modal .fld.is-invalid .fld-box:focus-within { box-shadow: inset 0 0 0 1px var(--ab-error-600); }
+.pm-modal .fld-error { font-size: 12px; color: var(--ab-error-600); }
+/* Un nombre largo se corta con puntos suspensivos y no empuja el diseño */
+.pm-modal .fld-box input { min-width: 0; text-overflow: ellipsis; }
+
+/* ---------- Datos del producto ---------- */
+.pm-top { display: flex; gap: 20px; align-items: flex-start; min-width: 0; }
+.pm-top .photo-pick { width: 120px; height: 120px; }
+.pm-top .photo-pick-change { width: 120px; }
+.pm-top-fields { flex: 1; display: flex; flex-direction: column; gap: var(--ab-espacio-3); min-width: 0; }
+.pm-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 0; }
+.pm-price strong { font-family: var(--ab-font-display); font-size: 22px; line-height: 28px; font-weight: 700; color: var(--ab-marino-900); font-variant-numeric: tabular-nums; }
+.pm-price span { font-size: 14px; color: var(--ab-gris-500); }
+@media (max-width: 479px) {
+  .pm-top { flex-direction: column; }
+  .pm-top-fields { width: 100%; }
+}
+
+/* «Escanear» dentro del campo del código, a la derecha */
+.pm-barcode .fld-box { padding-right: 4px; }
+.pm-barcode .fld-adorn { display: flex; }
+.pm-scan { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 var(--ab-espacio-3); border: 0; border-radius: var(--ab-radio-sm); background: var(--ab-azul-500); color: var(--ab-blanco); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.pm-scan:hover { background: var(--ab-azul-600); }
+.pm-scan ion-icon { font-size: 18px; }
+/* El botón mide 38 px dentro del campo de 46; su área táctil llega a 44 */
+.pm-scan { position: relative; }
+.pm-scan::after { content: ''; position: absolute; inset: -3px 0; }
+
+.pm-saletype { display: flex; flex-direction: column; gap: var(--ab-espacio-2); }
+
+/* ---------- Precio e inventario ---------- */
+.pm-margin { margin: 0; padding: 10px var(--ab-espacio-3); border-radius: var(--ab-radio-md); font-size: 14px; line-height: 20px; font-weight: 600; }
+.pm-margin.is-ok { background: #e3f3e8; color: var(--ab-exito-800); }
+.pm-margin.is-bad { background: var(--ab-error-100); color: var(--ab-error-700); }
+
+/* ---------- Pide y recoge ---------- */
+.pm-modal .fld-switch { min-height: 64px; padding: var(--ab-espacio-3) var(--ab-espacio-4); border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-blanco); }
+.pm-modal .fld-switch strong { font-size: 15px; font-weight: 600; color: var(--ab-marino-900); }
+.pm-modal .fld-switch small { font-size: 13px; color: var(--ab-gris-500); }
+.pm-description .fld-box textarea { min-height: 92px; padding: var(--ab-espacio-3); line-height: 22px; }
+.pm-description .fld-hint { justify-content: space-between; gap: var(--ab-espacio-3); }
+.pm-count { flex: none; font-variant-numeric: tabular-nums; }
+
+/* ---------- Pie: Borrar a la izquierda; Cancelar y Guardar a la derecha ---------- */
+.pm-foot .pmodal-delete { --padding-start: var(--ab-espacio-2); --padding-end: var(--ab-espacio-3); }
+.pm-save { min-width: 180px; }
+@media (max-width: 599px) { .pm-save { min-width: 0; } }
+
+/* ---------- Paso del código (antes del formulario) ---------- */
 .pm-lookup { display: flex; flex-direction: column; gap: 14px; }
 .pm-lookup .form-intro { margin: 0; }
 .pm-code .fld-box { min-height: 58px; }
 .pm-code input { height: 56px; font-size: 1.25rem; font-weight: 650; letter-spacing: 0.05em; font-variant-numeric: tabular-nums; }
 .pm-code .fld-icon { font-size: 24px; }
-.pm-internal { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 1.5px dashed var(--t-border-strong); border-radius: var(--t-radius-sm); background: var(--t-surface); color: var(--t-ink); font: inherit; text-align: left; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-.pm-internal:hover { border-color: var(--ion-color-primary); background: var(--t-primary-bg); }
-.pm-internal ion-icon { flex: none; font-size: 24px; color: var(--ion-color-primary); }
+.pm-internal { display: flex; align-items: center; gap: 12px; width: 100%; min-height: var(--ab-toque-min); padding: 12px 14px; border: 1.5px dashed var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-blanco); color: var(--ab-marino-900); font: inherit; text-align: left; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.pm-internal:hover { border-color: var(--ab-azul-500); background: var(--ab-azul-100); }
+.pm-internal ion-icon { flex: none; font-size: 24px; color: var(--ab-azul-500); }
 .pm-internal span { display: flex; flex-direction: column; line-height: 1.3; }
-.pm-internal small { font-size: 0.82rem; color: var(--t-muted); }
-
-/* Paso del código: ícono grande y pregunta clara */
+.pm-internal small { font-size: 13px; color: var(--ab-gris-500); }
 .pm-hero { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 0 4px; text-align: center; }
-.pm-hero-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; background: var(--t-brand-gradient); color: #fff; font-size: 32px; box-shadow: var(--t-shadow-lift); }
-.pm-hero h2 { margin: 6px 0 0; font-size: 1.25rem; font-weight: 800; color: var(--t-ink); }
-.pm-hero p { margin: 0; max-width: 380px; font-size: 0.92rem; color: var(--t-muted); }
-.pm-or { display: flex; align-items: center; gap: 10px; color: var(--t-muted); font-size: 0.82rem; }
-.pm-or::before, .pm-or::after { content: ''; flex: 1; height: 1px; background: var(--t-border); }
+.pm-hero-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: var(--ab-radio-xl); background: var(--ab-azul-500); color: var(--ab-blanco); font-size: 32px; }
+.pm-hero h2 { margin: 6px 0 0; font-family: var(--ab-font-display); font-size: 18px; font-weight: 500; color: var(--ab-marino-900); }
+.pm-hero p { margin: 0; max-width: 380px; font-size: 14px; color: var(--ab-gris-700); }
+.pm-or { display: flex; align-items: center; gap: 10px; color: var(--ab-gris-500); font-size: 13px; }
+.pm-or::before, .pm-or::after { content: ''; flex: 1; height: 1px; background: var(--ab-gris-200); }
 
-/* Encabezado del formulario: foto, nombre y cómo se verá el precio */
-.pm-head { padding: 14px; border-radius: var(--t-radius); background: var(--t-surface-2); }
-.pm-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 0.88rem; color: var(--t-muted); }
-.pm-preview strong { font-size: 1.3rem; font-weight: 800; color: var(--t-ink); font-variant-numeric: tabular-nums; }
-.pm-chip { padding: 2px 10px; border-radius: 999px; background: var(--t-surface); border: 1px solid var(--t-border); font-size: 0.8rem; font-weight: 650; color: var(--t-ink); }
-.pm-label { display: block; margin-bottom: 8px; font-size: 0.88rem; font-weight: 650; color: var(--t-ink); }
-.pm-form { gap: 14px; }
-.pm-save { min-width: 200px; font-weight: 750; }
+/* ---------- Avisos y movimientos ---------- */
+.pm-sync { margin: 0; padding: 10px var(--ab-espacio-3); border-radius: var(--ab-radio-md); font-size: 14px; font-weight: 600; line-height: 20px; overflow-wrap: anywhere; }
+.pm-sync.is-pendiente { background: var(--ab-ambar-100); color: var(--ab-ambar-900); }
 
-.pm-history { padding: 12px 14px; border: 1px solid var(--t-border); border-radius: var(--t-radius); background: var(--t-surface-2); align-self: start; }
-.pm-history h3 { margin: 0 0 6px; font-size: 0.86rem; font-weight: 750; }
-.pm-history p { margin: 4px 0; font-size: 0.86rem; }
 .pm-history ul { list-style: none; margin: 0; padding: 0; }
+.pm-history p { margin: 0; font-size: 14px; }
 .pm-history li { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
-.pm-history li + li { border-top: 1px solid var(--t-border); }
-.pm-move-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; font-size: 15px; flex-shrink: 0; }
-.pm-move-text { flex: 1; display: flex; flex-direction: column; font-size: 0.76rem; min-width: 0; }
-.pm-move-text strong { font-size: 0.86rem; }
-.pm-move-qty { font-weight: 800; font-variant-numeric: tabular-nums; }
-.pm-move-qty.is-in { color: var(--ion-color-success-shade); }
-.pm-move-qty.is-out { color: var(--ion-color-danger); }
-.type-venta { background: var(--t-danger-bg); color: var(--ion-color-danger); }
-.type-entrada, .type-alta { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
-.type-ajuste { background: var(--t-warning-bg); color: var(--t-warning-text); }
-@media (max-width: 599px) {
-  .pm-head { align-items: flex-start; }
-  .photo-pick { width: 84px; height: 84px; }
-  .pm-history { order: 2; }
-}
-
+.pm-history li + li { border-top: 1px solid var(--ab-gris-200); }
+.pm-move-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--ab-radio-sm); font-size: 15px; flex-shrink: 0; }
+.pm-move-text { flex: 1; display: flex; flex-direction: column; font-size: 12px; min-width: 0; }
+.pm-move-text strong { font-size: 14px; }
+.pm-move-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pm-move-qty.is-in { color: var(--ab-exito-800); }
+.pm-move-qty.is-out { color: var(--ab-error-700); }
+.type-venta { background: var(--ab-error-100); color: var(--ab-error-700); }
+.type-entrada, .type-alta { background: var(--ab-exito-100); color: var(--ab-exito-800); }
+.type-ajuste { background: var(--ab-ambar-100); color: var(--ab-ambar-900); }

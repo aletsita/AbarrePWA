@@ -9,10 +9,11 @@ export type OrderStatus = 'pendiente' | 'preparando' | 'listo' | 'entregado' | '
 // Etapas en orden (cancelado no es una etapa: sale de cualquiera antes de entregado)
 export const ORDER_STATUSES: OrderStatus[] = ['pendiente', 'preparando', 'listo', 'entregado'];
 
+// Nombres de «Estados de un pedido» (marca/README)
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pendiente: 'Pendiente',
-  preparando: 'Preparando',
-  listo: 'Listo para recoger',
+  preparando: 'Haciendo',
+  listo: 'Pedido listo',
   entregado: 'Entregado',
   cancelado: 'Cancelado',
 };
@@ -57,7 +58,7 @@ export function orderNoticeText(status: OrderStatus, folio: string) {
     case 'listo':
       return `Tu pedido ${folio} está listo para recoger`;
     case 'entregado':
-      return `Pedido ${folio} entregado. ¡Gracias!`;
+      return `Pedido ${folio} entregado`;
     case 'cancelado':
       return `La tienda canceló tu pedido ${folio}`;
   }

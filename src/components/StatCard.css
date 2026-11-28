@@ -19,7 +19,7 @@
 .stat-card.is-click:hover { border-color: var(--t-border-strong); box-shadow: var(--t-shadow-lift); transform: translateY(-1px); }
 .stat-card.is-active { border-color: var(--stat-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--stat-color) 16%, transparent); }
 .stat-head { display: flex; align-items: center; gap: 10px; color: var(--t-muted); }
-.stat-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: color-mix(in srgb, var(--stat-color) 13%, var(--t-surface)); color: var(--stat-color); font-size: 18px; }
+.stat-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: var(--ab-radio-md); background: color-mix(in srgb, var(--stat-color) 13%, var(--t-surface)); color: var(--stat-color); font-size: 18px; }
 .stat-label { font-size: 0.82rem; font-weight: 650; }
 .stat-value { font-size: 1.75rem; font-weight: 750; line-height: 1.1; letter-spacing: -0.03em; color: var(--t-ink); }
 .stat-hint { font-size: 0.76rem; color: var(--t-muted); }
@@ -30,7 +30,7 @@
 .tone-danger { --stat-color: var(--ion-color-danger); }
 @media (max-width: 599px) {
   .stat-card { padding: 13px 14px; gap: 5px; }
-  .stat-icon { width: 28px; height: 28px; border-radius: 8px; font-size: 15px; }
+  .stat-icon { width: 28px; height: 28px; border-radius: var(--ab-radio-sm); font-size: 15px; }
   .stat-label { font-size: 0.74rem; line-height: 1.2; }
   .stat-value { font-size: 1.3rem; }
   .stat-hint { font-size: 0.7rem; }

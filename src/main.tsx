@@ -11,13 +11,19 @@ import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
 
 import '@fontsource-variable/inter';
+// Poppins para títulos, precios y el nombre «Abarré»
+import '@fontsource/poppins/latin-500.css';
+import '@fontsource/poppins/latin-600.css';
+import '@fontsource/poppins/latin-700.css';
 import './theme/variables.css';
 import './theme/global.css';
 
 import App from './App';
 import { initTheme } from './lib/theme';
+import { installModalStack } from './components/modalStack';
 
 initTheme();
+installModalStack();
 
 registerSW({ immediate: true });
 

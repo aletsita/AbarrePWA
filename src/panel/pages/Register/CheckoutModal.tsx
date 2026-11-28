@@ -1,24 +1,27 @@
 import { qtyText, roundQty } from '../../../domain/weight';
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar, useIonRouter } from '@ionic/react';
+import { IonButton, IonIcon, IonSpinner, useIonRouter } from '@ionic/react';
 import {
+  alertCircleOutline,
+  arrowBackOutline,
   bookOutline,
   cardOutline,
+  cartOutline,
   cashOutline,
   checkmarkCircle,
   checkmarkDone,
-  closeOutline,
+  lockClosedOutline,
   personAddOutline,
   swapHorizontalOutline,
 } from 'ionicons/icons';
-import { useState } from 'react';
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { availableCredit, initials, money, type CashMethod, type PaymentMethod } from '../../../data/models';
 import { PICKUP_METHODS } from '../../../data/pickup';
 import { piecesLabel, shortfallText, type Shortfall } from '../../../domain/stock';
-import { useAppAlert } from '../../../components/AppAlert';
-import { Notice } from '../../../components/Notice';
+import { IsotipoMark } from '../../../components/IsotipoMark';
 import { CustomerPicker } from '../Customers/CustomerPicker';
 import './CheckoutModal.css';
+import { PanelModal } from '../../../components/PanelModal';
 
 const METHODS: { id: PaymentMethod; label: string; hint: string; icon: string }[] = [
   { id: 'efectivo', label: 'Efectivo', hint: 'Calcula el cambio', icon: cashOutline },
@@ -26,6 +29,24 @@ const METHODS: { id: PaymentMethod; label: string; hint: string; icon: string }[
   { id: 'transferencia', label: 'Transferencia', hint: 'A tu cuenta', icon: swapHorizontalOutline },
   { id: 'credito', label: 'A crédito', hint: 'Se fía al cliente', icon: bookOutline },
 ];
+
+// Texto de apoyo de los métodos sin monto que capturar
+const METHOD_HELP: Partial<Record<PaymentMethod, string>> = {
+  tarjeta: 'Cobra en la terminal y confirma',
+  transferencia: 'Confirma que recibiste la transferencia',
+  credito: 'Se registrará como saldo a crédito del cliente',
+};
+
+// Atajos de billete: los primeros tres que cubren la cuenta, entre billetes comunes y el total redondeado hacia arriba
+const BILLS = [50, 100, 200, 500, 1000];
+function quickAmounts(total: number) {
+  const up = (step: number) => Math.ceil(total / step) * step;
+  const options = new Set([...BILLS, up(100), up(500), up(1000), up(1000) + 1000]);
+  return [...options].filter((v) => v > total + 0.005).sort((a, b) => a - b).slice(0, 3);
+}
+
+// Solo números y un punto decimal
+const decimalText = (raw: string) => raw.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
 
 // Pide y recoge: cobrar un pedido en lugar de la cuenta abierta (sin crédito)
 export interface OrderCharge {
@@ -50,12 +71,13 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
   const [upfrontText, setUpfrontText] = useState('');
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const showAlert = useAppAlert();
+  // Por qué no se cobró (lo dice el servidor); se muestra dentro del modal
+  const [error, setError] = useState<ReactNode>();
 
   const customer = customers.find((c) => c.id === account.customerId);
   const paid = Number(paidText) || 0;
   const change = paid - ticketTotal;
-  const quick = [50, 100, 200, 500, 1000].filter((v) => v > ticketTotal).slice(0, 3);
+  const quick = quickAmounts(ticketTotal);
 
   // A crédito: lo que no se abona ahora se carga a la cuenta del cliente
   const upfront = Math.min(Number(upfrontText) || 0, ticketTotal);
@@ -65,26 +87,18 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
 
   const canConfirm = shortages.length === 0 && (method === 'efectivo' ? paid >= ticketTotal : method === 'credito' ? creditOk : true);
 
+  // Al cambiar el pago, el error del intento anterior ya no aplica
+  useEffect(() => setError(undefined), [method, paidText, upfrontText, account.customerId]);
+
   // Lo que respondió el servidor si no dejó cobrar (por ejemplo, otra caja se llevó la última pieza)
   const refused = (message: string, shortages?: Shortfall[]) =>
-    void showAlert({
-      tone: 'error',
-      title: 'No se cobró',
-      message: shortages?.length ? (
-        <>
-          <p>{shortfallText(shortages)}</p>
-          <p>Quita o ajusta esas piezas y vuelve a cobrar.</p>
-        </>
-      ) : (
-        message
-      ),
-      primary: 'Entendido',
-    });
+    setError(shortages?.length ? <>{shortfallText(shortages)}. Quita o ajusta esas piezas y vuelve a cobrar.</> : message);
 
   const reset = () => {
     setPaidText('');
     setUpfrontText('');
     setMethod('efectivo');
+    setError(undefined);
   };
 
   const confirm = async () => {
@@ -106,183 +120,220 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
     router.push('/panel/venta-completada', 'forward');
   };
 
+  // Enter cobra desde los campos y desde la forma de pago; los demás botones conservan su Enter
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    if ((e.target as HTMLElement).closest('button:not([role=radio]), a, ion-button')) return;
+    e.preventDefault();
+    void confirm();
+  };
+
+  // Por qué el botón de cobrar está apagado
+  const why =
+    shortages.length > 0
+      ? 'Falta inventario'
+      : method === 'efectivo' && paid < ticketTotal
+        ? `El monto debe cubrir ${money(ticketTotal)}`
+        : method === 'credito' && !customer
+          ? 'Elige el cliente'
+          : method === 'credito' && !creditOk
+            ? 'No le alcanza el crédito'
+            : '';
+
+  const cashState = paid === 0 ? 'is-idle' : change < 0 ? 'is-short' : 'is-ok';
+  const methodInfo = METHODS.find((m) => m.id === method)!;
+
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={() => { onClose(); reset(); }} className="pmodal co-modal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>{order ? `Cobrar pedido ${order.folio}` : 'Cobrar'}</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar">
-              <IonIcon slot="icon-only" icon={closeOutline} />
-            </IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
-
-      <div className="pmodal-body co-body">
-        <section className="co-total" aria-label="Total a cobrar">
-          <span className="co-total-label">{order ? `Pedido ${order.folio}` : account.name}</span>
-          <strong className="money">{money(ticketTotal)}</strong>
-          <span className="co-total-meta">
-            {ticketCount} {ticketCount === 1 ? 'artículo' : 'artículos'}
-            {customer && !order && <> · {customer.name}</>}
-          </span>
-        </section>
-
-        {shortages.length > 0 && (
-          <Notice tone="error" title="No se puede cobrar: falta inventario">
-            <ul>
-              {shortages.map((s) => (
-                <li key={s.product.id}>
-                  {s.product.name}: en la cuenta {qtyText(s.qty, s.product.saleType)}, disponibles {qtyText(s.available, s.product.saleType)} (faltan{' '}
-                  {piecesLabel(roundQty(s.qty - s.available), s.product.saleType)})
-                </li>
-              ))}
-            </ul>
-            <p>Ajusta las cantidades en la cuenta. Lo demás ya está apartado por pedidos o en otras cuentas.</p>
-          </Notice>
-        )}
-
-        <h3 className="co-step">¿Cómo paga?</h3>
-        <div className={`co-methods ${order ? 'is-three' : ''}`} role="radiogroup" aria-label="Forma de pago">
-          {methods.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="radio"
-              aria-checked={method === m.id}
-              className={`co-method ${method === m.id ? 'is-active' : ''}`}
-              onClick={() => setMethod(m.id)}
-            >
-              <span className="co-method-icon">
-                <IonIcon icon={m.icon} />
+    <PanelModal
+      isOpen={isOpen}
+      onClose={() => { onClose(); reset(); }}
+      busy={busy}
+      size="wide"
+      className="co-modal"
+      title={
+        <>
+          Cobrar
+          <span className="co-chip">{order ? `Pedido ${order.folio}` : customer ? `${account.name} · ${customer.name}` : account.name}</span>
+        </>
+      }
+    >
+      <form className="co-form" onSubmit={(e) => e.preventDefault()} onKeyDown={onKeyDown}>
+        <div className="pmodal-body co-body">
+          <div className="co-col">
+            <section className="co-total" aria-label="Total a cobrar">
+              <IsotipoMark className="co-total-mark" />
+              <span className="co-total-top">
+                <span>Total a cobrar</span>
+                <span className="co-count">
+                  <IonIcon icon={cartOutline} aria-hidden="true" />
+                  {ticketCount} {ticketCount === 1 ? 'artículo' : 'artículos'}
+                </span>
               </span>
-              <span className="co-method-text">
-                <strong>{m.label}</strong>
-                <small>{m.hint}</small>
-              </span>
-              {method === m.id && <IonIcon className="co-check" icon={checkmarkCircle} />}
-            </button>
-          ))}
+              <strong className="money">{money(ticketTotal)}</strong>
+            </section>
+
+            <div>
+              <h3 className="co-step" id="co-how">¿Cómo paga?</h3>
+              <div className="co-methods" role="radiogroup" aria-labelledby="co-how">
+                {methods.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={method === m.id}
+                    className={`co-method ${method === m.id ? 'is-active' : ''}`}
+                    onClick={() => setMethod(m.id)}
+                  >
+                    <span className="co-method-icon">
+                      <IonIcon icon={m.icon} aria-hidden="true" />
+                    </span>
+                    <span className="co-method-text">
+                      <strong>{m.label}</strong>
+                      <small>{m.hint}</small>
+                    </span>
+                    {method === m.id && <IonIcon className="co-check" icon={checkmarkCircle} aria-hidden="true" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="co-col">
+            {method === 'efectivo' ? (
+              <>
+                <div>
+                  <label className="co-step" htmlFor="co-paid">¿Con cuánto paga?</label>
+                  <div className={`co-input ${paidText ? 'has-value' : ''}`}>
+                    <span aria-hidden="true">$</span>
+                    <input
+                      id="co-paid"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="0.00"
+                      value={paidText}
+                      autoFocus
+                      onChange={(e) => setPaidText(decimalText(e.target.value))}
+                    />
+                  </div>
+                </div>
+                <div className="co-quick" role="group" aria-label="Montos rápidos">
+                  <button type="button" className={paidText && paid === ticketTotal ? 'is-active' : ''} aria-pressed={!!paidText && paid === ticketTotal} onClick={() => setPaidText(String(ticketTotal))}>
+                    Exacto
+                  </button>
+                  {quick.map((v) => (
+                    <button key={v} type="button" className={paid === v ? 'is-active' : ''} aria-pressed={paid === v} onClick={() => setPaidText(String(v))}>
+                      {money(v).replace('.00', '')}
+                    </button>
+                  ))}
+                </div>
+                <div className={`co-change ${cashState}`} aria-live="polite">
+                  <span className="co-change-text">
+                    <strong>{cashState === 'is-short' ? 'Falta' : cashState === 'is-ok' && Math.abs(change) < 0.005 ? 'Pago exacto' : 'Cambio'}</strong>
+                    <small>
+                      {cashState === 'is-idle' ? 'Escribe lo que te da el cliente' : cashState === 'is-short' ? 'Aún no alcanza para cubrir la cuenta' : 'Entrega al cliente'}
+                    </small>
+                  </span>
+                  <strong className="money">{money(cashState === 'is-idle' ? 0 : Math.abs(change))}</strong>
+                </div>
+              </>
+            ) : (
+              <section className="co-other">
+                <span className="co-other-icon"><IonIcon icon={methodInfo.icon} aria-hidden="true" /></span>
+                <strong className="co-other-title">{methodInfo.label} · <span className="money">{money(ticketTotal)}</span></strong>
+                <p>{METHOD_HELP[method]}</p>
+
+                {method === 'credito' && (
+                  <div className="co-credit">
+                    {customer ? (
+                      <div className="co-customer">
+                        <span className="cu-avatar">{initials(customer.name)}</span>
+                        <span className="co-customer-text">
+                          <strong>{customer.name}</strong>
+                          <small>Debe {money(customer.balance)} · disponible {money(available)} de {money(customer.creditLimit)}</small>
+                        </span>
+                        <IonButton fill="clear" size="small" onClick={() => setPicking(true)}>Cambiar</IonButton>
+                      </div>
+                    ) : (
+                      <button type="button" className="co-pick" onClick={() => setPicking(true)}>
+                        <IonIcon icon={personAddOutline} aria-hidden="true" />
+                        <span>
+                          <strong>Elige al cliente</strong>
+                          <small>Obligatorio: la venta queda en su cuenta y la paga después</small>
+                        </span>
+                      </button>
+                    )}
+
+                    <label className="co-upfront" htmlFor="co-upfront">
+                      <span>Abona ahora en efectivo <small>(opcional)</small></span>
+                      <span className={`co-input is-small ${upfrontText ? 'has-value' : ''}`}>
+                        <span aria-hidden="true">$</span>
+                        <input
+                          id="co-upfront"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          placeholder="0.00"
+                          value={upfrontText}
+                          onChange={(e) => setUpfrontText(decimalText(e.target.value))}
+                        />
+                      </span>
+                    </label>
+                    {customer && (
+                      <div className={`co-credit-sum ${creditOk ? 'is-ok' : 'is-short'}`} aria-live="polite">
+                        <span>
+                          <strong>{creditOk ? 'Queda a su cuenta' : 'Excede su crédito por'}</strong>
+                          <small>
+                            {creditOk
+                              ? `Después debe ${money(customer.balance + charged)} y le quedan ${money(available - charged)} de crédito.`
+                              : 'Pide un abono mayor, cobra de otra forma o sube su límite en Clientes.'}
+                          </small>
+                        </span>
+                        <strong className="money">{money(creditOk ? charged : charged - available)}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </div>
 
-        {method === 'efectivo' && (
-          <section className="co-cash">
-            <label className="co-step" htmlFor="co-paid">¿Con cuánto paga?</label>
-            <div className="co-input">
-              <span>$</span>
-              <input
-                id="co-paid"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={paidText}
-                autoFocus
-                onChange={(e) => setPaidText(e.target.value.replace(/[^\d.]/g, ''))}
-                onKeyDown={(e) => e.key === 'Enter' && void confirm()}
-              />
-            </div>
-            <div className="co-quick">
-              <button type="button" className={paid === ticketTotal ? 'is-active' : ''} onClick={() => setPaidText(String(ticketTotal))}>
-                Exacto
-              </button>
-              {quick.map((v) => (
-                <button key={v} type="button" className={paid === v ? 'is-active' : ''} onClick={() => setPaidText(String(v))}>
-                  {money(v).replace('.00', '')}
-                </button>
-              ))}
-            </div>
-            <div className={`co-change ${paid === 0 ? 'is-idle' : change >= 0 ? 'is-ok' : 'is-short'}`} aria-live="polite">
-              <span>{paid === 0 ? 'Cambio' : change >= 0 ? 'Entrega de cambio' : 'Le faltan'}</span>
-              <strong className="money">{money(Math.abs(paid === 0 ? 0 : change))}</strong>
-            </div>
-          </section>
-        )}
-
-        {(method === 'tarjeta' || method === 'transferencia') && (
-          <Notice tone="info" title={method === 'tarjeta' ? 'Cobra en la terminal' : 'Espera la transferencia'} className="co-gap">
-            {method === 'tarjeta' ? (
-              <>Cobra <strong>{money(ticketTotal)}</strong> en la terminal y confirma cuando el pago sea aprobado.</>
+        {(error || shortages.length > 0) && (
+          <div className="co-error" role="alert">
+            <IonIcon icon={alertCircleOutline} aria-hidden="true" />
+            {error ? (
+              <span><strong>No se cobró.</strong> {error}</span>
             ) : (
-              <>Confirma cuando veas la transferencia de <strong>{money(ticketTotal)}</strong> en tu banca.</>
+              <span>
+                <strong>No se puede cobrar: falta inventario.</strong>{' '}
+                {shortages
+                  .map((s) => `${s.product.name}: en la cuenta ${qtyText(s.qty, s.product.saleType)}, disponibles ${qtyText(s.available, s.product.saleType)} (faltan ${piecesLabel(roundQty(s.qty - s.available), s.product.saleType)}).`)
+                  .join(' ')}{' '}
+                Ajusta las cantidades en la cuenta; lo demás ya está apartado por pedidos o en otras cuentas.
+              </span>
             )}
-          </Notice>
+          </div>
         )}
 
-        {method === 'credito' && (
-          <section className="co-cash">
-            <h3 className="co-step">¿A quién se le fía?</h3>
-            {customer ? (
-              <div className="co-customer">
-                <span className="cu-avatar">{initials(customer.name)}</span>
-                <span className="co-customer-text">
-                  <strong>{customer.name}</strong>
-                  <small>
-                    Debe {money(customer.balance)} · disponible {money(available)} de {money(customer.creditLimit)}
-                  </small>
-                </span>
-                <IonButton fill="clear" size="small" onClick={() => setPicking(true)}>
-                  Cambiar
-                </IonButton>
-              </div>
-            ) : (
-              <button type="button" className="co-pick" onClick={() => setPicking(true)}>
-                <IonIcon icon={personAddOutline} />
-                <span>
-                  <strong>Elige al cliente</strong>
-                  <small>La venta queda en su cuenta y la paga después</small>
-                </span>
-              </button>
-            )}
-
-            <label className="co-step" htmlFor="co-upfront">
-              Abona ahora en efectivo <span className="co-optional">(opcional)</span>
-            </label>
-            <div className="co-input is-small">
-              <span>$</span>
-              <input
-                id="co-upfront"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={upfrontText}
-                onChange={(e) => setUpfrontText(e.target.value.replace(/[^\d.]/g, ''))}
-                onKeyDown={(e) => e.key === 'Enter' && void confirm()}
-              />
-            </div>
-            {customer && (
-              <div className={`co-change ${creditOk ? 'is-ok' : 'is-short'}`} aria-live="polite">
-                <span>{creditOk ? 'Queda a su cuenta' : 'Excede su crédito por'}</span>
-                <strong className="money">{money(creditOk ? charged : charged - available)}</strong>
-              </div>
-            )}
-            {customer && creditOk && (
-              <p className="co-after">
-                Después de esta compra debe {money(customer.balance + charged)} y le quedan {money(available - charged)} de crédito.
-              </p>
-            )}
-            {customer && !creditOk && (
-              <Notice tone="warning" title="No le alcanza el crédito">
-                Pide un abono mayor, cobra de otra forma o sube su límite en Clientes.
-              </Notice>
-            )}
-          </section>
-        )}
-      </div>
-
-      <div className="pmodal-foot co-foot">
-        <IonButton fill="outline" className="btn-lg" onClick={onClose}>
-          {order ? 'Volver al pedido' : 'Volver a la cuenta'}
-        </IonButton>
-        <IonButton color="success" className="btn-lg co-confirm" disabled={!canConfirm || busy} onClick={() => void confirm()}>
-          <IonIcon slot="start" icon={checkmarkDone} />
-          {busy
-            ? 'Cobrando…'
-            : method === 'credito'
-              ? `Cargar ${money(charged)} a su cuenta`
-              : order
-                ? `Entregar y cobrar ${money(ticketTotal)}`
-                : `Cobrar ${money(ticketTotal)}`}
-        </IonButton>
-      </div>
+        <div className="pmodal-foot co-foot">
+          <IonButton fill="outline" className="co-back" disabled={busy} onClick={onClose}>
+            <IonIcon slot="start" icon={arrowBackOutline} />
+            {order ? 'Volver al pedido' : 'Volver a la cuenta'}
+          </IonButton>
+          <span className="co-foot-end">
+            {why && !busy && <span className="co-why">{why}</span>}
+            <IonButton className="co-confirm" disabled={!canConfirm || busy} onClick={() => void confirm()}>
+              {busy ? <IonSpinner slot="start" name="crescent" /> : <IonIcon slot="start" icon={canConfirm ? checkmarkDone : lockClosedOutline} />}
+              {busy
+                ? 'Cobrando…'
+                : method === 'credito'
+                  ? `Cargar ${money(charged)} a su cuenta`
+                  : order
+                    ? `Entregar y cobrar ${money(ticketTotal)}`
+                    : `Cobrar ${money(ticketTotal)}`}
+            </IonButton>
+          </span>
+        </div>
+      </form>
 
       <CustomerPicker
         isOpen={picking}
@@ -290,6 +341,6 @@ export function CheckoutModal({ isOpen, onClose, order }: { isOpen: boolean; onC
         onClose={() => setPicking(false)}
         onPick={(c) => linkCustomer(account.id, c)}
       />
-    </IonModal>
+    </PanelModal>
   );
 }

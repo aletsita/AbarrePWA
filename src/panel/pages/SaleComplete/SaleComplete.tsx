@@ -77,7 +77,7 @@ export default function SaleComplete() {
           {sale && (
             <aside className="ticket" aria-label="Ticket">
               <header>
-                {ticketConfig.showLogo && <img src="/icons/icon.svg" alt="" width="32" height="32" />}
+                {ticketConfig.showLogo && <img src="/brand/isotipo.svg" alt="" width="32" height="32" />}
                 <strong>{first}</strong>
                 {rest.map((l, i) => <span key={i}>{l}</span>)}
                 <span>RFC {store.rfc}</span>

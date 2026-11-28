@@ -18,9 +18,9 @@
 .login-pitch { max-width: 440px; }
 .login-pitch h2 { margin: 0 0 28px; font-size: 2rem; line-height: 1.2; font-weight: 700; letter-spacing: -0.025em; color: var(--t-ink); }
 .login-pitch ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.login-pitch li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--t-border); font-size: 0.95rem; color: #3b4659; }
+.login-pitch li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--t-border); font-size: 0.95rem; color: var(--ab-gris-700); }
 .login-pitch li:last-child { border-bottom: 1px solid var(--t-border); }
-.login-pitch ion-icon { flex-shrink: 0; width: 20px; height: 20px; padding: 8px; border-radius: 8px; background: var(--t-primary-bg); color: var(--ion-color-primary); }
+.login-pitch ion-icon { flex-shrink: 0; width: 20px; height: 20px; padding: 8px; border-radius: var(--ab-radio-sm); background: var(--t-primary-bg); color: var(--ion-color-primary); }
 .login-legal { margin: 0; font-size: 0.78rem; color: var(--t-muted); }
 
 .login-main { display: flex; flex-direction: column; justify-content: center; padding: calc(env(safe-area-inset-top) + 32px) 16px 32px; }
@@ -41,19 +41,19 @@
   border-radius: var(--t-radius);
   box-shadow: var(--t-shadow-lift);
 }
-.login-seg { --background: var(--t-surface-3); border-radius: 8px; padding: 3px; }
+.login-seg { --background: var(--t-surface-3); border-radius: var(--ab-radio-sm); padding: 3px; }
 .login-seg ion-segment-button {
   --indicator-color: transparent;
   --background-checked: var(--t-surface);
   --color: var(--t-muted);
   --color-checked: var(--t-ink);
-  --border-radius: 6px;
+  --border-radius: var(--ab-radio-sm);
   min-height: 40px;
   text-transform: none;
   font-weight: 600;
   letter-spacing: 0;
 }
-.login-seg ion-segment-button.segment-button-checked { box-shadow: var(--t-shadow); border-radius: 6px; }
+.login-seg ion-segment-button.segment-button-checked { box-shadow: var(--t-shadow); border-radius: var(--ab-radio-sm); }
 .login-link {
   align-self: flex-end;
   margin-top: -6px;
@@ -66,5 +66,5 @@
   font-size: 0.86rem;
   cursor: pointer;
 }
-.login-help { margin: -8px 0 0; padding: 10px 12px; border: 1px solid var(--t-border); border-radius: 8px; background: var(--t-surface-2); color: var(--t-ink); font-size: 0.86rem; line-height: 1.45; }
+.login-help { margin: -8px 0 0; padding: 10px 12px; border: 1px solid var(--t-border); border-radius: var(--ab-radio-sm); background: var(--t-surface-2); color: var(--t-ink); font-size: 0.86rem; line-height: 1.45; }
 .login-foot { margin-top: 20px; text-align: center; color: var(--t-muted); font-size: 0.84rem; line-height: 1.45; }

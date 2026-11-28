@@ -61,7 +61,7 @@ export default function PanelLayout() {
   const NAV = [
     { href: '/panel/caja', label: 'Caja', icon: calculatorOutline, badge: openItems, tone: 'secondary' },
     // Contador: pedidos pendientes de atender (o, si no hay, los que faltan por entregar)
-    { href: '/panel/pedidos', label: 'Pedidos', icon: bagHandleOutline, badge: newOrders || openOrders, tone: newOrders ? 'danger' : 'medium' },
+    { href: '/panel/pedidos', label: 'Pedidos', icon: bagHandleOutline, badge: newOrders || openOrders, tone: 'danger' },
     { href: '/panel/inventario', label: 'Inventario', icon: cubeOutline, badge: low, tone: 'warning' },
     { href: '/panel/ventas', label: 'Ventas', icon: receiptOutline, badge: unsynced, tone: 'warning' },
     { href: '/panel/corte', label: 'Corte del día', short: 'Corte', icon: walletOutline },

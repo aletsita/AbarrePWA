@@ -1,11 +1,11 @@
-import { useIonToast } from '@ionic/react';
 import { useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAviso } from '../components/Aviso';
 
 // Aviso cuando sube lo que se hizo sin internet. Lo que el servidor no aceptó se muestra y ya no se reintenta.
 export function SyncToaster() {
   const { lastUpload } = useApp();
-  const [toast] = useIonToast();
+  const toast = useAviso();
 
   useEffect(() => {
     if (!lastUpload) return;

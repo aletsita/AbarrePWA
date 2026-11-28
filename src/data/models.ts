@@ -193,6 +193,14 @@ export const CATEGORIES = [
   'Abarrotes', 'Bebidas', 'Botanas', 'Lácteos', 'Panadería', 'Tortillería', 'Limpieza', 'Galletas', 'Enlatados', 'Otros',
 ];
 
+// Las de siempre más las propias que ya usan los productos (una categoría nueva es solo el nombre en el producto)
+export function categoryList(products: { category: string }[], extra: string[] = []) {
+  const own = [...products.map((p) => p.category), ...extra].map((c) => c.trim()).filter(Boolean);
+  const known = new Set(CATEGORIES.map((c) => c.toLocaleLowerCase('es')));
+  const added = [...new Map(own.filter((c) => !known.has(c.toLocaleLowerCase('es'))).map((c) => [c.toLocaleLowerCase('es'), c])).values()];
+  return [...CATEGORIES.filter((c) => c !== 'Otros'), ...added.sort((a, b) => a.localeCompare(b, 'es')), 'Otros'];
+}
+
 const CATEGORY_COLOR: Record<string, string> = {
   Abarrotes: '#7a5232',
   Bebidas: '#1f5a80',

@@ -1,15 +1,15 @@
 {
   "id": "./",
-  "name": "Abarré · Punto de venta",
+  "name": "Abarré",
   "short_name": "Abarré",
-  "description": "Punto de venta e inventario para tu tiendita. El celular escanea y la caja cobra.",
+  "description": "Punto de venta e inventario para tu tienda local. El celular escanea y la caja cobra.",
   "lang": "es-MX",
   "start_url": "./panel/caja",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "theme_color": "#ffffff",
-  "background_color": "#f5f7fa",
+  "theme_color": "#123F8C",
+  "background_color": "#123F8C",
   "categories": [
     "business",
     "productivity"

@@ -1,8 +1,11 @@
-.sale-type { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.sale-type button { cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 72px; padding: 12px 14px; border: 1.5px solid var(--t-border-strong); border-radius: var(--t-radius-sm); background: var(--t-surface); color: var(--t-ink); font: inherit; text-align: left; }
-.sale-type button ion-icon { font-size: 22px; color: var(--t-muted); margin-bottom: 4px; }
-.sale-type button strong { font-size: 1rem; }
-.sale-type button span { font-size: 0.85rem; color: var(--t-muted); }
-.sale-type button.is-active { border-color: var(--ion-color-primary); background: var(--t-primary-bg); }
-.sale-type button.is-active ion-icon { color: var(--ion-color-primary); }
-.sale-type button:focus-visible { outline: 3px solid var(--ion-color-primary); outline-offset: 2px; }
+/* Se vende por: dos opciones lado a lado; la elegida con borde azul de 2 px y fondo azul-100 */
+.sale-type { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ab-espacio-3); }
+.sale-type button { cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 72px; padding: var(--ab-espacio-3) 14px; border: 1px solid var(--ab-gris-200); border-radius: var(--ab-radio-md); background: var(--ab-blanco); color: var(--ab-marino-900); font: inherit; text-align: left; transition: border-color 0.15s, background 0.15s; }
+.sale-type button:hover { border-color: var(--ab-gris-500); }
+.sale-type button ion-icon { font-size: 22px; color: var(--ab-gris-700); margin-bottom: 4px; }
+.sale-type button strong { font-size: 15px; font-weight: 600; }
+.sale-type button span { font-size: 13px; color: var(--ab-gris-500); }
+/* El segundo pixel del borde va por dentro (sombra) para que la tarjeta no brinque al elegirla */
+.sale-type button.is-active { border-color: var(--ab-azul-500); box-shadow: inset 0 0 0 1px var(--ab-azul-500); background: var(--ab-azul-100); }
+.sale-type button.is-active ion-icon { color: var(--ab-azul-500); }
+.sale-type button:focus-visible { outline: 2px solid var(--ab-azul-500); outline-offset: 2px; }

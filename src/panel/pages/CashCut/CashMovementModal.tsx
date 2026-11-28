@@ -1,8 +1,9 @@
-import { IonButton, IonButtons, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/react';
-import { arrowDownCircleOutline, arrowUpCircleOutline, basketOutline, checkmarkCircle, closeOutline, saveOutline } from 'ionicons/icons';
+import { IonButton, IonIcon } from '@ionic/react';
+import { arrowDownCircleOutline, arrowUpCircleOutline, basketOutline, checkmarkCircle, saveOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { MoneyField, TextField } from '../../../components/Form';
 import type { CashMovementType } from '../../../data/models';
+import { PanelModal, PanelModalCancel } from '../../../components/PanelModal';
 
 const TYPES: { id: CashMovementType; label: string; hint: string; icon: string; example: string }[] = [
   { id: 'entrada', label: 'Entrada', hint: 'Dinero que se mete al cajón', icon: arrowDownCircleOutline, example: 'Ej. Cambio adicional' },
@@ -29,6 +30,7 @@ export function CashMovementModal({ isOpen, onClose, onSave }: Props) {
   }, [isOpen]);
 
   const valid = Number(amount) > 0 && note.trim().length > 1;
+  const dirty = type !== 'gasto' || amount !== '' || note.trim() !== '';
 
   const save = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -38,15 +40,7 @@ export function CashMovementModal({ isOpen, onClose, onSave }: Props) {
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="pmodal">
-      <IonHeader className="ion-no-border">
-        <IonToolbar>
-          <IonTitle>Movimiento de efectivo</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose} aria-label="Cerrar"><IonIcon slot="icon-only" icon={closeOutline} /></IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
+    <PanelModal isOpen={isOpen} onClose={onClose} dirty={dirty} size="form" title="Movimiento de efectivo">
       <form className="pmodal-body form-stack" onSubmit={save}>
         <div className="fld">
           <span className="fld-label">¿Qué tipo de movimiento es?</span>
@@ -68,12 +62,12 @@ export function CashMovementModal({ isOpen, onClose, onSave }: Props) {
         </div>
       </form>
       <div className="pmodal-foot">
-        <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
+        <PanelModalCancel className="btn-lg">Cancelar</PanelModalCancel>
         <IonButton className="btn-lg" disabled={!valid} onClick={() => save()}>
           <IonIcon slot="start" icon={saveOutline} />
           Registrar
         </IonButton>
       </div>
-    </IonModal>
+    </PanelModal>
   );
 }
