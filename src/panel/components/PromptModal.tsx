@@ -2,7 +2,7 @@ import { IonButton, IonIcon } from '@ionic/react';
 import { checkmarkOutline } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { MoneyField, TextField } from '../../components/Form';
-import { PanelModal } from '../../components/PanelModal';
+import { PanelModal, PanelModalCancel } from '../../components/PanelModal';
 
 interface Props {
   isOpen: boolean;
@@ -26,6 +26,7 @@ export function PromptModal({ isOpen, title, text, label, hint, initial, money, 
   }, [isOpen, initial]);
 
   const valid = value.trim().length > 0;
+  const dirty = value !== initial;
   const save = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!valid) return;
@@ -34,7 +35,7 @@ export function PromptModal({ isOpen, title, text, label, hint, initial, money, 
   };
 
   return (
-    <PanelModal isOpen={isOpen} onClose={onClose} size="form" title={title}>
+    <PanelModal isOpen={isOpen} onClose={onClose} dirty={dirty} size="form" title={title}>
       <form className="pmodal-body" onSubmit={save}>
         {text && <p className="form-intro">{text}</p>}
         {money ? (
@@ -44,7 +45,7 @@ export function PromptModal({ isOpen, title, text, label, hint, initial, money, 
         )}
       </form>
       <div className="pmodal-foot">
-        <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
+        <PanelModalCancel className="btn-lg">Cancelar</PanelModalCancel>
         <IonButton className="btn-lg" disabled={!valid} onClick={() => save()}>
           <IonIcon slot="start" icon={checkmarkOutline} />
           {confirmText}

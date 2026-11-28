@@ -2,17 +2,18 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 12px;
   margin-inline-end: 12px;
-  border-radius: var(--ab-radio-sm);
+  border-radius: var(--ab-radio-full);
   font-size: 0.76rem;
   font-weight: 700;
   white-space: nowrap;
 }
 .conn-badge ion-icon { font-size: 16px; }
-.conn-badge.is-online { background: var(--t-success-bg); color: var(--ion-color-success-shade); }
-.conn-badge.is-offline { background: var(--ion-color-danger); color: var(--ion-color-danger-contrast); }
+/* En línea en verde; sin conexión en ámbar (la caja sigue funcionando, no es un error) */
+.conn-badge.is-online { background: #e3f3e8; color: #166534; }
+.conn-badge.is-offline { background: #fff4d6; color: #7a4b00; box-shadow: inset 0 0 0 1px #f2d48a; }
 
 .offline-bar {
   display: flex;

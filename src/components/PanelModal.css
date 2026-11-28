@@ -1,26 +1,43 @@
 /* Modal único del panel (PanelModal.tsx): 640 px formularios, 760 px detalles, 960 px formularios anchos.
-   Alto máximo 90 vh; encabezado y pie fijos, solo el cuerpo hace scroll. */
+   Alto máximo: lo visible menos 48 px; encabezado y pie fijos, solo el cuerpo hace scroll.
+   En celular (menos de 720 px): hoja inferior (is-m-sheet) o pantalla completa (is-m-full). */
 ion-modal.amodal {
-  --width: min(640px, calc(100% - 32px));
+  --width: min(640px, calc(100% - 48px));
   --height: auto;
-  --max-height: 90vh;
-  --border-radius: var(--ab-radio-xl);
+  --max-height: calc(100dvh - 48px);
+  --border-radius: 24px;
   --background: var(--ab-blanco);
   --box-shadow: var(--ab-sombra-lg);
   --backdrop-opacity: 0.55;
+  /* Alto del teclado en pantalla (PanelModal.tsx lo mide con visualViewport) */
+  --kb: 0px;
 }
 ion-modal.amodal::part(backdrop) { background: var(--ab-marino-900); }
-ion-modal.amodal.is-detail { --width: min(760px, calc(100% - 32px)); }
-ion-modal.amodal.is-wide { --width: min(960px, calc(100% - 32px)); }
+ion-modal.amodal.is-detail { --width: min(760px, calc(100% - 48px)); }
+ion-modal.amodal.is-wide { --width: min(960px, calc(100% - 48px)); }
 /* Encima de otro modal, el de arriba conserva su fondo oscurecido (ver modalStack.ts) */
 ion-modal.amodal[data-stack='arriba'] { --backdrop-opacity: 0.55 !important; }
 
-ion-modal.amodal .ion-page { position: relative; contain: content; display: flex; flex-direction: column; max-height: 90vh; }
+ion-modal.amodal .ion-page { position: relative; contain: content; display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
 /* Formularios que envuelven cuerpo y pie: el scroll sigue siendo solo del cuerpo */
-ion-modal.amodal .ion-page > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+ion-modal.amodal .amodal-main > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 
-/* Encabezado: título Poppins Bold 20 alineado con el contenido (28 px) y cerrar de 44 px */
-.amodal-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ab-espacio-4); padding: 22px 16px 18px 28px; border-bottom: 1px solid var(--ab-gris-200); background: var(--ab-blanco); }
+/* Sin panel lateral, la división no existe para el diseño: encabezado, cuerpo y pie siguen siendo hijos directos de la columna */
+ion-modal.amodal:not(.has-aside) .amodal-split,
+ion-modal.amodal:not(.has-aside) .amodal-main { display: contents; }
+/* Con panel lateral (`aside`): fila con el panel a la izquierda y la columna del modal a la derecha */
+ion-modal.amodal.has-aside .amodal-split { flex: 1 1 auto; display: flex; min-height: 0; }
+ion-modal.amodal.has-aside .amodal-aside { flex: none; display: flex; flex-direction: column; min-height: 0; }
+ion-modal.amodal.has-aside .amodal-main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+/* Página detrás sin scroll mientras haya un modal abierto (PanelModal.tsx lleva la cuenta) */
+body.pmodal-open { overflow: hidden; }
+
+/* Asa de la hoja inferior: solo en celular */
+.amodal-grip { display: none; }
+
+/* Encabezado: título Poppins Bold 20 y cerrar de 44 px. Queda por encima del cuerpo (z-index) para que la X siempre reciba el clic */
+.amodal-head { position: relative; z-index: 2; flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ab-espacio-4); padding: 22px 16px 18px 28px; border-bottom: 1px solid var(--ab-gris-200); background: var(--ab-blanco); }
 .amodal-title { min-width: 0; padding-top: 6px; }
 .amodal-title h2 {
   margin: 0;
@@ -29,20 +46,30 @@ ion-modal.amodal .ion-page > form { display: flex; flex-direction: column; flex:
   line-height: 28px;
   font-weight: 700;
   color: var(--ab-marino-900);
-  /* Nombres largos: hasta 2 líneas antes de cortar */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
   overflow-wrap: anywhere;
 }
 .amodal-title p { margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--ab-gris-500); }
 .amodal-close { display: grid; place-items: center; flex: none; width: var(--ab-toque-min); height: var(--ab-toque-min); border: 0; border-radius: var(--ab-radio-full); background: none; color: var(--ab-gris-700); font-size: 24px; cursor: pointer; }
 .amodal-close:hover { background: var(--ab-gris-100); }
 .amodal-close:focus-visible { outline: 2px solid var(--ab-azul-500); outline-offset: 2px; }
+/* Mientras se guarda no se puede cerrar */
+.amodal-close:disabled { color: var(--ab-gris-200); cursor: not-allowed; background: none; }
 
-/* Cuerpo: 28 px de relleno, 24 px entre secciones, 8 px entre etiqueta y campo */
-ion-modal.amodal .pmodal-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--ab-espacio-6); padding: 28px; overflow-y: auto; font-size: 14px; line-height: 20px; color: var(--ab-gris-700); }
+/* Cuerpo: el único lugar con scroll */
+ion-modal.amodal .pmodal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ab-espacio-6);
+  padding: 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ab-gris-700);
+}
 ion-modal.amodal .fld { gap: var(--ab-espacio-2); }
 
 /* Pie fijo: borde superior y 24 px de relleno; acción principal a la derecha */
@@ -51,10 +78,46 @@ ion-modal.amodal .pmodal-foot ion-button { margin: 0; min-height: 48px; height: 
 ion-modal.amodal .pmodal-foot .pmodal-delete,
 ion-modal.amodal .pmodal-foot .amodal-start { margin-right: auto; }
 
-@media (max-width: 599px) {
-  .amodal-head { padding: 18px 12px 14px 20px; }
+/* Celular: a todo el ancho, como hoja inferior o pantalla completa */
+@media (max-width: 719px) {
+  /* !important: gana a los anchos propios de cada modal (Cobrar, Nuevo cliente, Registrar abono…) */
+  ion-modal.amodal {
+    --width: 100% !important;
+    --max-height: calc(92dvh - var(--kb)) !important;
+    --border-radius: 24px 24px 0 0 !important;
+    align-items: flex-end;
+  }
+  ion-modal.amodal::part(content) { margin-bottom: var(--kb); }
+  ion-modal.amodal .ion-page { max-height: calc(92dvh - var(--kb)); }
+
+  ion-modal.amodal.is-m-full {
+    --height: calc(100dvh - var(--kb)) !important;
+    --max-height: calc(100dvh - var(--kb)) !important;
+    --border-radius: 0 !important;
+  }
+  ion-modal.amodal.is-m-full .ion-page { height: calc(100dvh - var(--kb)); max-height: none; }
+
+  /* En celular el panel lateral no se muestra: la pantalla pone su resumen dentro del cuerpo */
+  ion-modal.amodal.has-aside .amodal-aside { display: none; }
+  ion-modal.amodal.has-aside .amodal-split, ion-modal.amodal.has-aside .amodal-main { display: contents; }
+  ion-modal.amodal.is-m-sheet .amodal-grip { display: block; flex: none; width: 40px; height: 4px; margin: 8px auto 0; border-radius: var(--ab-radio-full); background: var(--ab-gris-200); }
+  ion-modal.amodal.is-m-sheet .amodal-head { padding-top: 10px; }
+
+  .amodal-head { padding: 14px 12px 14px 20px; }
+  .amodal-title { padding-top: 8px; }
   ion-modal.amodal .pmodal-body { padding: 20px; }
-  ion-modal.amodal .pmodal-foot { padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); }
-  ion-modal.amodal .pmodal-foot ion-button { flex: 1 1 0; white-space: nowrap; }
-  ion-modal.amodal .pmodal-foot .pmodal-delete { flex: 1 1 100%; margin-right: 0; }
+
+  /* Pie: botones a todo el ancho y apilados (el principal, que va al final, queda arriba), 52 px cada uno */
+  ion-modal.amodal .pmodal-foot { flex-direction: column-reverse; flex-wrap: nowrap; align-items: stretch; gap: 10px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); }
+  ion-modal.amodal .pmodal-foot ion-button { flex: none; width: 100%; height: 52px; min-height: 52px; margin: 0; white-space: normal; }
+  ion-modal.amodal .pmodal-foot .pmodal-delete,
+  ion-modal.amodal .pmodal-foot .amodal-start { margin-right: 0; }
+
+  /* Campos de al menos 48 px y texto de 16 px (iOS no hace zoom) */
+  ion-modal.amodal .fld-box { min-height: 48px; }
+  ion-modal.amodal .fld-box input,
+  ion-modal.amodal .fld-box select,
+  ion-modal.amodal .fld-box textarea { font-size: 16px; }
+  ion-modal.amodal .form-grid { grid-template-columns: minmax(0, 1fr); }
+  ion-modal.amodal .form-grid > * { grid-column: auto; }
 }

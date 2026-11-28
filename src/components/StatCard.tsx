@@ -1,17 +1,19 @@
 import { IonIcon } from '@ionic/react';
+import type { ReactNode } from 'react';
 import './StatCard.css';
 
 interface Props {
   icon: string;
   label: string;
   value: string;
-  hint?: string;
+  hint?: ReactNode;
   tone?: 'primary' | 'success' | 'warning' | 'accent' | 'danger';
   active?: boolean;
   onClick?: () => void;
+  className?: string;
 }
 
-export function StatCard({ icon, label, value, hint, tone = 'primary', active, onClick }: Props) {
+export function StatCard({ icon, label, value, hint, tone = 'primary', active, onClick, className = '' }: Props) {
   const body = (
     <>
       <span className="stat-head">
@@ -22,9 +24,9 @@ export function StatCard({ icon, label, value, hint, tone = 'primary', active, o
       {hint && <span className="stat-hint">{hint}</span>}
     </>
   );
-  if (!onClick) return <div className={`stat-card tone-${tone}`}>{body}</div>;
+  if (!onClick) return <div className={`stat-card tone-${tone} ${className}`}>{body}</div>;
   return (
-    <button type="button" className={`stat-card is-click tone-${tone} ${active ? 'is-active' : ''}`} aria-pressed={active} onClick={onClick}>
+    <button type="button" className={`stat-card is-click tone-${tone} ${active ? 'is-active' : ''} ${className}`} aria-pressed={active} onClick={onClick}>
       {body}
     </button>
   );

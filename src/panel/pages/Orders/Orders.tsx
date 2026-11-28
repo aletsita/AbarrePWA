@@ -1,29 +1,30 @@
-import { IonButton, IonContent, IonIcon, IonPage, useIonRouter } from '@ionic/react';
+import { IonButton, IonContent, IonIcon, IonPage, IonSkeletonText, useIonRouter } from '@ionic/react';
 import { useAppAlert } from '../../../components/AppAlert';
 import {
   alertCircleOutline,
   bagCheckOutline,
-  callOutline,
-  closeCircleOutline,
   createOutline,
   globeOutline,
   flameOutline,
+  fileTrayOutline,
   hourglassOutline,
-  printOutline,
   qrCodeOutline,
+  storefrontOutline,
   timeOutline,
   warningOutline,
 } from 'ionicons/icons';
 import { useEffect, useState } from 'react';
 import { EmptyState } from '../../../components/EmptyState';
 import { useApp } from '../../../context/AppContext';
-import { isToday, money, PAYMENT_LABEL, time } from '../../../data/models';
-import { ACTIVE_STATUSES, CANCEL_REASON_LABEL, isPaidOnline, ORDER_NEXT_ACTION, ORDER_STATUS_LABEL, reservedStock, type OrderStatus, type PickupOrder } from '../../../data/pickup';
+import { initials, isToday, money, time } from '../../../data/models';
+import { ACTIVE_STATUSES, CANCEL_REASON_LABEL, isPaidOnline, ORDER_NEXT_ACTION, reservedStock, type OrderStatus, type PickupOrder } from '../../../data/pickup';
 import { shortfallText } from '../../../domain/stock';
+import { fromCents, itemCount, lineTotal, qtyText, sumCents } from '../../../domain/weight';
 import { printSale } from '../../../lib/print';
 import { PanelHeader } from '../../components/PanelHeader';
 import { CheckoutModal } from '../Register/CheckoutModal';
 import { CancelOrderModal } from './CancelOrderModal';
+import { OrderDetail, OrderStatusChip } from './OrderDetail';
 import { PickupCodeModal } from './PickupCodeModal';
 import './Orders.css';
 import { useAviso } from '../../../components/Aviso';
@@ -35,10 +36,10 @@ const PREVIEW_ITEMS = 3;
 type View = 'curso' | 'entregado' | 'cancelado';
 
 // Tablero: una columna por etapa, del pedido que lleva más tiempo esperando al más nuevo
-const COLUMNS: { status: Exclude<OrderStatus, 'entregado' | 'cancelado'>; title: string; empty: string; icon: string }[] = [
-  { status: 'pendiente', title: 'Pendientes', empty: 'Sin pedidos nuevos', icon: timeOutline },
-  { status: 'preparando', title: 'Haciendo', empty: 'Nada en preparación', icon: flameOutline },
-  { status: 'listo', title: 'Pedido listo', empty: 'Nada esperando al cliente', icon: bagCheckOutline },
+const COLUMNS: { status: Exclude<OrderStatus, 'entregado' | 'cancelado'>; title: string; empty: string; help: string; icon: string }[] = [
+  { status: 'pendiente', title: 'Pendientes', empty: 'Sin pedidos nuevos', help: 'Cuando un cliente pida, aparece aquí.', icon: timeOutline },
+  { status: 'preparando', title: 'Haciendo', empty: 'Nada en preparación', help: 'Los pedidos que empieces a preparar aparecen aquí.', icon: flameOutline },
+  { status: 'listo', title: 'Pedido listo', empty: 'Nada esperando al cliente', help: 'Los pedidos listos para recoger aparecen aquí.', icon: bagCheckOutline },
 ];
 
 function ago(iso: string, now: number) {
@@ -53,7 +54,7 @@ const pieces = (o: PickupOrder) => o.items.reduce((n, i) => n + i.qty, 0);
 const closedAt = (o: PickupOrder) => o.deliveredAt ?? o.updatedAt;
 
 export default function Orders() {
-  const { orders, products, sales, store, ticketConfig, advanceOrder, deliverOrder, cancelOrder, reportShortage } = useApp();
+  const { ready, orders, products, sales, store, ticketConfig, advanceOrder, deliverOrder, cancelOrder, reportShortage } = useApp();
   const [view, setView] = useState<View>('curso');
   const [openId, setOpenId] = useState<string>();
   // Entrega en dos pasos: primero el código del cliente, después el cobro
@@ -119,52 +120,74 @@ export default function Orders() {
   const card = (o: PickupOrder) => {
     const fresh = o.status === 'pendiente' && now - Date.parse(o.createdAt) < NEW_MS;
     const missing = !o.issue && shortages(o).length > 0;
+    const out = (id: string) => !!o.issue?.missing.includes(id);
     const rest = o.items.length - PREVIEW_ITEMS;
+    const n = itemCount(o.items);
+    // Lo que recibiría el cliente si acepta solo lo disponible
+    const available = o.issue ? fromCents(sumCents(o.items.filter((i) => !out(i.productId)))) : 0;
     return (
-      <li key={o.id} className={`ob-card ${o.issue ? 'is-waiting' : ''} ${fresh ? 'is-new' : ''}`}>
+      <li key={o.id} className={`ob-card ${o.issue || missing ? 'is-attention' : ''} ${fresh ? 'is-new' : ''}`}>
         <button type="button" className="ob-card-main" onClick={() => setOpenId(o.id)} aria-label={`${o.folio}, ${o.customer.name}, ${money(o.total)}`}>
           <span className="ob-card-top">
             <strong className="ob-folio">
               {fresh && <span className="ord-dot" aria-hidden="true" />}
               {o.folio}
             </strong>
-            <span className="ob-ago">{ago(o.createdAt, now)}</span>
+            <span className="ob-ago"><IonIcon icon={timeOutline} aria-hidden="true" />{ago(o.createdAt, now)}</span>
           </span>
-          <span className="ob-who">{o.customer.name}</span>
+          <span className="ob-who">
+            <span className="ob-avatar" aria-hidden="true">{initials(o.customer.name)}</span>
+            <span className="ob-name">{o.customer.name}</span>
+          </span>
           <ul className="ob-items">
             {o.items.slice(0, PREVIEW_ITEMS).map((i) => (
-              <li key={i.productId} className={o.issue?.missing.includes(i.productId) ? 'is-out' : ''}>
-                <b>{i.qty}×</b> {i.name}
+              <li key={i.productId} className={out(i.productId) ? 'is-out' : ''}>
+                <b>{i.saleType === 'peso' ? qtyText(i.qty, i.saleType) : `${i.qty}×`}</b>
+                <span className="ob-item-name">{i.name}</span>
+                {out(i.productId) ? <span className="ob-out">Agotado</span> : <span className="ob-item-price">{money(lineTotal(i.qty, i.price, i.saleType))}</span>}
               </li>
             ))}
             {rest > 0 && <li className="ob-more">y {rest} {rest === 1 ? 'producto más' : 'productos más'}</li>}
           </ul>
-          <span className="ob-card-foot">
-            <span className="muted">{pieces(o)} {pieces(o) === 1 ? 'pieza' : 'piezas'}</span>
-            <strong className="money">{money(o.total)}</strong>
-          </span>
           {o.issue && (
-            <span className="ob-flag is-waiting"><IonIcon icon={hourglassOutline} />Esperando al cliente</span>
+            <span className="ob-notice">
+              <IonIcon icon={hourglassOutline} aria-hidden="true" />
+              <span><strong>Esperando al cliente.</strong> Debe elegir si cancela el pedido o recibe lo disponible por {money(available)}.</span>
+            </span>
           )}
-          {missing && (
-            <span className="ob-flag is-warn"><IonIcon icon={warningOutline} />Falta existencia</span>
+          {(missing || (o.editedAt && !o.issue)) && (
+            <span className="ob-flags">
+              {missing && <span className="ob-flag is-warn"><IonIcon icon={warningOutline} />Falta existencia</span>}
+              {o.editedAt && !o.issue && <span className="ob-flag is-edited"><IonIcon icon={createOutline} />El cliente cambió productos</span>}
+            </span>
           )}
-          {o.editedAt && !o.issue && (
-            <span className="ob-flag is-edited"><IonIcon icon={createOutline} />El cliente cambió productos</span>
-          )}
-          {isPaidOnline(o) && (
-            <span className="ob-flag is-paid"><IonIcon icon={globeOutline} />Pagado en línea</span>
-          )}
+          <span className="ob-card-foot">
+            <span className="ob-card-meta">
+              <span>{n} {n === 1 ? 'pieza' : 'piezas'}</span>
+              {isPaidOnline(o) ? (
+                <span className="ob-pay is-paid"><IonIcon icon={globeOutline} aria-hidden="true" />Pagado en línea</span>
+              ) : (
+                <span className="ob-pay"><IonIcon icon={storefrontOutline} aria-hidden="true" />Pago en tienda</span>
+              )}
+            </span>
+            <span className="ob-card-total">
+              <small>Total</small>
+              <strong className="money">{money(o.total)}</strong>
+            </span>
+          </span>
         </button>
         <div className="ob-card-actions">
           {o.issue ? (
-            <IonButton fill="outline" color="medium" className="ob-act" disabled>Esperando respuesta</IonButton>
+            <IonButton fill="outline" className="ob-act is-waiting" disabled>
+              <IonIcon slot="start" icon={hourglassOutline} />
+              Esperando respuesta
+            </IonButton>
           ) : (
             <IonButton fill={o.status === 'listo' ? 'solid' : 'outline'} color={o.status === 'listo' ? 'success' : undefined} className="ob-act" disabled={busy === o.id} onClick={() => void act(o)}>
               {o.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[o.status as keyof typeof ORDER_NEXT_ACTION]}
             </IonButton>
           )}
-          <IonButton fill="clear" color="danger" className="ob-problem" onClick={() => askProblem(o)} aria-label={`Problema con ${o.folio}`} title="Producto agotado o cancelar">
+          <IonButton fill="outline" className="ob-problem" onClick={() => askProblem(o)} aria-label={`Problema con el pedido ${o.folio}`} title="Producto agotado o cancelar">
             <IonIcon slot="icon-only" icon={alertCircleOutline} />
           </IonButton>
         </div>
@@ -172,11 +195,26 @@ export default function Orders() {
     );
   };
 
+  // Mientras llegan los datos: dos tarjetas de la misma altura por columna
+  const skeleton = (
+    <ul className="ob-cards" aria-hidden="true">
+      {[0, 1].map((k) => (
+        <li key={k} className="ob-card is-skeleton">
+          <IonSkeletonText animated className="sk-row" />
+          <IonSkeletonText animated className="sk-who" />
+          <IonSkeletonText animated className="sk-items" />
+          <IonSkeletonText animated className="sk-row" />
+          <IonSkeletonText animated className="sk-act" />
+        </li>
+      ))}
+    </ul>
+  );
+
   return (
     <IonPage>
       <PanelHeader title="Pedidos" />
       <IonContent>
-        <div className="ppage">
+        <div className="ppage ob-page">
           <div className="ppage-head">
             <div>
               <h1>Pedidos</h1>
@@ -186,7 +224,7 @@ export default function Orders() {
               </p>
             </div>
             <div className="ppage-actions">
-              <IonButton className="btn-lg" onClick={() => setVerifying({})}>
+              <IonButton className="ob-code" onClick={() => setVerifying({})}>
                 <IonIcon slot="start" icon={qrCodeOutline} />
                 Entregar con código
               </IonButton>
@@ -213,12 +251,22 @@ export default function Orders() {
                 return (
                   <section key={c.status} className={`ob-col is-${c.status}`} aria-label={c.title}>
                     <header className="ob-col-head">
-                      <IonIcon icon={c.icon} aria-hidden="true" />
+                      <span className="ob-col-icon"><IonIcon icon={c.icon} aria-hidden="true" /></span>
                       <h2>{c.title}</h2>
-                      <span className="ob-count">{list.length}</span>
-                      {list.length > 0 && <span className="ob-col-sum money">{money(sumOf(list))}</span>}
+                      <span className="ob-col-count">{ready ? list.length : '–'}</span>
+                      {ready && list.length > 0 && <span className="ob-col-sum money">{money(sumOf(list))}</span>}
                     </header>
-                    {list.length === 0 ? <p className="ob-empty">{c.empty}</p> : <ul className="ob-cards">{list.map(card)}</ul>}
+                    {!ready ? (
+                      skeleton
+                    ) : list.length === 0 ? (
+                      <div className="ob-empty">
+                        <span className="ob-empty-icon"><IonIcon icon={fileTrayOutline} aria-hidden="true" /></span>
+                        <strong>{c.empty}</strong>
+                        <small>{c.help}</small>
+                      </div>
+                    ) : (
+                      <ul className="ob-cards">{list.map(card)}</ul>
+                    )}
                   </section>
                 );
               })}
@@ -255,92 +303,24 @@ export default function Orders() {
         </div>
       </IonContent>
 
-      <PanelModal isOpen={!!open} onClose={() => setOpenId(undefined)} size="detail" title={open ? `${open.folio} · ${ORDER_STATUS_LABEL[open.status]}` : ''}>
+      <PanelModal
+        isOpen={!!open}
+        onClose={() => setOpenId(undefined)}
+        busy={!!open && busy === open.id}
+        size="detail"
+        className="od-modal"
+        title={open ? <>{open.folio}<OrderStatusChip status={open.status} /></> : ''}
+      >
         {open && (
-          <>
-            <div className="pmodal-body">
-              <dl className="sd-facts">
-                <div><dt>Cliente</dt><dd>{open.customer.name}</dd></div>
-                {open.customer.phone && (
-                  <div>
-                    <dt>Teléfono</dt>
-                    <dd><a className="ord-phone" href={`tel:${open.customer.phone.replace(/\s/g, '')}`}><IonIcon icon={callOutline} />{open.customer.phone}</a></dd>
-                  </div>
-                )}
-                <div><dt>Pidió</dt><dd>{time(open.createdAt)}</dd></div>
-                {open.payment && <div><dt>Pagó</dt><dd>{PAYMENT_LABEL[open.payment.method]}{sale ? ` · venta #${sale.folio}` : ''}</dd></div>}
-                {!open.payment && <div><dt>Pago</dt><dd>{isPaidOnline(open) ? 'Pagado en línea · solo pide el código' : 'Se paga al recoger'}</dd></div>}
-              </dl>
-
-              {open.note && <p className="ord-note">“{open.note}”</p>}
-              {open.issue && (
-                <p className="ord-waiting">
-                  <IonIcon icon={hourglassOutline} />
-                  <span>
-                    <strong>Esperando al cliente</strong> · le avisaste a las {time(open.issue.at)} que se agotó:{' '}
-                    {open.items.filter((i) => open.issue!.missing.includes(i.productId)).map((i) => i.name).join(', ')}. Puede elegir otro producto, quitarlo o cancelar.
-                  </span>
-                </p>
-              )}
-              {open.editedAt && !open.issue && open.status !== 'cancelado' && (
-                <p className="ord-edited">
-                  <IonIcon icon={createOutline} />
-                  El cliente cambió los productos a las {time(open.editedAt)}.
-                </p>
-              )}
-              {open.cancel && (
-                <p className="ord-cancelled">
-                  <IonIcon icon={closeCircleOutline} />
-                  <span>
-                    <strong>{open.cancel.reason === 'cliente' ? 'Lo canceló el cliente' : `Cancelado por ${CANCEL_REASON_LABEL[open.cancel.reason].toLowerCase()}`}</strong> · {time(open.cancel.at)}
-                    {open.cancel.missing.length > 0 && <> · Se agotó: {open.items.filter((i) => open.cancel!.missing.includes(i.productId)).map((i) => i.name).join(', ')}</>}
-                    {open.cancel.note && <> · “{open.cancel.note}”</>}
-                  </span>
-                </p>
-              )}
-              {!open.issue && openMissing.length > 0 && (
-                <p className="ord-warn">
-                  <IonIcon icon={alertCircleOutline} />
-                  Ya no alcanza: {openMissing.map((i) => i.name).join(', ')}.
-                </p>
-              )}
-
-              <ul className="ord-items">
-                {open.items.map((i) => (
-                  <li key={i.productId} className={open.issue?.missing.includes(i.productId) ? 'is-out' : ''}>
-                    <span><strong>{i.qty}</strong> {i.name}</span>
-                    <span className="money">{money(i.qty * i.price)}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="sd-total">
-                <span>Total</span>
-                <strong className="money">{money(open.total)}</strong>
-              </div>
-            </div>
-            <div className="pmodal-foot">
-              {open.status === 'entregado' ? (
-                sale && (
-                  <IonButton fill="outline" className="btn-lg" onClick={() => printSale(sale, store, ticketConfig)}>
-                    <IonIcon slot="start" icon={printOutline} />
-                    Imprimir ticket
-                  </IonButton>
-                )
-              ) : open.status !== 'cancelado' && (
-                <>
-                  <IonButton fill="clear" color="danger" className="btn-lg" onClick={() => askProblem(open)}>
-                    <IonIcon slot="start" icon={alertCircleOutline} />
-                    Producto agotado o cancelar
-                  </IonButton>
-                  {!open.issue && (
-                    <IonButton className="btn-lg" color={open.status === 'listo' ? 'success' : undefined} disabled={busy === open.id} onClick={() => void act(open)}>
-                      {open.status === 'listo' ? 'Entregar' : ORDER_NEXT_ACTION[open.status]}
-                    </IonButton>
-                  )}
-                </>
-              )}
-            </div>
-          </>
+          <OrderDetail
+            order={open}
+            sale={sale}
+            missingNow={openMissing}
+            busy={busy === open.id}
+            onAct={() => void act(open)}
+            onProblem={() => askProblem(open)}
+            onPrint={() => sale && printSale(sale, store, ticketConfig)}
+          />
         )}
       </PanelModal>
 

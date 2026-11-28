@@ -76,8 +76,6 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   const modal = useRef<HTMLIonModalElement>(null);
   // Cómo estaba el producto al abrirlo: si cambió, cerrar pide confirmación
   const initial = useRef('');
-  // Ya se guardó o se borró: se cierra sin preguntar
-  const leaving = useRef(false);
   // Texto de los campos numéricos tal como se escribe ("14." no debe volverse 14 a medio teclear)
   const [nums, setNums] = useState({ cost: '', price: '', stock: '', minStock: '' });
 
@@ -95,7 +93,6 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
     setTried(false);
     setNotice('');
     setCode('');
-    leaving.current = false;
     if (product) {
       const { sync: _sync, ...p } = product;
       start(p);
@@ -169,18 +166,8 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
   const margin = draft.price - draft.cost;
   const dirty = step === 'form' && canEdit && JSON.stringify(draft) !== initial.current;
 
-  // Cerrar (X, Cancelar, Esc o tocar fuera) pasa por aquí: con cambios sin guardar, pregunta antes
-  const confirmClose = async () => {
-    if (leaving.current || !dirty) return true;
-    return showAlert({
-      tone: 'warning',
-      title: '¿Salir sin guardar?',
-      message: 'Los cambios que hiciste en este producto se van a perder.',
-      primary: { text: 'Salir sin guardar', danger: true },
-      secondary: 'Seguir editando',
-    });
-  };
-  const close = () => void modal.current?.dismiss();
+  // Cancelar cierra como la X: con cambios sin guardar, PanelModal pregunta antes (al guardar o borrar se cierra sin preguntar)
+  const close = () => void modal.current?.dismiss(undefined, 'cancel');
 
   const save = () => {
     setTried(true);
@@ -203,7 +190,6 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
       position: 'top',
       cssClass: 'toast-app',
     });
-    leaving.current = true;
     onSaved?.(p, isNew);
     onClose();
   };
@@ -226,7 +212,6 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
       return;
     }
     void toast({ message: `${draft.name} se borró del inventario`, duration: 2000, color: 'success', position: 'top', cssClass: 'toast-app' });
-    leaving.current = true;
     onClose();
   };
 
@@ -241,9 +226,10 @@ export function ProductModal({ isOpen, product, barcode, onClose, onSaved }: Pro
       modalRef={modal}
       isOpen={isOpen}
       onClose={onClose}
-      canDismiss={confirmClose}
+      dirty={dirty}
       onDidPresent={() => step === 'codigo' && codeInput.current?.focus()}
       size={step === 'form' ? 'wide' : 'form'}
+      mobile={step === 'form' ? 'full' : 'sheet'}
       title={title}
       subtitle={step === 'form' ? 'Los cambios se ven al instante en la tienda y en la app' : undefined}
       className="pm-modal"

@@ -1,10 +1,19 @@
 /* Alerta: el Modal estándar (Modal.css) centrado, ancho máximo de 420 px */
 ion-modal.app-alert-modal {
-  --width: min(420px, calc(100vw - 32px));
+  --width: min(420px, calc(100vw - 48px));
   --height: auto;
-  --max-height: calc(100vh - 48px);
+  --max-height: calc(100dvh - 48px);
   --border-radius: var(--ab-radio-lg);
   --box-shadow: var(--ab-sombra-lg);
 }
 ion-modal.app-alert-modal::part(content) { position: relative; }
 .app-alert-code { align-self: flex-start; padding: var(--ab-espacio-1) var(--ab-espacio-3); border-radius: var(--ab-radio-sm); background: var(--ab-gris-100); font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 1rem; letter-spacing: 0.06em; color: var(--ab-marino-900); overflow-wrap: anywhere; }
+
+/* Celular: hoja inferior a todo el ancho con asa, como los demás modales cortos */
+@media (max-width: 719px) {
+  ion-modal.app-alert-modal { --width: 100%; --max-height: 92dvh; --border-radius: 24px 24px 0 0; align-items: flex-end; }
+  ion-modal.app-alert-modal .app-alert { padding: 22px 20px calc(16px + env(safe-area-inset-bottom)); }
+  ion-modal.app-alert-modal .app-alert::before { content: ''; align-self: center; width: 40px; height: 4px; margin: -12px 0 8px; border-radius: var(--ab-radio-full); background: var(--ab-gris-200); }
+  ion-modal.app-alert-modal .ab-modal-actions { flex-direction: column-reverse; gap: 10px; }
+  ion-modal.app-alert-modal .ab-modal-actions ion-button { flex: none; height: 52px; min-height: 52px; }
+}

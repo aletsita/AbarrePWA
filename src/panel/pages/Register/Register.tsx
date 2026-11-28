@@ -4,7 +4,6 @@ import {
   IonFooter,
   IonIcon,
   IonPage,
-  IonToolbar,
   useIonRouter,
   useIonViewDidEnter,
   useIonViewWillLeave,
@@ -12,11 +11,9 @@ import {
 import {
   add,
   alertCircleOutline,
-  barcodeOutline,
   cashOutline,
   closeCircleOutline,
   createOutline,
-  handLeftOutline,
   linkOutline,
   personAddOutline,
   personOutline,
@@ -29,6 +26,8 @@ import {
 import { useMemo, useRef, useState } from 'react';
 import { useAppAlert } from '../../../components/AppAlert';
 import { BarcodeSearch, type BarcodeSearchHandle } from '../../../components/BarcodeSearch';
+import { BrandMark } from '../../../components/Brand';
+import { IsotipoMark } from '../../../components/IsotipoMark';
 import { ProductThumb } from '../../../components/ProductThumb';
 import { useApp, type ProductView } from '../../../context/AppContext';
 import { availableCredit, money, type Product } from '../../../data/models';
@@ -44,6 +43,9 @@ import { CheckoutModal } from './CheckoutModal';
 import './Register.css';
 import { useAviso } from '../../../components/Aviso';
 
+// Atajos de «Más vendidos»: dos filas de 4 en escritorio
+const QUICK_PICKS = 8;
+
 function LiveDevice() {
   const { devices, lastScan, isLive } = useApp();
   const router = useIonRouter();
@@ -53,10 +55,10 @@ function LiveDevice() {
   const lastName = lastScan && devices.find((d) => d.id === lastScan.deviceId)?.name;
 
   return (
-    <section className={`live-device ${scanning && connected.length ? 'is-live' : ''} ${connected.length ? '' : 'is-off'}`}>
+    <section className={`live-device ${scanning && connected.length ? 'is-live' : ''} ${connected.length ? 'is-on' : 'is-off'}`}>
       <div className="live-head">
         <span className="live-icon">
-          <IonIcon icon={phonePortraitOutline} />
+          <IonIcon icon={phonePortraitOutline} aria-hidden="true" />
           {connected.length > 0 && <span className="live-pulse" />}
         </span>
         <div>
@@ -68,13 +70,13 @@ function LiveDevice() {
       </div>
       {lastScan && (
         <p className="live-last">
-          Último: <strong>{lastScan.name}</strong> · {ago(lastScan.at, now)}
+          Último escaneo: <strong>{lastScan.name}</strong> · {ago(lastScan.at, now)}
           {lastName && connected.length > 1 ? ` · ${lastName}` : ''}
         </p>
       )}
       {devices.length === 0 && (
         <button type="button" className="live-link" onClick={() => router.push('/panel/dispositivos')}>
-          <IonIcon icon={linkOutline} /> Vincular un celular
+          <IonIcon icon={linkOutline} aria-hidden="true" /> Vincular un celular
         </button>
       )}
     </section>
@@ -87,14 +89,17 @@ function QuickPicks({ onPick }: { onPick: (p: ProductView) => void }) {
   const picks = useMemo(() => {
     const sold = new Map<string, number>();
     sales.forEach((s) => s.items.forEach((i) => sold.set(i.productId, (sold.get(i.productId) ?? 0) + i.qty)));
-    return [...products].sort((a, b) => (sold.get(b.id) ?? 0) - (sold.get(a.id) ?? 0)).slice(0, 10);
+    return [...products].sort((a, b) => (sold.get(b.id) ?? 0) - (sold.get(a.id) ?? 0)).slice(0, QUICK_PICKS);
   }, [products, sales]);
   if (!picks.length) return null;
 
   return (
-    <div className="quick">
-      <span className="quick-label"><IonIcon icon={trendingUpOutline} /> Más vendidos</span>
-      <div className="quick-row" role="list">
+    <section className="quick" aria-labelledby="quick-title">
+      <div className="quick-head">
+        <span className="quick-label" id="quick-title"><IonIcon icon={trendingUpOutline} aria-hidden="true" /> Atajos · Más vendidos</span>
+        <span className="quick-help">Toca para agregar</span>
+      </div>
+      <div className="quick-grid" role="list">
         {picks.map((p) => {
           const inTicket = ticket.find((l) => l.product.id === p.id)?.qty;
           const out = availableFor(p.id) <= 0;
@@ -103,21 +108,23 @@ function QuickPicks({ onPick }: { onPick: (p: ProductView) => void }) {
               key={p.id}
               type="button"
               role="listitem"
-              className={`quick-item ${out ? 'is-out' : ''}`}
+              className={`quick-item ${out ? 'is-out' : ''} ${inTicket ? 'is-in' : ''}`}
               onClick={() => onPick(p)}
-              title={out ? `${p.name}: sin stock` : `Agregar ${p.name}`}
+              aria-label={out ? `${p.name}: sin stock` : `Agregar ${p.name}${inTicket ? `, ya hay ${isWeighed(p) ? qtyText(inTicket, 'peso') : inTicket} en la cuenta` : ''}`}
             >
-              <ProductThumb product={p} size={34} />
+              <ProductThumb product={p} size={44} />
               <span className="quick-text">
                 <strong>{p.name}</strong>
                 {out ? <span className="stock-out">Sin stock</span> : <span className="money">{money(p.price)}</span>}
               </span>
-              {inTicket && <span className="quick-count">{isWeighed(p) ? qtyText(inTicket, 'peso') : inTicket}</span>}
+              <span className="quick-add" aria-hidden="true">
+                {inTicket ? <span className="quick-count">{isWeighed(p) ? qtyText(inTicket, 'peso') : inTicket}</span> : <IonIcon icon={add} />}
+              </span>
             </button>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -136,11 +143,11 @@ function AccountTabs({ canAdd }: { canAdd: boolean }) {
             onClick={() => !a.active && switchAccount(a.id)}
           >
             <strong>{a.name}</strong>
-            <span className="money">{a.count ? `${a.count} art. · ${money(a.total)}` : 'Vacía'}</span>
+            <span className="money">{a.count ? `${a.count} ${a.count === 1 ? 'artículo' : 'artículos'} · ${money(a.total)}` : 'Vacía'}</span>
           </button>
         ))}
         <button type="button" className="acc-new" disabled={!canAdd} onClick={newAccount} title="Deja esta cuenta en espera y abre otra">
-          <IonIcon icon={add} />
+          <IonIcon icon={add} aria-hidden="true" />
           <span>Nueva cuenta</span>
         </button>
       </div>
@@ -236,11 +243,12 @@ export default function Register() {
   return (
     <IonPage>
       <PanelHeader title="Caja" />
-      <IonContent>
+      <IonContent className="reg-content">
         <div className="ppage reg-grid">
-          <AccountTabs canAdd={canAddAccount} />
-          <section className="pcard reg-ticket">
-            <div className="reg-search">
+          <section className="reg-main" aria-label="Venta">
+            <AccountTabs canAdd={canAddAccount} />
+
+            <div className="reg-reader">
               <BarcodeSearch
                 ref={search}
                 products={products}
@@ -252,115 +260,110 @@ export default function Register() {
                 allowQty
                 size="lg"
               />
-              <p className="reg-hint">Para varias piezas escribe la cantidad y un asterisco antes del código, por ejemplo 3*7501055300075.</p>
-              <QuickPicks onPick={(p) => addProduct(p, 1)} />
+              <span className="reg-ready" aria-hidden="true"><span className="reg-ready-dot" />Lector listo</span>
+              <p className="reg-hint">Para varias piezas escribe la cantidad y un asterisco antes del código, por ejemplo <b>3*7501055300075</b>.</p>
             </div>
 
-            <div className="pcard-head reg-head">
-              <div className="reg-acc">
-                <button type="button" className="reg-acc-name" onClick={() => setRenaming(true)} title="Cambiar el nombre de la cuenta">
-                  <h2>{account.name}</h2>
-                  <IonIcon icon={createOutline} />
-                </button>
-                <button type="button" className={`reg-acc-customer ${customer ? 'is-set' : ''}`} onClick={() => setPicking(true)}>
-                  <IonIcon icon={customer ? personOutline : personAddOutline} />
-                  {customer ? (
-                    <span>
-                      {customer.name !== account.name && `${customer.name} · `}
-                      <span className="money">{money(availableCredit(customer))}</span> de crédito disponible
-                    </span>
-                  ) : (
-                    <span>Asignar cliente</span>
-                  )}
-                </button>
-              </div>
-              <span className="reg-count">{ticketCount} {ticketCount === 1 ? 'artículo' : 'artículos'}</span>
-            </div>
-
-            {ticket.length === 0 ? (
-              <div className="reg-empty">
-                <span className="reg-empty-icon"><IonIcon icon={barcodeOutline} /></span>
-                <h3>La cuenta está vacía</h3>
-                <p>Escanea con el lector o con el celular vinculado, escribe el código arriba o toca uno de los más vendidos.</p>
-              </div>
-            ) : (
-              <div className="reg-table" role="table" aria-label="Productos de la cuenta">
-                <div className="reg-row reg-th" role="row">
-                  <span role="columnheader">Producto</span>
-                  <span role="columnheader" className="c-qty">Cantidad</span>
-                  <span role="columnheader" className="num">Importe</span>
-                  <span role="columnheader" className="sr-only">Quitar</span>
-                </div>
-                {ticket.map((l) => (
-                  <div key={`${l.product.id}-${l.flashAt}`} className={`reg-row is-${l.source} ${shortOf(l.product.id) ? 'is-short' : ''}`} role="row">
-                    <span className="cell-product" role="cell">
-                      <ProductThumb product={l.product} size={40} />
+            {/* La cuenta actual: lo principal de la pantalla */}
+            <section className="reg-ticket" aria-labelledby="reg-acc-title">
+              <div className="reg-head">
+                <div className="reg-acc">
+                  <h2 id="reg-acc-title">{account.name}</h2>
+                  <button type="button" className="reg-rename" onClick={() => setRenaming(true)} aria-label="Cambiar el nombre de la cuenta" title="Cambiar el nombre de la cuenta">
+                    <IonIcon icon={createOutline} aria-hidden="true" />
+                  </button>
+                  <button type="button" className={`reg-acc-customer ${customer ? 'is-set' : ''}`} onClick={() => setPicking(true)}>
+                    <IonIcon icon={customer ? personOutline : personAddOutline} aria-hidden="true" />
+                    {customer ? (
                       <span>
-                        <strong>{l.product.name}</strong>
-                        <span className="unit">{money(l.product.price)} {isWeighed(l.product) ? 'por kg' : 'c/u'} · {l.product.barcode}</span>
-                        {shortOf(l.product.id) && (
-                          <span className="src-tag is-short" role="alert">
-                            <IonIcon icon={alertCircleOutline} /> Solo hay {availableLabel(shortOf(l.product.id)!.available, l.product.saleType)}
+                        {customer.name !== account.name && `${customer.name} · `}
+                        <span className="money">{money(availableCredit(customer))}</span> de crédito disponible
+                      </span>
+                    ) : (
+                      <span>Asignar cliente</span>
+                    )}
+                  </button>
+                </div>
+                <span className="reg-count">{ticketCount} {ticketCount === 1 ? 'artículo' : 'artículos'}</span>
+              </div>
+
+              {ticket.length === 0 ? (
+                <div className="reg-empty">
+                  <BrandMark size={64} className="reg-empty-mark" />
+                  <p>Escanea un producto o elige uno de los atajos</p>
+                </div>
+              ) : (
+                <ul className="reg-lines" aria-label="Productos de la cuenta">
+                  {ticket.map((l) => (
+                    <li key={`${l.product.id}-${l.flashAt}`} className={`reg-line is-${l.source} ${shortOf(l.product.id) ? 'is-short' : ''}`}>
+                      <span className="reg-prod">
+                        <ProductThumb product={l.product} size={64} />
+                        <span className="reg-prod-text">
+                          <strong>{l.product.name}</strong>
+                          <span className="unit">{money(l.product.price)} {isWeighed(l.product) ? 'por kg' : 'c/u'} · {l.product.barcode}</span>
+                          {shortOf(l.product.id) && (
+                            <span className="src-tag is-short" role="alert">
+                              <IonIcon icon={alertCircleOutline} aria-hidden="true" /> Solo hay {availableLabel(shortOf(l.product.id)!.available, l.product.saleType)}
+                            </span>
+                          )}
+                          {l.source === 'movil' && (
+                            <span className="src-tag is-movil"><IonIcon icon={phonePortraitOutline} aria-hidden="true" /> Escaneado desde el celular</span>
+                          )}
+                        </span>
+                      </span>
+                      <span className="reg-qty">
+                        {isWeighed(l.product) ? (
+                          <button
+                            type="button"
+                            className="qty-weight"
+                            onClick={() => setWeighing({ product: l.product, kg: l.qty })}
+                            aria-label={`Cambiar el peso de ${l.product.name}`}
+                          >
+                            <IonIcon icon={scaleOutline} aria-hidden="true" />
+                            {qtyText(l.qty, 'peso')}
+                          </button>
+                        ) : (
+                          <span className="qty-step" role="group" aria-label={`Cantidad de ${l.product.name}`}>
+                            <button type="button" onClick={() => ticketQty(l.product.id, -1)} aria-label={`Uno menos de ${l.product.name}`}>
+                              <IonIcon icon={remove} aria-hidden="true" />
+                            </button>
+                            <span aria-live="polite">{l.qty}</span>
+                            <button type="button" className="is-plus" onClick={() => more(l.product)} aria-label={`Uno más de ${l.product.name}`}>
+                              <IonIcon icon={add} aria-hidden="true" />
+                            </button>
                           </span>
                         )}
-                        {l.source === 'movil' ? (
-                          <span className="src-tag is-movil"><IonIcon icon={phonePortraitOutline} /> Escaneado desde el celular</span>
-                        ) : (
-                          <span className="src-tag"><IonIcon icon={handLeftOutline} /> Agregado en caja</span>
-                        )}
                       </span>
-                    </span>
-                    <span className="c-qty" role="cell">
-                      {isWeighed(l.product) ? (
-                        <button
-                          type="button"
-                          className="qty-weight"
-                          onClick={() => setWeighing({ product: l.product, kg: l.qty })}
-                          aria-label={`Cambiar el peso de ${l.product.name}`}
-                        >
-                          <IonIcon icon={scaleOutline} />
-                          {qtyText(l.qty, 'peso')}
-                        </button>
-                      ) : (
-                      <span className="qty-mini">
-                        <button type="button" onClick={() => ticketQty(l.product.id, -1)} aria-label="Uno menos">
-                          <IonIcon icon={remove} />
-                        </button>
-                        <span>{l.qty}</span>
-                        <button type="button" onClick={() => more(l.product)} aria-label="Uno más">
-                          <IonIcon icon={add} />
-                        </button>
-                      </span>
-                      )}
-                    </span>
-                    <span className="num c-sub money" role="cell">{money(lineTotal(l.qty, l.product.price, l.product.saleType))}</span>
-                    <span className="c-del" role="cell">
-                      <button type="button" onClick={() => ticketRemove(l.product.id)} aria-label={`Quitar ${l.product.name}`}>
-                        <IonIcon icon={trashOutline} />
+                      <span className="reg-sub money">{money(lineTotal(l.qty, l.product.price, l.product.saleType))}</span>
+                      <button type="button" className="reg-del" onClick={() => ticketRemove(l.product.id)} aria-label={`Quitar ${l.product.name}`}>
+                        <IonIcon icon={trashOutline} aria-hidden="true" />
                       </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <QuickPicks onPick={(p) => addProduct(p, 1)} />
           </section>
 
           <aside className="reg-side">
-            <section className="pcard reg-summary">
+            <section className="reg-summary" aria-label="Resumen de la venta">
               <dl>
                 <div><dt>Artículos</dt><dd>{ticketCount}</dd></div>
                 <div><dt>Subtotal</dt><dd className="money">{money(ticketTotal - iva)}</dd></div>
                 <div><dt>IVA 16 % incluido</dt><dd className="money">{money(iva)}</dd></div>
               </dl>
               <div className="reg-total">
+                <IsotipoMark className="reg-total-mark" />
                 <span>Total</span>
                 <strong className="money" key={ticketTotal}>{money(ticketTotal)}</strong>
               </div>
-              <IonButton expand="block" color="secondary" className="btn-xl reg-pay" disabled={!ticket.length} onClick={() => setPayOpen(true)}>
+              <IonButton expand="block" className="reg-pay" disabled={!ticket.length} onClick={() => setPayOpen(true)}>
                 <IonIcon slot="start" icon={cashOutline} />
-                Cobrar
+                Cobrar {money(ticketTotal)}
               </IonButton>
-              <IonButton expand="block" fill="clear" color="danger" className="btn-lg" disabled={!ticket.length} onClick={cancel}>
+              <IonButton expand="block" fill="clear" color="danger" className="reg-cancel" disabled={!ticket.length} onClick={cancel}>
                 <IonIcon slot="start" icon={closeCircleOutline} />
                 Cancelar venta
               </IonButton>
@@ -371,18 +374,18 @@ export default function Register() {
         <WeightModal product={weighing?.product ?? null} initialKg={weighing?.kg} max={weighMax} onConfirm={onWeight} onClose={() => setWeighing(null)} />
       </IonContent>
 
-      <IonFooter className="action-footer reg-footer ion-no-border">
-        <IonToolbar>
-          <div className="reg-foot">
-            <div>
-              <span>Total · {ticketCount} art.</span>
-              <strong className="money">{money(ticketTotal)}</strong>
-            </div>
-            <IonButton color="secondary" className="btn-xl" disabled={!ticket.length} onClick={() => setPayOpen(true)}>
-              Cobrar
-            </IonButton>
+      {/* Menos de 1100 px: el total y «Cobrar» quedan fijos abajo */}
+      <IonFooter className="reg-footer ion-no-border">
+        <div className="reg-foot">
+          <div className="reg-foot-total">
+            <span>Total · {ticketCount} {ticketCount === 1 ? 'artículo' : 'artículos'}</span>
+            <strong className="money">{money(ticketTotal)}</strong>
           </div>
-        </IonToolbar>
+          <IonButton className="reg-pay" disabled={!ticket.length} onClick={() => setPayOpen(true)}>
+            <IonIcon slot="start" icon={cashOutline} />
+            Cobrar
+          </IonButton>
+        </div>
       </IonFooter>
 
       <PromptModal

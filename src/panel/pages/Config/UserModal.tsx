@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { FormSection, SelectField, TextField } from '../../../components/Form';
 import { useApp } from '../../../context/AppContext';
 import { ROLES, type Role } from '../../../data/models';
-import { PanelModal } from '../../../components/PanelModal';
+import { PanelModal, PanelModalCancel } from '../../../components/PanelModal';
 
 const ROLE_HINT: Record<Role, string> = {
   Dueño: 'Todo, incluido el corte y la configuración.',
@@ -34,6 +34,7 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
     : users.some((u) => u.email.toLowerCase() === mail) && 'Ya hay un usuario con ese correo';
 
   const [busy, setBusy] = useState(false);
+  const dirty = name.trim() !== '' || email.trim() !== '' || role !== 'Cajero';
   const [serverError, setServerError] = useState('');
 
   const save = async (e?: React.FormEvent) => {
@@ -53,7 +54,7 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
   };
 
   return (
-    <PanelModal isOpen={isOpen} onClose={onClose} size="form" title="Agregar usuario">
+    <PanelModal isOpen={isOpen} onClose={onClose} dirty={dirty} busy={busy} size="form" title="Agregar usuario">
       <form className="pmodal-body" onSubmit={save}>
         <FormSection
           title="Datos del usuario"
@@ -71,7 +72,7 @@ export function UserModal({ isOpen, onClose, onAdded }: { isOpen: boolean; onClo
         {serverError && <p className="form-error" role="alert">{serverError}</p>}
       </form>
       <div className="pmodal-foot">
-        <IonButton fill="outline" className="btn-lg" onClick={onClose}>Cancelar</IonButton>
+        <PanelModalCancel className="btn-lg" disabled={busy}>Cancelar</PanelModalCancel>
         <IonButton className="btn-lg" disabled={busy} onClick={() => void save()}>
           <IonIcon slot="start" icon={personAddOutline} />
           Agregar usuario
